@@ -5,10 +5,14 @@ import (
 	"io/ioutil"
 	"strings"
 	"testing"
+
+	"github.com/docker/libnetwork"
 )
 
 func TestSetupIPForwarding(t *testing.T) {
+	defer libnetwork.SetupTestNetNS(t)()
 	// Read current setting and ensure the original value gets restored
+	// even though net ns will be destroyed.
 	procSetting := readCurrentIPForwardingSetting(t)
 	defer reconcileIPForwardingSetting(t, procSetting)
 
@@ -38,7 +42,9 @@ func TestSetupIPForwarding(t *testing.T) {
 }
 
 func TestUnexpectedSetupIPForwarding(t *testing.T) {
+	defer libnetwork.SetupTestNetNS(t)()
 	// Read current setting and ensure the original value gets restored
+	// even though net ns will be destroyed.
 	procSetting := readCurrentIPForwardingSetting(t)
 	defer reconcileIPForwardingSetting(t, procSetting)
 
