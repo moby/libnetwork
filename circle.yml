@@ -5,7 +5,8 @@ machine:
     pre:
         # sudo -E doesn't preserve $PATH, so go isn't found anymore.
         - sudo ln -s $(which go) /usr/local/bin
-
+    services:
+        - docker
 checkout:
     post:
         # We need docker/libnetwork itself in the GOPATH for imports to work.
@@ -20,8 +21,5 @@ dependencies:
 
 test:
     override:
-        - test -z "$(goimports -l . | grep -v Godeps/_workspace/src/ | tee /dev/stderr)"
-        - go vet ./...
-        - test -z "$(golint ./... | tee /dev/stderr)"
-        - sudo -E $(which godep) go test -test.v ./...
+        - make check
 
