@@ -6,7 +6,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/vishvananda/netlink/nl"
+	"github.com/docker/libnetwork/Godeps/_workspace/src/github.com/vishvananda/netlink/nl"
 )
 
 // AddrAdd will add an IP address to a link device.

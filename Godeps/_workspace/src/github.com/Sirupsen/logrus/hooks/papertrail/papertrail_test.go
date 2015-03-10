@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/Sirupsen/logrus"
+	"github.com/docker/libnetwork/Godeps/_workspace/src/github.com/Sirupsen/logrus"
 	"github.com/stvp/go-udp-testing"
 )
 

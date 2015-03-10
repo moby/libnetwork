@@ -8,7 +8,7 @@ import (
 	"runtime"
 	"syscall"
 
-	"github.com/vishvananda/netlink"
+	"github.com/docker/libnetwork/Godeps/_workspace/src/github.com/vishvananda/netlink"
 )
 
 type setupError struct {

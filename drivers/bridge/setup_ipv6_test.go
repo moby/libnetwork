@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/docker/libnetwork"
-	"github.com/vishvananda/netlink"
+	"github.com/docker/libnetwork/Godeps/_workspace/src/github.com/vishvananda/netlink"
 )
 
 func TestSetupIPv6(t *testing.T) {

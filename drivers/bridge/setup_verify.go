@@ -3,7 +3,7 @@ package bridge
 import (
 	"fmt"
 
-	"github.com/vishvananda/netlink"
+	"github.com/docker/libnetwork/Godeps/_workspace/src/github.com/vishvananda/netlink"
 )
 
 func setupVerifyConfiguredAddresses(i *bridgeInterface) error {

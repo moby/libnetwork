@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/vishvananda/netlink"
+	"github.com/docker/libnetwork/Godeps/_workspace/src/github.com/vishvananda/netlink"
 )
 
 func configureInterface(iface netlink.Link, settings *Interface) error {
