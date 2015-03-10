@@ -3,8 +3,8 @@ package bridge
 import (
 	"fmt"
 
-	log "github.com/Sirupsen/logrus"
-	"github.com/docker/docker/daemon/networkdriver/ipallocator"
+	log "github.com/docker/libnetwork/Godeps/_workspace/src/github.com/Sirupsen/logrus"
+	"github.com/docker/libnetwork/Godeps/_workspace/src/github.com/docker/docker/daemon/networkdriver/ipallocator"
 )
 
 func setupFixedCIDRv4(i *bridgeInterface) error {

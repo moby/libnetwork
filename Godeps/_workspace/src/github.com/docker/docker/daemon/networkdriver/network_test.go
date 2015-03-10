@@ -1,7 +1,7 @@
 package networkdriver
 
 import (
-	"github.com/docker/libcontainer/netlink"
+	"github.com/docker/libnetwork/Godeps/_workspace/src/github.com/docker/libcontainer/netlink"
 	"net"
 	"testing"
 )

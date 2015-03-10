@@ -1,6 +1,6 @@
 package bridge
 
-import "github.com/vishvananda/netlink"
+import "github.com/docker/libnetwork/Godeps/_workspace/src/github.com/vishvananda/netlink"
 
 const (
 	// DefaultBridgeName is the default name for the bridge interface managed

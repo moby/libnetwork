@@ -5,7 +5,7 @@ import (
 	"os"
 	"os/exec"
 
-	dre "github.com/docker/docker/pkg/reexec"
+	dre "github.com/docker/libnetwork/Godeps/_workspace/src/github.com/docker/docker/pkg/reexec"
 )
 
 type reexecCommand int

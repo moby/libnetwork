@@ -5,8 +5,8 @@ import (
 	"runtime"
 	"syscall"
 
-	log "github.com/Sirupsen/logrus"
-	"github.com/vishvananda/netlink"
+	log "github.com/docker/libnetwork/Godeps/_workspace/src/github.com/Sirupsen/logrus"
+	"github.com/docker/libnetwork/Godeps/_workspace/src/github.com/vishvananda/netlink"
 )
 
 func reexecCreateNamespace() {

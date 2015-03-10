@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/docker/docker/daemon/networkdriver/portmapper"
 	"github.com/docker/docker/engine"
 	"github.com/docker/docker/pkg/iptables"
+	"github.com/docker/libnetwork/Godeps/_workspace/src/github.com/docker/docker/daemon/networkdriver/portmapper"
 )
 
 func init() {

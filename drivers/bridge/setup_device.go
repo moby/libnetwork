@@ -5,13 +5,13 @@ import (
 	"math/rand"
 	"net"
 
-	log "github.com/Sirupsen/logrus"
-	"github.com/docker/docker/pkg/parsers/kernel"
-	"github.com/vishvananda/netlink"
+	log "github.com/docker/libnetwork/Godeps/_workspace/src/github.com/Sirupsen/logrus"
+	"github.com/docker/libnetwork/Godeps/_workspace/src/github.com/docker/docker/pkg/parsers/kernel"
+	"github.com/docker/libnetwork/Godeps/_workspace/src/github.com/vishvananda/netlink"
 )
 
-// SetupDevice create a new bridge interface/
-func setupDevice(i *bridgeInterface) error {
+func // SetupDevice create a new bridge interface/
+setupDevice(i *bridgeInterface) error {
 	// We only attempt to create the bridge when the requested device name is
 	// the default one.
 	if i.Config.BridgeName != DefaultBridgeName {

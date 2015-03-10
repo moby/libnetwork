@@ -10,16 +10,16 @@ import (
 	"strings"
 	"sync"
 
-	log "github.com/Sirupsen/logrus"
-	"github.com/docker/docker/daemon/networkdriver"
-	"github.com/docker/docker/daemon/networkdriver/ipallocator"
-	"github.com/docker/docker/daemon/networkdriver/portmapper"
 	"github.com/docker/docker/engine"
 	"github.com/docker/docker/nat"
 	"github.com/docker/docker/pkg/iptables"
 	"github.com/docker/docker/pkg/networkfs/resolvconf"
-	"github.com/docker/docker/pkg/parsers/kernel"
-	"github.com/docker/libcontainer/netlink"
+	log "github.com/docker/libnetwork/Godeps/_workspace/src/github.com/Sirupsen/logrus"
+	"github.com/docker/libnetwork/Godeps/_workspace/src/github.com/docker/docker/daemon/networkdriver"
+	"github.com/docker/libnetwork/Godeps/_workspace/src/github.com/docker/docker/daemon/networkdriver/ipallocator"
+	"github.com/docker/libnetwork/Godeps/_workspace/src/github.com/docker/docker/daemon/networkdriver/portmapper"
+	"github.com/docker/libnetwork/Godeps/_workspace/src/github.com/docker/docker/pkg/parsers/kernel"
+	"github.com/docker/libnetwork/Godeps/_workspace/src/github.com/docker/libcontainer/netlink"
 )
 
 const (

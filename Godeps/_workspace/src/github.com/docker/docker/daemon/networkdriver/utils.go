@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/docker/libcontainer/netlink"
+	"github.com/docker/libnetwork/Godeps/_workspace/src/github.com/docker/libcontainer/netlink"
 )
 
 var (

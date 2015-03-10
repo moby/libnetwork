@@ -5,7 +5,7 @@ import (
 	"io/ioutil"
 	"net"
 
-	"github.com/vishvananda/netlink"
+	"github.com/docker/libnetwork/Godeps/_workspace/src/github.com/vishvananda/netlink"
 )
 
 var bridgeIPv6 *net.IPNet
