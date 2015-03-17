@@ -1,6 +1,7 @@
 package bridge
 
 import (
+	"fmt"
 	"net"
 
 	"github.com/docker/libnetwork"
@@ -27,12 +28,21 @@ type Configuration struct {
 type driver struct{}
 
 func init() {
-	libnetwork.RegisterNetworkType(networkType, &driver{}, &Configuration{})
+	libnetwork.RegisterNetworkDriver(networkType, NewDriver)
+}
+
+// NewDriver returns a new instance of a bridge driver.
+func NewDriver() (libnetwork.Driver, error) {
+	return &driver{}, nil
 }
 
 // Create a new network using simplebridge plugin
-func (d *driver) CreateNetwork(name string, opaqueConfig interface{}) (libnetwork.Network, error) {
-	config := opaqueConfig.(*Configuration)
+func (d *driver) NewNetwork(name string, opaqueConfig interface{}) (libnetwork.Network, error) {
+	config, ok := opaqueConfig.(*Configuration)
+	if !ok {
+		return nil, fmt.Errorf("Invalid configuration type received")
+	}
+
 	bridgeIntfc := newInterface(config)
 	bridgeSetup := newBridgeSetup(bridgeIntfc)
 

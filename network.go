@@ -1,17 +1,23 @@
 // Package libnetwork provides basic fonctionalities and extension points to
 // create network namespaces and allocate interfaces for containers to use.
 //
-//    // Create a network for containers to join.
-//    network, err := libnetwork.NewNetwork("simplebridge", &Options{})
+//    // Create a network driver
+//    drv, err := libnetwork.NewDriver("simplebridge")
 //    if err != nil {
-//    	return err
+//        return err
+//    }
+//
+//    // Create a network for containers to join.
+//    network, err := drv.NewNetwork("foo", &Options{})
+//    if err != nil {
+//        return err
 //    }
 //
 //    // For a new container: create network namespace (providing the path).
 //    networkPath := "/var/lib/docker/.../4d23e"
 //    networkNamespace, err := libnetwork.NewNetworkNamespace(networkPath)
 //    if err != nil {
-//    	return err
+//        return err
 //    }
 //
 //    // For each new container: allocate IP and interfaces. The returned network
@@ -19,14 +25,14 @@
 //    // iptables rules for port publishing.
 //    interfaces, err := network.Link(containerID)
 //    if err != nil {
-//    	return err
+//        return err
 //    }
 //
 //    // Add interfaces to the namespace.
 //    for _, interface := range interfaces {
-//    	if err := networkNamespace.AddInterface(interface); err != nil {
-//    		return err
-//    	}
+//        if err := networkNamespace.AddInterface(interface); err != nil {
+//            return err
+//        }
 //    }
 //
 package libnetwork
@@ -96,10 +102,17 @@ type Namespace interface {
 	AddInterface(*Interface) error
 }
 
-// NewNetwork creates a new network of the specified networkType. The options
-// are driver specific and modeled in a generic way.
-func NewNetwork(networkType, name string, options DriverParams) (Network, error) {
-	return createNetwork(networkType, name, options)
+// Driver represents a network driver capable of creating networks of a certain
+// type.
+type Driver interface {
+	// NewNetwork creates a new network of the specified networkType. The
+	// options are driver specific and modeled in a generic way.
+	NewNetwork(name string, options interface{}) (Network, error)
+}
+
+// NewDriver creates a network driver of the specified type.
+func NewDriver(driverType string) (Driver, error) {
+	return createNetworkDriver(driverType)
 }
 
 // NewNetworkNamespace creates a new network namespace mounted on the specified
