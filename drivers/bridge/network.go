@@ -5,10 +5,15 @@ import (
 	"net"
 	"strings"
 
-	"github.com/docker/libcontainer/utils"
 	"github.com/docker/libnetwork"
 	"github.com/docker/libnetwork/ipallocator"
 	"github.com/vishvananda/netlink"
+)
+
+const (
+	// Used for naming the virtual ethernet ports
+	vethLen       = 7
+	containerVeth = "eth0"
 )
 
 // ErrEndpointExists is returned if more than one endpoint is added to the network
@@ -95,7 +100,7 @@ func (b *bridgeNetwork) Link(name string) ([]*libnetwork.Interface, error) {
 	var interfaces []*libnetwork.Interface
 	intf := &libnetwork.Interface{}
 	intf.SrcName = name2
-	intf.DstName = "eth0"
+	intf.DstName = containerVeth
 	intf.Address = ipv4Addr.String()
 	intf.Gateway = b.bridge.bridgeIPv4.IP.String()
 	if b.bridge.Config.EnableIPv6 {
@@ -108,9 +113,12 @@ func (b *bridgeNetwork) Link(name string) ([]*libnetwork.Interface, error) {
 	return interfaces, nil
 }
 
+// Generates a name to be used for a virtual ethernet
+// interface. The name is constructed by 'veth' appended
+// by a randomly generated hex value. (example: veth0f60e2c)
 func generateIfaceName() (string, error) {
-	for i := 0; i < 10; i++ {
-		name, err := utils.GenerateRandomName("veth", 7)
+	for i := 0; i < 3; i++ {
+		name, err := libnetwork.GenerateRandomName(vethPrefix, vethLen)
 		if err != nil {
 			continue
 		}
