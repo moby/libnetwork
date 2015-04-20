@@ -43,6 +43,7 @@ import (
 
 	"github.com/docker/docker/pkg/stringid"
 	"github.com/docker/libnetwork/driverapi"
+	"github.com/docker/libnetwork/drivers/remote"
 	"github.com/docker/libnetwork/sandbox"
 	"github.com/docker/libnetwork/types"
 )
@@ -68,6 +69,9 @@ type NetworkController interface {
 
 	// NetworkByID returns the Network which has the passed id, if it exists otherwise nil is returned
 	NetworkByID(id string) Network
+
+	// Register an external driver.
+	RegisterRemoteDriver(name string, r remote.Remote)
 }
 
 // A Network represents a logical connectivity zone that containers may
@@ -158,6 +162,10 @@ type controller struct {
 // New creates a new instance of network controller.
 func New() NetworkController {
 	return &controller{networkTable{}, enumerateDrivers(), sync.Mutex{}}
+}
+
+func (c *controller) RegisterRemoteDriver(name string, r remote.Remote) {
+	c.drivers[name] = remote.New(r)
 }
 
 func (c *controller) ConfigureNetworkDriver(networkType string, options interface{}) error {
