@@ -61,7 +61,7 @@ type NetworkController interface {
 	Networks() []Network
 
 	// WalkNetworks uses the provided function to walk the Network(s) managed by this controller.
-	WalkNetworks(walker NetworkWalker)
+	WalkNetworks(walker NetworkWalker) bool
 
 	// NetworkByName returns the Network which has the passed name, if it exists otherwise nil is returned
 	NetworkByName(name string) Network
@@ -221,12 +221,13 @@ func (c *controller) Networks() []Network {
 	return list
 }
 
-func (c *controller) WalkNetworks(walker NetworkWalker) {
+func (c *controller) WalkNetworks(walker NetworkWalker) bool {
 	for _, n := range c.Networks() {
 		if walker(n) {
-			return
+			return true
 		}
 	}
+	return false
 }
 
 func (c *controller) NetworkByName(name string) Network {
