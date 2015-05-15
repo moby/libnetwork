@@ -274,6 +274,8 @@ func Exists(table Table, chain string, rule ...string) bool {
 	if _, err := Raw(append([]string{
 		"-t", string(table), "-C", chain}, rule...)...); err == nil {
 		return true
+	} else if strings.Contains(err.Error(), "iptables: No chain/target/match by that name") {
+		return false
 	}
 
 	// parse "iptables -S" for the rule (this checks rules in a specific chain
