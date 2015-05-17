@@ -48,6 +48,7 @@ package libnetwork
 import (
 	"sync"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/pkg/stringid"
 	"github.com/docker/libnetwork/driverapi"
 	"github.com/docker/libnetwork/sandbox"
@@ -63,6 +64,9 @@ type NetworkController interface {
 	// Create a new network. The options parameter carries network specific options.
 	// Labels support will be added in the near future.
 	NewNetwork(networkType, name string, options ...NetworkOption) (Network, error)
+
+	// Clean up all network setup created by each driver implementation.
+	DestroyNetworks()
 
 	// Networks returns the list of Network(s) managed by this controller.
 	Networks() []Network
@@ -192,6 +196,16 @@ func (c *controller) WalkNetworks(walker NetworkWalker) {
 	for _, n := range c.Networks() {
 		if walker(n) {
 			return
+		}
+	}
+}
+
+func (c *controller) DestroyNetworks() {
+	logrus.Debugf("Destroy all networks")
+	for _, n := range c.Networks() {
+		err := n.Delete()
+		if err != nil {
+			logrus.Errorf("Failed to destroy network %%s: %v", n.Name, err)
 		}
 	}
 }
