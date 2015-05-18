@@ -205,7 +205,7 @@ func (c *controller) DestroyNetworks() {
 	for _, n := range c.Networks() {
 		err := n.Delete()
 		if err != nil {
-			logrus.Errorf("Failed to destroy network %%s: %v", n.Name, err)
+			logrus.Errorf("Failed to destroy network %s: %v", n.Name, err)
 		}
 	}
 }
