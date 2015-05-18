@@ -201,7 +201,7 @@ func (c *controller) WalkNetworks(walker NetworkWalker) {
 }
 
 func (c *controller) DestroyNetworks() {
-	logrus.Debugf("Destroy all networks")
+	logrus.Info("Destroy all networks")
 	for _, n := range c.Networks() {
 		err := n.Delete()
 		if err != nil {
