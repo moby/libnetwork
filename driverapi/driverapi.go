@@ -91,12 +91,27 @@ type InterfaceNameInfo interface {
 	ID() int
 }
 
+// InterfaceRouteInfo provides a go interface for the drivers to assign routes
+// to interfaces.
+type InterfaceRouteInfo interface {
+	// SetRoutes method assigns routes for the interface.
+	SetRoutes(routes []net.IPNet) error
+
+	// ID returns the numerical id that was assigned to the interface by the driver
+	// CreateEndpoint.
+	ID() int
+}
+
 // JoinInfo represents a set of resources that the driver has the ability to provide during
 // join time.
 type JoinInfo interface {
 	// InterfaceNames returns a list of InterfaceNameInfo go interface to facilitate
 	// setting the names for the interfaces.
 	InterfaceNames() []InterfaceNameInfo
+
+	// InterfaceRoutes returns a list of InterfaceRouteInfo go interface to facilitate
+	// setting the names for the interfaces.
+	InterfaceRoutes() []InterfaceRouteInfo
 
 	// SetGateway sets the default IPv4 gateway when a container joins the endpoint.
 	SetGateway(net.IP) error

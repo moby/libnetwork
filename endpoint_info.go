@@ -40,12 +40,13 @@ type InterfaceInfo interface {
 }
 
 type endpointInterface struct {
-	id        int
-	mac       net.HardwareAddr
-	addr      net.IPNet
-	addrv6    net.IPNet
-	srcName   string
+	id      int
+	mac     net.HardwareAddr
+	addr    net.IPNet
+	addrv6  net.IPNet
+	srcName string
 	dstPrefix string
+	routes  []net.IPNet
 }
 
 type endpointJoinInfo struct {
@@ -136,11 +137,29 @@ func (i *endpointInterface) SetNames(srcName string, dstPrefix string) error {
 	return nil
 }
 
+func (i *endpointInterface) SetRoutes(routes []net.IPNet) error {
+	i.routes = routes
+	return nil
+}
+
 func (ep *endpoint) InterfaceNames() []driverapi.InterfaceNameInfo {
 	ep.Lock()
 	defer ep.Unlock()
 
 	iList := make([]driverapi.InterfaceNameInfo, len(ep.iFaces))
+
+	for i, iface := range ep.iFaces {
+		iList[i] = iface
+	}
+
+	return iList
+}
+
+func (ep *endpoint) InterfaceRoutes() []driverapi.InterfaceRouteInfo {
+	ep.Lock()
+	defer ep.Unlock()
+
+	iList := make([]driverapi.InterfaceRouteInfo, len(ep.iFaces))
 
 	for i, iface := range ep.iFaces {
 		iList[i] = iface

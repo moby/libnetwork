@@ -19,6 +19,7 @@ func configureInterface(iface netlink.Link, settings *Interface) error {
 		{setInterfaceName, fmt.Sprintf("error renaming interface %q to %q", ifaceName, settings.DstName)},
 		{setInterfaceIP, fmt.Sprintf("error setting interface %q IP to %q", ifaceName, settings.Address)},
 		{setInterfaceIPv6, fmt.Sprintf("error setting interface %q IPv6 to %q", ifaceName, settings.AddressIPv6)},
+		{setInterfaceRoutes, fmt.Sprintf("error setting interface %q routes to %q", ifaceName, settings.Routes)},
 	}
 
 	for _, config := range ifaceConfigurators {
@@ -78,4 +79,18 @@ func setInterfaceIPv6(iface netlink.Link, settings *Interface) error {
 
 func setInterfaceName(iface netlink.Link, settings *Interface) error {
 	return netlink.LinkSetName(iface, settings.DstName)
+}
+
+func setInterfaceRoutes(iface netlink.Link, settings *Interface) error {
+	for _, route := range settings.Routes {
+		err := netlink.RouteAdd(&netlink.Route{
+			Scope:     netlink.SCOPE_UNIVERSE,
+			LinkIndex: iface.Attrs().Index,
+			Dst:       &route,
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

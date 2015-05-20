@@ -293,6 +293,7 @@ func (ep *endpoint) Join(containerID string, options ...EndpointOption) (*Contai
 			SrcName: i.srcName,
 			DstName: i.dstPrefix,
 			Address: &i.addr,
+			Routes:  i.routes,
 		}
 		if i.addrv6.IP.To16() != nil {
 			iface.AddressIPv6 = &i.addrv6

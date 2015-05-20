@@ -25,7 +25,7 @@ type Sandbox interface {
 	// an appropriate suffix for the DstName to disambiguate.
 	AddInterface(*Interface) error
 
-	// Remove an interface from the sandbox by renamin to original name
+	// Remove an interface from the sandbox by renaming to original name
 	// and moving it out of the sandbox.
 	RemoveInterface(*Interface) error
 
@@ -74,15 +74,25 @@ type Interface struct {
 
 	// IPv6 address for the interface.
 	AddressIPv6 *net.IPNet
+
+	// IPv4 routes for the interface.
+	Routes []net.IPNet
 }
 
 // GetCopy returns a copy of this Interface structure
 func (i *Interface) GetCopy() *Interface {
+	copiedRoutes := make([]net.IPNet, len(i.Routes))
+
+	for index := range i.Routes {
+		copiedRoutes[index] = *types.GetIPNetCopy(&i.Routes[index])
+	}
+
 	return &Interface{
 		SrcName:     i.SrcName,
 		DstName:     i.DstName,
 		Address:     types.GetIPNetCopy(i.Address),
 		AddressIPv6: types.GetIPNetCopy(i.AddressIPv6),
+		Routes:      copiedRoutes,
 	}
 }
 
@@ -106,6 +116,16 @@ func (i *Interface) Equal(o *Interface) bool {
 
 	if !types.CompareIPNet(i.AddressIPv6, o.AddressIPv6) {
 		return false
+	}
+
+	if len(i.Routes) != len(o.Routes) {
+		return false
+	}
+
+	for index := range i.Routes {
+		if !types.CompareIPNet(&i.Routes[index], &o.Routes[index]) {
+			return false
+		}
 	}
 
 	return true
