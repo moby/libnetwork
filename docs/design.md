@@ -59,7 +59,7 @@ Networks consist of *many* endpoints
 `Options` provides a generic and flexible mechanism to pass `Driver` specific configuration option from the user to the `Driver` directly. `Options` are just key-value pairs of data with `key` represented by a string and `value` represented by a generic object (such as golang `interface{}`). Libnetwork will operate on the `Options` ONLY if the  `key` matches any of the well-known `Label` defined in the `net-labels` package. `Options` also encompasses `Labels` as explained below. `Options` are generally NOT end-user visible (in UI), while `Labels` are.
 
 ***Labels***
-`Labels` are very similar to `Options` & in fact they  are just a subset of `Options`. `Labels` are typically end-user visible and are represented in the UI explicitly using the `--labels` option. They are passed from the UI to the `Driver` so that `Driver` can make use of it and perform any `Driver` specific operation (such as a subnet to allocate IP-Addresses from in a Network).
+`Labels` are very similar to `Options` & in fact they are just a subset of `Options`. `Labels` are typically end-user visible and are represented in the UI explicitly using the `--labels` option. They are passed from the UI to the `Driver` so that `Driver` can make use of it and perform any `Driver` specific operation (such as a subnet to allocate IP-Addresses from in a Network).
 
 ## CNM Lifecycle
 
@@ -91,7 +91,7 @@ Consumers of the CNM, like Docker for example, interact through the CNM Objects 
 
 ### Networks & Endpoints
 
-LibNetwork's Network and Endpoint APIs are primarly for managing the corresponding Objects and book-keeping them to provide a level of abstraction as required by the CNM. It delegates the actual implementation to the drivers which  realizes the functionality as promised in the CNM. For more information on these details, please see [the drivers section](#Drivers)
+LibNetwork's Network and Endpoint APIs are primarily for managing the corresponding Objects and book-keeping them to provide a level of abstraction as required by the CNM. It delegates the actual implementation to the drivers which  realizes the functionality as promised in the CNM. For more information on these details, please see [the drivers section](#Drivers)
 
 ### Sandbox
 
