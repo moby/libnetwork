@@ -40,13 +40,13 @@ type InterfaceInfo interface {
 }
 
 type endpointInterface struct {
-	id      int
-	mac     net.HardwareAddr
-	addr    net.IPNet
-	addrv6  net.IPNet
-	srcName string
+	id        int
+	mac       net.HardwareAddr
+	addr      net.IPNet
+	addrv6    net.IPNet
+	srcName   string
 	dstPrefix string
-	routes  []net.IPNet
+	routes    []net.IPNet
 }
 
 type endpointJoinInfo struct {
