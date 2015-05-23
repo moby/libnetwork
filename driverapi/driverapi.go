@@ -91,17 +91,6 @@ type InterfaceNameInfo interface {
 	ID() int
 }
 
-// InterfaceRouteInfo provides a go interface for the drivers to assign routes
-// to interfaces.
-type InterfaceRouteInfo interface {
-	// SetRoutes method assigns routes for the interface.
-	SetRoutes(routes []net.IPNet) error
-
-	// ID returns the numerical id that was assigned to the interface by the driver
-	// CreateEndpoint.
-	ID() int
-}
-
 // JoinInfo represents a set of resources that the driver has the ability to provide during
 // join time.
 type JoinInfo interface {
@@ -109,15 +98,15 @@ type JoinInfo interface {
 	// setting the names for the interfaces.
 	InterfaceNames() []InterfaceNameInfo
 
-	// InterfaceRoutes returns a list of InterfaceRouteInfo go interface to facilitate
-	// setting the names for the interfaces.
-	InterfaceRoutes() []InterfaceRouteInfo
-
 	// SetGateway sets the default IPv4 gateway when a container joins the endpoint.
 	SetGateway(net.IP) error
 
 	// SetGatewayIPv6 sets the default IPv6 gateway when a container joins the endpoint.
 	SetGatewayIPv6(net.IP) error
+
+	// SetStaticRoutes sets the routes that should be added to the sandbox.  It
+	// may be used in addtion to or instead of a default gateway (as above).
+	SetStaticRoutes(routes []types.StaticRoute) error
 
 	// SetHostsPath sets the overriding /etc/hosts path to use for the container.
 	SetHostsPath(string) error

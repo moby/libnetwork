@@ -303,6 +303,10 @@ func (ep *endpoint) Join(containerID string, options ...EndpointOption) (*Contai
 			return nil, err
 		}
 	}
+	// Set up non-interface routes.
+	for _, r := range ep.joinInfo.StaticRoutes {
+		sb.AddStaticRoute(r)
+	}
 
 	err = sb.SetGateway(joinInfo.gw)
 	if err != nil {

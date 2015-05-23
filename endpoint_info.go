@@ -46,7 +46,7 @@ type endpointInterface struct {
 	addrv6    net.IPNet
 	srcName   string
 	dstPrefix string
-	routes    []net.IPNet
+	routes    []*net.IPNet
 }
 
 type endpointJoinInfo struct {
@@ -54,6 +54,7 @@ type endpointJoinInfo struct {
 	gw6            net.IP
 	hostsPath      string
 	resolvConfPath string
+	StaticRoutes   []*types.StaticRoute
 }
 
 func (ep *endpoint) Info() EndpointInfo {
@@ -137,11 +138,6 @@ func (i *endpointInterface) SetNames(srcName string, dstPrefix string) error {
 	return nil
 }
 
-func (i *endpointInterface) SetRoutes(routes []net.IPNet) error {
-	i.routes = routes
-	return nil
-}
-
 func (ep *endpoint) InterfaceNames() []driverapi.InterfaceNameInfo {
 	ep.Lock()
 	defer ep.Unlock()
@@ -155,17 +151,31 @@ func (ep *endpoint) InterfaceNames() []driverapi.InterfaceNameInfo {
 	return iList
 }
 
-func (ep *endpoint) InterfaceRoutes() []driverapi.InterfaceRouteInfo {
+func (ep *endpoint) SetStaticRoutes(routes []types.StaticRoute) error {
 	ep.Lock()
 	defer ep.Unlock()
 
-	iList := make([]driverapi.InterfaceRouteInfo, len(ep.iFaces))
-
-	for i, iface := range ep.iFaces {
-		iList[i] = iface
+	for _, r := range routes {
+		if r.RouteType == types.NEXTHOP {
+			ep.joinInfo.StaticRoutes = append(ep.joinInfo.StaticRoutes, &r)
+		} else {
+			if err := ep.AddInterfaceRoute(&r); err != nil {
+				return err
+			}
+		}
 	}
+	return nil
+}
 
-	return iList
+func (ep *endpoint) AddInterfaceRoute(route *types.StaticRoute) error {
+	for _, iface := range ep.iFaces {
+		if iface.id == route.InterfaceID {
+			iface.routes = append(iface.routes, route.Destination)
+			return nil
+		}
+	}
+	return types.BadRequestErrorf("Interface with ID %d doesn't exist.",
+		route.InterfaceID)
 }
 
 func (ep *endpoint) SandboxKey() string {
