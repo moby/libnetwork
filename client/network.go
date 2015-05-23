@@ -7,6 +7,9 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"text/tabwriter"
+
+	"github.com/docker/docker/pkg/stringid"
 
 	flag "github.com/docker/docker/pkg/mflag"
 )
@@ -66,9 +69,12 @@ func (cli *NetworkCli) CmdNetworkCreate(chain string, args ...string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := io.Copy(cli.out, bytes.NewReader(obj)); err != nil {
+	var replyID string
+	err = json.Unmarshal(obj, &replyID)
+	if err != nil {
 		return err
 	}
+	fmt.Fprintf(cli.out, "%s\n", replyID)
 	return nil
 }
 
@@ -97,6 +103,10 @@ func (cli *NetworkCli) CmdNetworkRm(chain string, args ...string) error {
 // CmdNetworkLs handles Network List UI
 func (cli *NetworkCli) CmdNetworkLs(chain string, args ...string) error {
 	cmd := cli.Subcmd(chain, "ls", "", "Lists all the networks created by the user", false)
+	quiet := cmd.Bool([]string{"q", "-quiet"}, false, "Only display numeric IDs")
+	noTrunc := cmd.Bool([]string{"#notrunc", "-no-trunc"}, false, "Do not truncate the output")
+	nLatest := cmd.Bool([]string{"l", "-latest"}, false, "Show the latest network created")
+	last := cmd.Int([]string{"n"}, -1, "Show n last created networks")
 	err := cmd.ParseFlags(args, true)
 	if err != nil {
 		return err
@@ -105,9 +115,42 @@ func (cli *NetworkCli) CmdNetworkLs(chain string, args ...string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := io.Copy(cli.out, bytes.NewReader(obj)); err != nil {
+
+	if *last == -1 && *nLatest {
+		*last = 1
+	}
+
+	var networkResources []networkResource
+	err = json.Unmarshal(obj, &networkResources)
+	if err != nil {
 		return err
 	}
+
+	wr := tabwriter.NewWriter(cli.out, 20, 1, 3, ' ', 0)
+
+	// unless quiet (-q) is specified, print field titles
+	if !*quiet {
+		fmt.Fprintln(wr, "NETWORK ID\tNAME\tTYPE")
+	}
+
+	for _, networkResource := range networkResources {
+		ID := networkResource.ID
+		netName := networkResource.Name
+		if !*noTrunc {
+			ID = stringid.TruncateID(ID)
+		}
+		if *quiet {
+			fmt.Fprintln(wr, ID)
+			continue
+		}
+		netType := networkResource.Type
+		fmt.Fprintf(wr, "%s\t%s\t%s\t",
+			ID,
+			netName,
+			netType)
+		fmt.Fprint(wr, "\n")
+	}
+	wr.Flush()
 	return nil
 }
 
@@ -129,9 +172,22 @@ func (cli *NetworkCli) CmdNetworkInfo(chain string, args ...string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := io.Copy(cli.out, bytes.NewReader(obj)); err != nil {
+
+	networkResource := &networkResource{}
+	if err := json.NewDecoder(bytes.NewReader(obj)).Decode(networkResource); err != nil {
 		return err
 	}
+	fmt.Fprintf(cli.out, "Network Id: %s\n", networkResource.ID)
+	fmt.Fprintf(cli.out, "Name: %s\n", networkResource.Name)
+	fmt.Fprintf(cli.out, "Type: %s\n", networkResource.Type)
+	if networkResource.Endpoints != nil {
+		for _, endpointResource := range networkResource.Endpoints {
+			fmt.Fprintf(cli.out, "  Service Id: %s\n", endpointResource.ID)
+			fmt.Fprintf(cli.out, "\tName: %s\n", endpointResource.Name)
+			fmt.Fprintf(cli.out, "\tNetwork: %s\n", endpointResource.Network)
+		}
+	}
+
 	return nil
 }
 
@@ -264,9 +320,14 @@ func (cli *NetworkCli) CmdNetworkServiceCreate(chain string, args ...string) err
 	if err != nil {
 		return err
 	}
-	if _, err := io.Copy(cli.out, bytes.NewReader(obj)); err != nil {
+
+	var replyID string
+	err = json.Unmarshal(obj, &replyID)
+	if err != nil {
 		return err
 	}
+
+	fmt.Fprintf(cli.out, "%s\n", replyID)
 	return nil
 }
 
@@ -302,6 +363,10 @@ func (cli *NetworkCli) CmdNetworkServiceRm(chain string, args ...string) error {
 // CmdNetworkServiceLs handles service list UI
 func (cli *NetworkCli) CmdNetworkServiceLs(chain string, args ...string) error {
 	cmd := cli.Subcmd(chain, "ls", "NETWORK", "Lists all the services on a network", false)
+	quiet := cmd.Bool([]string{"q", "-quiet"}, false, "Only display numeric IDs")
+	noTrunc := cmd.Bool([]string{"#notrunc", "-no-trunc"}, false, "Do not truncate the output")
+	nLatest := cmd.Bool([]string{"l", "-latest"}, false, "Show the latest network created")
+	last := cmd.Int([]string{"n"}, -1, "Show n last created networks")
 	err := cmd.ParseFlags(args, true)
 	if err != nil {
 		return err
@@ -319,9 +384,42 @@ func (cli *NetworkCli) CmdNetworkServiceLs(chain string, args ...string) error {
 		fmt.Fprintf(cli.err, "%s", err.Error())
 		return err
 	}
-	if _, err := io.Copy(cli.out, bytes.NewReader(obj)); err != nil {
+
+	if *last == -1 && *nLatest {
+		*last = 1
+	}
+
+	var endpointResources []endpointResource
+	err = json.Unmarshal(obj, &endpointResources)
+	if err != nil {
 		return err
 	}
+
+	wr := tabwriter.NewWriter(cli.out, 20, 1, 3, ' ', 0)
+	// unless quiet (-q) is specified, print field titles
+	if !*quiet {
+		fmt.Fprintln(wr, "NETWORK SERVICE ID\tNAME\tNETWORK")
+	}
+
+	for _, networkResource := range endpointResources {
+		ID := networkResource.ID
+		netName := networkResource.Name
+		if !*noTrunc {
+			ID = stringid.TruncateID(ID)
+		}
+		if *quiet {
+			fmt.Fprintln(wr, ID)
+			continue
+		}
+		network := networkResource.Network
+		fmt.Fprintf(wr, "%s\t%s\t%s",
+			ID,
+			netName,
+			network)
+		fmt.Fprint(wr, "\n")
+	}
+	wr.Flush()
+
 	return nil
 }
 
@@ -349,9 +447,15 @@ func (cli *NetworkCli) CmdNetworkServiceInfo(chain string, args ...string) error
 		fmt.Fprintf(cli.err, "%s", err.Error())
 		return err
 	}
-	if _, err := io.Copy(cli.out, bytes.NewReader(obj)); err != nil {
+
+	endpointResource := &endpointResource{}
+	if err := json.NewDecoder(bytes.NewReader(obj)).Decode(endpointResource); err != nil {
 		return err
 	}
+	fmt.Fprintf(cli.out, "Service Id: %s\n", endpointResource.ID)
+	fmt.Fprintf(cli.out, "\tName: %s\n", endpointResource.Name)
+	fmt.Fprintf(cli.out, "\tNetwork: %s\n", endpointResource.Network)
+
 	return nil
 }
 
