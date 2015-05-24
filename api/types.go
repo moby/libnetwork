@@ -48,7 +48,7 @@ type endpointJoin struct {
 	ResolvConfPath    string                 `json:"resolv_conf_path"`
 	DNS               []string               `json:"dns"`
 	ExtraHosts        []endpointExtraHost    `json:"extra_hosts"`
-	ParentUpdates     []endpointParentUpdate `json:"extra_hosts"`
+	ParentUpdates     []endpointParentUpdate `json:"parent_updates"`
 	UseDefaultSandbox bool                   `json:"use_default_sandbox"`
 }
 
