@@ -244,6 +244,9 @@ func TestCreateLinkWithOptions(t *testing.T) {
 	epOptions := make(map[string]interface{})
 	epOptions[netlabel.MacAddress] = mac
 
+	ip := net.ParseIP("172.17.42.111")
+	epOptions[netlabel.IPAddress] = ip
+
 	te := &testEndpoint{ifaces: []*testInterface{}}
 	err = d.CreateEndpoint("net1", "ep", te, epOptions)
 	if err != nil {
@@ -262,7 +265,12 @@ func TestCreateLinkWithOptions(t *testing.T) {
 	}
 
 	if !bytes.Equal(mac, veth.Attrs().HardwareAddr) {
-		t.Fatalf("Failed to parse and program endpoint configuration")
+		t.Fatalf("Failed to parse and program endpoint MAC configuration")
+	}
+
+	teIP4 := te.ifaces[0].addr.IP.To4()
+	if !ip.Equal(teIP4) {
+		t.Fatalf("Failed to parse and program endpoint IP configuration")
 	}
 }
 
