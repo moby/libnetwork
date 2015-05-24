@@ -375,6 +375,9 @@ func procDeleteNetwork(c libnetwork.NetworkController, vars map[string]string, b
 	if !errRsp.isOK() {
 		return nil, errRsp
 	}
+	if isReservedNetwork(nw.Name()) {
+		return nil, errRsp
+	}
 
 	err := nw.Delete()
 	if err != nil {
@@ -548,4 +551,14 @@ func writeJSON(w http.ResponseWriter, code int, v interface{}) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	return json.NewEncoder(w).Encode(v)
+}
+
+func isReservedNetwork(name string) bool {
+	reserved := []string{"bridge", "none", "host"}
+	for _, r := range reserved {
+		if strings.EqualFold(r, name) {
+			return true
+		}
+	}
+	return false
 }
