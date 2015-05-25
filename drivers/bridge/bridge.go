@@ -468,35 +468,6 @@ func (d *driver) CreateNetwork(id types.UUID, option map[string]interface{}) err
 	bridgeIface := newInterface(config)
 	network.bridge = bridgeIface
 
-	// Verify network does not conflict with previously configured networks
-	// on parameters that were chosen by the driver.
-	d.Lock()
-	for _, nw := range d.networks {
-		if nw.id == id {
-			continue
-		}
-		// Verify the name (which may have been set by newInterface()) does not conflict with
-		// existing bridge interfaces. Ironically the system chosen name gets stored in the config...
-		// Basically we are checking if the two original configs were both empty.
-		if nw.config.BridgeName == config.BridgeName {
-			d.Unlock()
-			return types.ForbiddenErrorf("conflicts with network %s (%s)", nw.id, nw.config.BridgeName)
-		}
-		// If this network config specifies the AddressIPv4, we need
-		// to make sure it does not conflict with any previously allocated
-		// bridges. This could not be completely caught by the config conflict
-		// check, because networks which config does not specify the AddressIPv4
-		// get their address and subnet selected by the driver (see electBridgeIPv4())
-		if config.AddressIPv4 != nil {
-			if nw.bridge.bridgeIPv4.Contains(config.AddressIPv4.IP) ||
-				config.AddressIPv4.Contains(nw.bridge.bridgeIPv4.IP) {
-				d.Unlock()
-				return types.ForbiddenErrorf("conflicts with network %s (%s)", nw.id, nw.config.BridgeName)
-			}
-		}
-	}
-	d.Unlock()
-
 	// Prepare the bridge setup configuration
 	bridgeSetup := newBridgeSetup(config, bridgeIface)
 
