@@ -46,6 +46,95 @@ func TestCreateFullOptions(t *testing.T) {
 	}
 }
 
+func TestCreateFullOptionsLabels(t *testing.T) {
+	defer netutils.SetupTestNetNS(t)()
+	d := newDriver()
+	dd, _ := d.(*driver)
+
+	config := &configuration{
+		EnableIPForwarding: true,
+	}
+	genericOption := make(map[string]interface{})
+	genericOption[netlabel.GenericData] = config
+
+	if err := d.Config(genericOption); err != nil {
+		t.Fatalf("Failed to setup driver config: %v", err)
+	}
+
+	nwip := bridgeNetworks[1]
+	gw := nwip.IP.To4()
+	gw[3] = 254
+
+	var labels []string
+	labels = append(labels, BridgeName)
+	labels = append(labels, "cu")
+	labels = append(labels, AllowNonDefaultBridge)
+	labels = append(labels, "true")
+	labels = append(labels, netlabel.EnableIPv6)
+	labels = append(labels, "true")
+	labels = append(labels, EnableIPTables)
+	labels = append(labels, "true")
+	labels = append(labels, EnableICC)
+	labels = append(labels, "true")
+	labels = append(labels, EnableIPMasquerade)
+	labels = append(labels, "true")
+	labels = append(labels, EnableUserlandProxy)
+	labels = append(labels, "true")
+	labels = append(labels, netlabel.NetworkIPv4)
+	labels = append(labels, nwip.String())
+	labels = append(labels, netlabel.ContainersSubnetIPv4)
+	labels = append(labels, nwip.String())
+	labels = append(labels, netlabel.ContainersSubnetIPv6)
+	labels = append(labels, "2003:db8:ea9:9abc:b0c4::/80")
+	labels = append(labels, netlabel.DefaultGatewayIPv4)
+	labels = append(labels, gw.String())
+	labels = append(labels, netlabel.DefaultGatewayIPv6)
+	labels = append(labels, "2003:db8:ea9:9abc:b0c4::254")
+	labels = append(labels, DefaultBindingIP)
+	labels = append(labels, "127.0.0.1")
+
+	netOption := make(map[string]interface{})
+	netOption[netlabel.GenericLabels] = labels
+
+	err := d.CreateNetwork("dummy", netOption)
+	if err != nil {
+		t.Fatalf("Failed to create bridge: %v", err)
+	}
+
+	nw, ok := dd.networks["dummy"]
+	if !ok {
+		t.Fatalf("Cannot find dummy network in bridge driver")
+	}
+
+	if nw.config.BridgeName != "cu" {
+		t.Fatalf("incongruent name in bridge network")
+	}
+
+	if !nw.config.AllowNonDefaultBridge {
+		t.Fatalf("incongruent AllowNonDefaultBridge in bridge network")
+	}
+
+	if !nw.config.EnableIPv6 {
+		t.Fatalf("incongruent EnableIPv6 in bridge network")
+	}
+
+	if !nw.config.EnableIPTables {
+		t.Fatalf("incongruent EnableIPTables in bridge network")
+	}
+
+	if !nw.config.EnableICC {
+		t.Fatalf("incongruent EnableICC in bridge network")
+	}
+
+	if !nw.config.EnableIPMasquerade {
+		t.Fatalf("incongruent EnableIPMasquerade in bridge network")
+	}
+
+	if !nw.config.EnableUserlandProxy {
+		t.Fatalf("incongruent EnableUserlandProxy in bridge network")
+	}
+}
+
 func TestCreate(t *testing.T) {
 	defer netutils.SetupTestNetNS(t)()
 	d := newDriver()
@@ -163,6 +252,89 @@ func TestQueryEndpointInfo(t *testing.T) {
 
 func TestQueryEndpointInfoHairpin(t *testing.T) {
 	testQueryEndpointInfo(t, false)
+}
+
+func TestCreateEndpointWithLabels(t *testing.T) {
+	defer netutils.SetupTestNetNS(t)()
+	d := newDriver()
+	dd, _ := d.(*driver)
+
+	config := &networkConfiguration{
+		BridgeName:     DefaultBridgeName,
+		EnableIPTables: true,
+	}
+	genericOption := make(map[string]interface{})
+	genericOption[netlabel.GenericData] = config
+
+	err := d.CreateNetwork("net2", genericOption)
+	if err != nil {
+		t.Fatalf("Failed to create bridge: %v", err)
+	}
+
+	// Build label list
+	var labels []string
+	macs := "80:cd:ef:12:34:56"
+	mac, err := net.ParseMAC(macs)
+	labels = append(labels, netlabel.MacAddress)
+	labels = append(labels, macs)
+
+	exposedPorts := getExposedPorts()
+	for _, exp := range exposedPorts {
+		labels = append(labels, netlabel.ExposedPorts)
+		labels = append(labels, exp.String())
+	}
+
+	portBindings := getPortMapping()
+	for _, pb := range portBindings {
+		labels = append(labels, netlabel.PortBinding)
+		labels = append(labels, pb.String())
+	}
+
+	epOptions := make(map[string]interface{})
+	epOptions[netlabel.GenericLabels] = labels
+
+	te := &testEndpoint{ifaces: []*testInterface{}}
+	err = d.CreateEndpoint("net2", "ep1", te, epOptions)
+	if err != nil {
+		t.Fatalf("Failed to create an endpoint : %s", err.Error())
+	}
+
+	network, ok := dd.networks["net2"]
+	if !ok {
+		t.Fatalf("Cannot find network %s inside driver", "net2")
+	}
+
+	// Check if bridgeEndpoint configuration contains the expected fields
+	ep, _ := network.endpoints["ep1"]
+	epConfig := ep.config
+
+	if !bytes.Equal(mac, epConfig.MacAddress) {
+		t.Fatalf("incongruent mac address found in endpoint configuration. Expected %s. Found %v", mac, epConfig.MacAddress)
+	}
+
+	if len(epConfig.ExposedPorts) != len(exposedPorts) {
+		t.Fatalf("endpoint configuration does not contain expected number of exposed ports. Expected %d. Found %d", len(exposedPorts), len(epConfig.ExposedPorts))
+	}
+	for i := 0; i < len(exposedPorts); i++ {
+		if !exposedPorts[i].Equal(&epConfig.ExposedPorts[i]) {
+			t.Fatalf("incongruent exposed port found in endpoint configuration")
+		}
+	}
+
+	if len(epConfig.PortBindings) != len(portBindings) {
+		t.Fatalf("endpoint configuration does not contain expected number of port bindings. Expected %d. Found %d", len(portBindings), len(epConfig.PortBindings))
+	}
+	for i := 0; i < len(portBindings); i++ {
+		if !portBindings[i].Equal(&epConfig.PortBindings[i]) {
+			t.Fatalf("incongruent binding port found in endpoint configuration")
+		}
+	}
+
+	// Cleanup as host ports are there
+	err = releasePorts(ep)
+	if err != nil {
+		t.Fatalf("Failed to release mapped ports: %v", err)
+	}
 }
 
 func testQueryEndpointInfo(t *testing.T, ulPxyEnabled bool) {

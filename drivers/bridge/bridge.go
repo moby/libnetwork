@@ -159,7 +159,6 @@ func (c *networkConfiguration) Conflict(o *networkConfiguration) bool {
 	}
 
 	// They must be in different subnets
-
 	if (c.AddressIPv4 != nil && o.AddressIPv4.IP != nil) &&
 		(c.AddressIPv4.Contains(o.AddressIPv4.IP) || o.AddressIPv4.Contains(c.AddressIPv4.IP)) {
 		return true
@@ -309,6 +308,110 @@ func (c *networkConfiguration) FromMap(data map[string]interface{}) error {
 	return nil
 }
 
+// FromLabels retrieves the network configuration from the list of labels
+func (c *networkConfiguration) FromLabels(labels []string) error {
+	for i := 0; i < len(labels); i += 2 {
+		var err error
+		label := labels[i]
+		value := labels[i+1]
+		switch label {
+		case BridgeName:
+			c.BridgeName = value
+		case MTU:
+			if c.Mtu, err = strconv.Atoi(value); err != nil {
+				return types.BadRequestErrorf("failed to parse %s's value: %s", label, err.Error())
+			}
+		case netlabel.EnableIPv6:
+			if c.EnableIPv6, err = strconv.ParseBool(value); err != nil {
+				return types.BadRequestErrorf("failed to parse %s's value: %s", label, err.Error())
+			}
+		case EnableIPTables:
+			if c.EnableIPTables, err = strconv.ParseBool(value); err != nil {
+				return types.BadRequestErrorf("failed to parse %s value: %s", label, err.Error())
+			}
+		case EnableICC:
+			if c.EnableICC, err = strconv.ParseBool(value); err != nil {
+				return types.BadRequestErrorf("failed to parse %s's value: %s", label, err.Error())
+			}
+		case EnableIPMasquerade:
+			if c.EnableIPMasquerade, err = strconv.ParseBool(value); err != nil {
+				return types.BadRequestErrorf("failed to parse %s's value: %s", label, err.Error())
+			}
+		case EnableUserlandProxy:
+			if c.EnableUserlandProxy, err = strconv.ParseBool(value); err != nil {
+				return types.BadRequestErrorf("failed to parse %s's value: %s", label, err.Error())
+			}
+		case AllowNonDefaultBridge:
+			if c.AllowNonDefaultBridge, err = strconv.ParseBool(value); err != nil {
+				return types.BadRequestErrorf("failed to parse %s's value: %s", label, err.Error())
+			}
+		case netlabel.NetworkIPv4:
+			if ip, nw, e := net.ParseCIDR(value); e == nil {
+				nw.IP = ip
+				c.AddressIPv4 = nw
+			} else {
+				return types.BadRequestErrorf("failed to parse %s's value", label)
+			}
+		case netlabel.ContainersSubnetIPv4:
+			if ip, nw, e := net.ParseCIDR(value); e == nil {
+				nw.IP = ip
+				c.FixedCIDR = nw
+			} else {
+				return types.BadRequestErrorf("failed to parse %s's value: %s", label, err.Error())
+			}
+		case netlabel.ContainersSubnetIPv6:
+			if ip, nw, e := net.ParseCIDR(value); e == nil {
+				nw.IP = ip
+				c.FixedCIDRv6 = nw
+			} else {
+				return types.BadRequestErrorf("failed to parse %s's value: %s", label, err.Error())
+			}
+		case netlabel.DefaultGatewayIPv4:
+			if c.DefaultGatewayIPv4 = net.ParseIP(value); c.DefaultGatewayIPv4 == nil {
+				return types.BadRequestErrorf("failed to parse %s's value: %s", label, err.Error())
+			}
+		case netlabel.DefaultGatewayIPv6:
+			if c.DefaultGatewayIPv6 = net.ParseIP(value); c.DefaultGatewayIPv6 == nil {
+				return types.BadRequestErrorf("failed to parse %s's value: %s", label, err.Error())
+			}
+		case DefaultBindingIP:
+			if c.DefaultBindingIP = net.ParseIP(value); c.DefaultBindingIP == nil {
+				return types.BadRequestErrorf("failed to parse %s's value", label)
+			}
+		}
+	}
+	return nil
+}
+
+// FromLabels retrieves the endpoint configuration from the list of labels
+func (ec *endpointConfiguration) FromLabels(labels []string) error {
+	for i := 0; i < len(labels); i += 2 {
+		switch labels[i] {
+		case netlabel.MacAddress:
+			if mac, err := net.ParseMAC(labels[i+1]); err == nil {
+				ec.MacAddress = mac
+			} else {
+				return types.BadRequestErrorf("cannot parse %s: %s", labels[i], labels[i+1])
+			}
+		case netlabel.ExposedPorts:
+			tp := new(types.TransportPort)
+			err := tp.FromString(labels[i+1])
+			if err != nil {
+				return types.BadRequestErrorf("invalid format for label %s's value: %s (%s)", labels[i], labels[i+1], err.Error())
+			}
+			ec.ExposedPorts = append(ec.ExposedPorts, *tp)
+		case netlabel.PortBinding:
+			pb := new(types.PortBinding)
+			err := pb.FromString(labels[i+1])
+			if err != nil {
+				return types.BadRequestErrorf("invalid format for label %s's value: %s (%s)", labels[i], labels[i+1], err.Error())
+			}
+			ec.PortBindings = append(ec.PortBindings, *pb)
+		}
+	}
+	return nil
+}
+
 func (n *bridgeNetwork) getEndpoint(eid types.UUID) (*bridgeEndpoint, error) {
 	n.Lock()
 	defer n.Unlock()
@@ -403,6 +506,15 @@ func parseNetworkGenericOptions(data interface{}) (*networkConfiguration, error)
 func parseNetworkOptions(option options.Generic) (*networkConfiguration, error) {
 	var err error
 	config := &networkConfiguration{}
+
+	// If labels are provided, relay on them only
+	if opt, ok := option[netlabel.GenericLabels]; ok {
+		if labels, ok := opt.([]string); ok {
+			err := config.FromLabels(labels)
+			return config, err
+		}
+		return nil, types.BadRequestErrorf("cannot recognize list of labels")
+	}
 
 	// Parse generic label first, config will be re-assigned
 	if genData, ok := option[netlabel.GenericData]; ok && genData != nil {
@@ -1090,6 +1202,15 @@ func parseEndpointOptions(epOptions map[string]interface{}) (*endpointConfigurat
 	}
 
 	ec := &endpointConfiguration{}
+
+	// If labels are provided, relay on them only
+	if opt, ok := epOptions[netlabel.GenericLabels]; ok {
+		if labels, ok := opt.([]string); ok {
+			err := ec.FromLabels(labels)
+			return ec, err
+		}
+		return nil, types.BadRequestErrorf("cannot recognize list of labels")
+	}
 
 	if opt, ok := epOptions[netlabel.MacAddress]; ok {
 		if mac, ok := opt.(net.HardwareAddr); ok {
