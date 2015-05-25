@@ -149,6 +149,11 @@ func (test *testEndpoint) SetNames(src string, dst string) error {
 	return nil
 }
 
+func (test *testEndpoint) SetStaticRoutes(routes []types.StaticRoute) error {
+	//TODO
+	return nil
+}
+
 func (test *testEndpoint) ID() int {
 	return test.id
 }

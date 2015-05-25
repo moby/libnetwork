@@ -293,11 +293,19 @@ func (ep *endpoint) Join(containerID string, options ...EndpointOption) (*Contai
 			SrcName: i.srcName,
 			DstName: i.dstPrefix,
 			Address: &i.addr,
+			Routes:  i.routes,
 		}
 		if i.addrv6.IP.To16() != nil {
 			iface.AddressIPv6 = &i.addrv6
 		}
 		err = sb.AddInterface(iface)
+		if err != nil {
+			return nil, err
+		}
+	}
+	// Set up non-interface routes.
+	for _, r := range ep.joinInfo.StaticRoutes {
+		err = sb.AddStaticRoute(r)
 		if err != nil {
 			return nil, err
 		}

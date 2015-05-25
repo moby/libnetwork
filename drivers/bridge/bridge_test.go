@@ -87,6 +87,7 @@ type testEndpoint struct {
 	gw6            net.IP
 	hostsPath      string
 	resolvConfPath string
+	routes         []types.StaticRoute
 }
 
 func (te *testEndpoint) Interfaces() []driverapi.InterfaceInfo {
@@ -154,6 +155,11 @@ func (te *testEndpoint) SetHostsPath(path string) error {
 
 func (te *testEndpoint) SetResolvConfPath(path string) error {
 	te.resolvConfPath = path
+	return nil
+}
+
+func (te *testEndpoint) SetStaticRoutes(routes []types.StaticRoute) error {
+	te.routes = routes
 	return nil
 }
 
