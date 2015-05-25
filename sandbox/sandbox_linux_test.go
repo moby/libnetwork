@@ -68,7 +68,7 @@ func newInfo(t *testing.T) (*Info, error) {
 		return nil, err
 	}
 
-	intf1.Routes = []net.IPNet{*route}
+	intf1.Routes = []*net.IPNet{route}
 
 	veth = &netlink.Veth{
 		LinkAttrs: netlink.LinkAttrs{Name: vethName3, TxQLen: 0},

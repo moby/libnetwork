@@ -79,7 +79,6 @@ type testInterface struct {
 	addrv6  net.IPNet
 	srcName string
 	dstName string
-	routes  []net.IPNet
 }
 
 type testEndpoint struct {
@@ -88,6 +87,7 @@ type testEndpoint struct {
 	gw6            net.IP
 	hostsPath      string
 	resolvConfPath string
+	routes         []types.StaticRoute
 }
 
 func (te *testEndpoint) Interfaces() []driverapi.InterfaceInfo {
@@ -128,23 +128,8 @@ func (i *testInterface) SetNames(srcName string, dstName string) error {
 	return nil
 }
 
-func (i *testInterface) SetRoutes(routes []net.IPNet) error {
-	i.routes = routes
-	return nil
-}
-
 func (te *testEndpoint) InterfaceNames() []driverapi.InterfaceNameInfo {
 	iList := make([]driverapi.InterfaceNameInfo, len(te.ifaces))
-
-	for i, iface := range te.ifaces {
-		iList[i] = iface
-	}
-
-	return iList
-}
-
-func (te *testEndpoint) InterfaceRoutes() []driverapi.InterfaceRouteInfo {
-	iList := make([]driverapi.InterfaceRouteInfo, len(te.ifaces))
 
 	for i, iface := range te.ifaces {
 		iList[i] = iface
@@ -170,6 +155,11 @@ func (te *testEndpoint) SetHostsPath(path string) error {
 
 func (te *testEndpoint) SetResolvConfPath(path string) error {
 	te.resolvConfPath = path
+	return nil
+}
+
+func (te *testEndpoint) SetStaticRoutes(routes []types.StaticRoute) error {
+	te.routes = routes
 	return nil
 }
 

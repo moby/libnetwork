@@ -105,10 +105,6 @@ func (test *testEndpoint) InterfaceNames() []driverapi.InterfaceNameInfo {
 	return []driverapi.InterfaceNameInfo{test}
 }
 
-func (test *testEndpoint) InterfaceRoutes() []driverapi.InterfaceRouteInfo {
-	return []driverapi.InterfaceRouteInfo{test}
-}
-
 func compareIPs(t *testing.T, kind string, shouldBe string, supplied net.IP) {
 	ip := net.ParseIP(shouldBe)
 	if ip == nil {
@@ -153,7 +149,7 @@ func (test *testEndpoint) SetNames(src string, dst string) error {
 	return nil
 }
 
-func (test *testEndpoint) SetRoutes(routes []net.IPNet) error {
+func (test *testEndpoint) SetStaticRoutes(routes []types.StaticRoute) error {
 	//TODO
 	return nil
 }
