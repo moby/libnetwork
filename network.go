@@ -2,9 +2,11 @@ package libnetwork
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 	"sync"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/pkg/stringid"
 	"github.com/docker/libnetwork/datastore"
 	"github.com/docker/libnetwork/driverapi"
@@ -60,6 +62,7 @@ type network struct {
 	endpoints   endpointTable
 	generic     options.Generic
 	dbIndex     uint64
+	labels      []string
 	sync.Mutex
 }
 
@@ -138,6 +141,26 @@ func NetworkOptionGeneric(generic map[string]interface{}) NetworkOption {
 		n.generic = generic
 		if _, ok := generic[netlabel.EnableIPv6]; ok {
 			n.enableIPv6 = generic[netlabel.EnableIPv6].(bool)
+		}
+	}
+}
+
+// NetworkOptionGenericLabels function returns an option setter for a Generic option defined
+// in a list of Key,Value pairs
+func NetworkOptionGenericLabels(labelPairs []string) NetworkOption {
+	return func(n *network) {
+		n.generic = make(map[string]interface{})
+		n.generic[netlabel.GenericLabels] = labelPairs
+	loop:
+		for i := 0; i < len(labelPairs); i += 2 {
+			if labelPairs[i] == netlabel.EnableIPv6 {
+				var err error
+				n.enableIPv6, err = strconv.ParseBool(labelPairs[i+1])
+				if err != nil {
+					logrus.Warnf("Invalid format for label %s's value: %s", labelPairs[i], labelPairs[i+1])
+				}
+				break loop
+			}
 		}
 	}
 }

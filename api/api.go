@@ -179,18 +179,57 @@ func buildEndpointResource(ep libnetwork.Endpoint) *endpointResource {
  Options Parsers
 *****************/
 
-func (nc *networkCreate) parseOptions() []libnetwork.NetworkOption {
+func (nc *networkCreate) parseOptions() ([]libnetwork.NetworkOption, error) {
 	var setFctList []libnetwork.NetworkOption
 
-	if nc.Options != nil {
+	// Labels have precedence
+	elements := len(nc.Labels)
+	if elements > 0 {
+		if elements%2 != 0 {
+			return nil, types.BadRequestErrorf("invalid label list in network create, number of elements is not even")
+		}
+		setFctList = append(setFctList, libnetwork.NetworkOptionGenericLabels(nc.Labels))
+	} else if nc.Options != nil {
 		setFctList = append(setFctList, libnetwork.NetworkOptionGeneric(nc.Options))
 	}
 
-	return setFctList
+	return setFctList, nil
 }
 
-func (ej *endpointJoin) parseOptions() []libnetwork.EndpointOption {
+func (ec *endpointCreate) parseOptions() ([]libnetwork.EndpointOption, error) {
 	var setFctList []libnetwork.EndpointOption
+
+	// Labels have precedence
+	elements := len(ec.Labels)
+	if elements > 0 {
+		if elements%2 != 0 {
+			return nil, types.BadRequestErrorf("invalid label list in endpoint create, number of elements is not even")
+		}
+		setFctList = append(setFctList, libnetwork.EndpointOptionGenericLabels(ec.Labels))
+	} else {
+		if ec.ExposedPorts != nil {
+			setFctList = append(setFctList, libnetwork.CreateOptionExposedPorts(ec.ExposedPorts))
+		}
+		if ec.PortMapping != nil {
+			setFctList = append(setFctList, libnetwork.CreateOptionPortMapping(ec.PortMapping))
+		}
+	}
+
+	return setFctList, nil
+}
+
+func (ej *endpointJoin) parseOptions() ([]libnetwork.EndpointOption, error) {
+	// Labels have precedence
+	elements := len(ej.Labels)
+	if elements > 0 {
+		if elements%2 != 0 {
+			return nil, types.BadRequestErrorf("invalid label list in endpoint join, number of elements is not even")
+		}
+		return []libnetwork.EndpointOption{libnetwork.JoinOptionLabels(ej.Labels)}, nil
+	}
+
+	var setFctList []libnetwork.EndpointOption
+
 	if ej.HostName != "" {
 		setFctList = append(setFctList, libnetwork.JoinOptionHostname(ej.HostName))
 	}
@@ -221,7 +260,8 @@ func (ej *endpointJoin) parseOptions() []libnetwork.EndpointOption {
 			setFctList = append(setFctList, libnetwork.JoinOptionParentUpdate(p.EndpointID, p.Name, p.Address))
 		}
 	}
-	return setFctList
+
+	return setFctList, nil
 }
 
 /******************
@@ -239,7 +279,12 @@ func procCreateNetwork(c libnetwork.NetworkController, vars map[string]string, b
 		return "", &responseStatus{Status: "Invalid body: " + err.Error(), StatusCode: http.StatusBadRequest}
 	}
 
-	nw, err := c.NewNetwork(create.NetworkType, create.Name, create.parseOptions()...)
+	options, err := create.parseOptions()
+	if err != nil {
+		return "", &responseStatus{Status: "Invalid body: " + err.Error(), StatusCode: http.StatusBadRequest}
+	}
+
+	nw, err := c.NewNetwork(create.NetworkType, create.Name, options...)
 	if err != nil {
 		return "", convertNetworkError(err)
 	}
@@ -305,15 +350,12 @@ func procCreateEndpoint(c libnetwork.NetworkController, vars map[string]string, 
 		return "", errRsp
 	}
 
-	var setFctList []libnetwork.EndpointOption
-	if ec.ExposedPorts != nil {
-		setFctList = append(setFctList, libnetwork.CreateOptionExposedPorts(ec.ExposedPorts))
-	}
-	if ec.PortMapping != nil {
-		setFctList = append(setFctList, libnetwork.CreateOptionPortMapping(ec.PortMapping))
+	options, err := ec.parseOptions()
+	if err != nil {
+		return "", &responseStatus{Status: "Invalid body: " + err.Error(), StatusCode: http.StatusBadRequest}
 	}
 
-	ep, err := n.CreateEndpoint(ec.Name, setFctList...)
+	ep, err := n.CreateEndpoint(ec.Name, options...)
 	if err != nil {
 		return "", convertNetworkError(err)
 	}
@@ -407,10 +449,16 @@ func procJoinEndpoint(c libnetwork.NetworkController, vars map[string]string, bo
 		return nil, errRsp
 	}
 
-	cd, err := ep.Join(ej.ContainerID, ej.parseOptions()...)
+	options, err := ej.parseOptions()
+	if err != nil {
+		return "", &responseStatus{Status: "Invalid body: " + err.Error(), StatusCode: http.StatusBadRequest}
+	}
+
+	cd, err := ep.Join(ej.ContainerID, options...)
 	if err != nil {
 		return nil, convertNetworkError(err)
 	}
+
 	return cd, &successResponse
 }
 

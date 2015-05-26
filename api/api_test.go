@@ -24,12 +24,6 @@ const (
 	bridgeName    = "docker0"
 )
 
-func getEmptyGenericOption() map[string]interface{} {
-	genericOption := make(map[string]interface{})
-	genericOption[netlabel.GenericData] = options.Generic{}
-	return genericOption
-}
-
 func i2s(i interface{}) string {
 	s, ok := i.(string)
 	if !ok {
@@ -97,6 +91,22 @@ func createTestNetwork(t *testing.T, network string) (libnetwork.NetworkControll
 	return c, nw
 }
 
+func getExposedPorts() []types.TransportPort {
+	return []types.TransportPort{
+		types.TransportPort{Proto: types.TCP, Port: uint16(5000)},
+		types.TransportPort{Proto: types.UDP, Port: uint16(400)},
+		types.TransportPort{Proto: types.TCP, Port: uint16(600)},
+	}
+}
+
+func getPortMapping() []types.PortBinding {
+	return []types.PortBinding{
+		types.PortBinding{Proto: types.TCP, Port: uint16(230), HostPort: uint16(23000)},
+		types.PortBinding{Proto: types.UDP, Port: uint16(200), HostPort: uint16(22000)},
+		types.PortBinding{Proto: types.TCP, Port: uint16(120), HostPort: uint16(12000)},
+	}
+}
+
 func TestMain(m *testing.M) {
 	if reexec.Init() {
 		return
@@ -124,10 +134,47 @@ func TestJoinOptionParser(t *testing.T) {
 		UseDefaultSandbox: true,
 	}
 
-	if len(ej.parseOptions()) != 10 {
+	options, err := ej.parseOptions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(options) != 10 {
 		t.Fatalf("Failed to generate all libnetwork.EndpointJoinOption methods libnetwork.EndpointJoinOption method")
 	}
 
+	ej = endpointJoin{
+		Labels: []string{netlabel.DNS},
+	}
+	options, err = ej.parseOptions()
+	if err == nil {
+		t.Fatalf("Expected failure, but got success")
+	}
+
+	ej.Labels = append(ej.Labels, "8.8.8.8")
+	options, err = ej.parseOptions()
+	if err != nil {
+		t.Fatalf("Unexpected failure: %v", err)
+	}
+}
+
+func TestNetworkCreateOptionParser(t *testing.T) {
+	nc := networkCreate{
+		Name:   "it does not matter",
+		Labels: []string{netlabel.EnableIPv6, "true", netlabel.DefaultGatewayIPv4},
+	}
+	if _, err := nc.parseOptions(); err == nil {
+		t.Fatalf("Expected failure, non even number of labels")
+	}
+}
+
+func TestEndpointCreateOptionParser(t *testing.T) {
+	ec := endpointCreate{
+		Name:   "it does not matter",
+		Labels: []string{netlabel.ExposedPorts, "tcp/23", netlabel.MacAddress},
+	}
+	if _, err := ec.parseOptions(); err == nil {
+		t.Fatalf("Expected failure, non even number of labels")
+	}
 }
 
 func TestJson(t *testing.T) {
@@ -240,6 +287,44 @@ func TestCreateDeleteNetwork(t *testing.T) {
 	if errRsp != &successResponse {
 		t.Fatalf("Unexepected failure: %v", errRsp)
 	}
+
+	// Create with labels
+	labels := []string{
+		netlabel.EnableIPv6, "true",
+		"io.docker.network.bridgename", "abc",
+		"io.docker.network.bridge.io.docker.network.bridge.allow_non_default_bridge", "true",
+		netlabel.ContainersSubnetIPv6, "ff80::1/64",
+		netlabel.NetworkIPv4,
+	}
+	nc = networkCreate{Name: "network_2", NetworkType: bridgeNetType, Labels: labels}
+	goodBody, err = json.Marshal(nc)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, errRsp = procCreateNetwork(c, vars, goodBody)
+	if errRsp == &createdResponse {
+		t.Fatalf("Expected failure but resource was created: %v", errRsp)
+	}
+
+	labels = append(labels, "172.28.30.254/24")
+	nc = networkCreate{Name: "network_2", NetworkType: bridgeNetType, Labels: labels}
+	goodBody, err = json.Marshal(nc)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, errRsp = procCreateNetwork(c, vars, goodBody)
+	if errRsp != &createdResponse {
+		t.Fatalf("Unexepected failure: %v", errRsp)
+	}
+
+	vars[urlNwName] = "network_2"
+	_, errRsp = procDeleteNetwork(c, vars, nil)
+	if errRsp != &successResponse {
+		t.Fatalf("Unexepected failure: %v", errRsp)
+	}
+
 }
 
 func TestGetNetworksAndEndpoints(t *testing.T) {
@@ -271,17 +356,9 @@ func TestGetNetworksAndEndpoints(t *testing.T) {
 	}
 
 	ec1 := endpointCreate{
-		Name: "ep1",
-		ExposedPorts: []types.TransportPort{
-			types.TransportPort{Proto: types.TCP, Port: uint16(5000)},
-			types.TransportPort{Proto: types.UDP, Port: uint16(400)},
-			types.TransportPort{Proto: types.TCP, Port: uint16(600)},
-		},
-		PortMapping: []types.PortBinding{
-			types.PortBinding{Proto: types.TCP, Port: uint16(230), HostPort: uint16(23000)},
-			types.PortBinding{Proto: types.UDP, Port: uint16(200), HostPort: uint16(22000)},
-			types.PortBinding{Proto: types.TCP, Port: uint16(120), HostPort: uint16(12000)},
-		},
+		Name:         "ep1",
+		ExposedPorts: getExposedPorts(),
+		PortMapping:  getPortMapping(),
 	}
 	b1, err := json.Marshal(ec1)
 	if err != nil {
@@ -723,6 +800,77 @@ func TestCreateDeleteEndpoints(t *testing.T) {
 	}
 }
 
+func TestCreateDeleteEndpointsWithLabels(t *testing.T) {
+	defer netutils.SetupTestNetNS(t)()
+
+	c, err := libnetwork.New("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = c.ConfigureNetworkDriver(bridgeNetType, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	nc := networkCreate{Name: "firstNet", NetworkType: bridgeNetType}
+	body, err := json.Marshal(nc)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	vars := make(map[string]string)
+	_, errRsp := procCreateNetwork(c, vars, body)
+	if errRsp != &createdResponse {
+		t.Fatalf("Unexepected failure: %v", errRsp)
+	}
+
+	var labels []string
+
+	for _, exp := range getExposedPorts() {
+		labels = append(labels, netlabel.ExposedPorts)
+		labels = append(labels, exp.String())
+	}
+
+	for _, pb := range getPortMapping() {
+		labels = append(labels, netlabel.PortBinding)
+		labels = append(labels, pb.String())
+	}
+
+	labels = append(labels, netlabel.MacAddress)
+
+	b, err := json.Marshal(endpointCreate{Name: "firstEp", Labels: labels})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	vars[urlNwName] = "firstNet"
+	_, errRsp = procCreateEndpoint(c, vars, b)
+	if errRsp == &createdResponse {
+		t.Fatalf("Expected failure. Got %v", errRsp)
+	}
+
+	labels = append(labels, "80:cd:ef:12:34:56")
+	b, err = json.Marshal(endpointCreate{Name: "firstEp", Labels: labels})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, errRsp = procCreateEndpoint(c, vars, b)
+	if errRsp != &createdResponse {
+		t.Fatalf("Unexepected failure: %v", errRsp)
+	}
+
+	vars[urlEpName] = "firstEp"
+	_, errRsp = procDeleteEndpoint(c, vars, nil)
+	if errRsp != &successResponse {
+		t.Fatalf("Unexepected failure: %v", errRsp)
+	}
+
+	_, errRsp = findEndpoint(c, "firstNet", "firstEp", byName, byName)
+	if errRsp == &successResponse {
+		t.Fatalf("Expected failure, got: %v", errRsp)
+	}
+}
+
 func TestJoinLeave(t *testing.T) {
 	defer netutils.SetupTestNetNS(t)()
 
@@ -775,7 +923,7 @@ func TestJoinLeave(t *testing.T) {
 	}
 
 	cid := "abcdefghi"
-	jl := endpointJoin{ContainerID: cid}
+	jl := endpointJoin{ContainerID: cid, Labels: []string{netlabel.DNS}}
 	jlb, err := json.Marshal(jl)
 	if err != nil {
 		t.Fatal(err)
@@ -802,10 +950,22 @@ func TestJoinLeave(t *testing.T) {
 		t.Fatalf("Expected failure, got: %v", errRsp)
 	}
 
+	// bad labels
 	vars[urlEpName] = "endpoint"
+	_, errRsp = procJoinEndpoint(c, vars, jlb)
+	if errRsp == &successResponse {
+		t.Fatalf("Expected failure, got: %v", errRsp)
+	}
+
+	jl.Labels = append(jl.Labels, "8.8.8.8")
+	jlb, err = json.Marshal(jl)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	cdi, errRsp := procJoinEndpoint(c, vars, jlb)
 	if errRsp != &successResponse {
-		t.Fatalf("Expected failure, got: %v", errRsp)
+		t.Fatalf("Unexpected failure, got: %v", errRsp)
 	}
 
 	cd := i2c(cdi)
