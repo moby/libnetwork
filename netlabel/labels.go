@@ -55,6 +55,9 @@ const (
 	// DNS constant represents the DNS to be configured on the container
 	DNS = "io.docker.network.dns"
 
+	// DNSSearch constant represents the DNS search to be configured on the container
+	DNSSearch = "io.docker.network.dnssearch"
+
 	// ExtraHost constant represents the ExtraHosts to be configured on the container
 	ExtraHost = "io.docker.network.extrahost"
 
@@ -63,4 +66,10 @@ const (
 
 	// UseDefaultSandbox constant represents the request to use or not the default sandbox
 	UseDefaultSandbox = "io.docker.endpoint.usedefaultsandbox"
+
+	// ParentEndpoint constant represents a parent relationship in the link context
+	ParentEndpoint = "io.docker.network.parentendpoint"
+
+	// ChildEndpoint constant represents a chil relationship in the link context
+	ChildEndpoint = "io.docker.network.childendpoint"
 )

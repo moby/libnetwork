@@ -134,10 +134,27 @@ func TestJoinOptionParser(t *testing.T) {
 		UseDefaultSandbox: true,
 	}
 
-	if len(ej.parseOptions()) != 10 {
+	options, err := ej.parseOptions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(options) != 10 {
 		t.Fatalf("Failed to generate all libnetwork.EndpointJoinOption methods libnetwork.EndpointJoinOption method")
 	}
 
+	ej = endpointJoin{
+		Labels: []string{netlabel.DNS},
+	}
+	options, err = ej.parseOptions()
+	if err == nil {
+		t.Fatalf("Expected failure, but got success")
+	}
+
+	ej.Labels = append(ej.Labels, "8.8.8.8")
+	options, err = ej.parseOptions()
+	if err != nil {
+		t.Fatalf("Unexpected failure: %v", err)
+	}
 }
 
 func TestNetworkCreateOptionParser(t *testing.T) {
@@ -786,7 +803,7 @@ func TestCreateDeleteEndpoints(t *testing.T) {
 func TestCreateDeleteEndpointsWithLabels(t *testing.T) {
 	defer netutils.SetupTestNetNS(t)()
 
-	c, err := libnetwork.New()
+	c, err := libnetwork.New("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -906,7 +923,7 @@ func TestJoinLeave(t *testing.T) {
 	}
 
 	cid := "abcdefghi"
-	jl := endpointJoin{ContainerID: cid}
+	jl := endpointJoin{ContainerID: cid, Labels: []string{netlabel.DNS}}
 	jlb, err := json.Marshal(jl)
 	if err != nil {
 		t.Fatal(err)
@@ -933,10 +950,22 @@ func TestJoinLeave(t *testing.T) {
 		t.Fatalf("Expected failure, got: %v", errRsp)
 	}
 
+	// bad labels
 	vars[urlEpName] = "endpoint"
+	_, errRsp = procJoinEndpoint(c, vars, jlb)
+	if errRsp == &successResponse {
+		t.Fatalf("Expected failure, got: %v", errRsp)
+	}
+
+	jl.Labels = append(jl.Labels, "8.8.8.8")
+	jlb, err = json.Marshal(jl)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	cdi, errRsp := procJoinEndpoint(c, vars, jlb)
 	if errRsp != &successResponse {
-		t.Fatalf("Expected failure, got: %v", errRsp)
+		t.Fatalf("Unexpected failure, got: %v", errRsp)
 	}
 
 	cd := i2c(cdi)

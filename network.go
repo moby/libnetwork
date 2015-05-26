@@ -2,8 +2,8 @@ package libnetwork
 
 import (
 	"encoding/json"
-	"strings"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/Sirupsen/logrus"

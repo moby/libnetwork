@@ -412,6 +412,19 @@ func (ec *endpointConfiguration) FromLabels(labels []string) error {
 	return nil
 }
 
+// FromLabels retrieves the container configuration from the list of labels
+func (cc *containerConfiguration) FromLabels(labels []string) error {
+	for i := 0; i < len(labels); i += 2 {
+		switch labels[i] {
+		case netlabel.ChildEndpoint:
+			cc.ChildEndpoints = append(cc.ChildEndpoints, labels[i+1])
+		case netlabel.ParentEndpoint:
+			cc.ParentEndpoints = append(cc.ParentEndpoints, labels[i+1])
+		}
+	}
+	return nil
+}
+
 func (n *bridgeNetwork) getEndpoint(eid types.UUID) (*bridgeEndpoint, error) {
 	n.Lock()
 	defer n.Unlock()
@@ -1243,8 +1256,19 @@ func parseContainerOptions(cOptions map[string]interface{}) (*containerConfigura
 	if cOptions == nil {
 		return nil, nil
 	}
-	genericData := cOptions[netlabel.GenericData]
-	if genericData == nil {
+
+	// If labels are provided, relay on them only
+	if labelData, ok := cOptions[netlabel.GenericLabels]; ok {
+		if labels, ok := labelData.([]string); ok {
+			cc := new(containerConfiguration)
+			err := cc.FromLabels(labels)
+			return cc, err
+		}
+		return nil, types.BadRequestErrorf("cannot recognize list of labels for container configuration")
+	}
+
+	genericData, ok := cOptions[netlabel.GenericData]
+	if !ok {
 		return nil, nil
 	}
 	switch opt := genericData.(type) {

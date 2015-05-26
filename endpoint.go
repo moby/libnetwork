@@ -6,6 +6,8 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/Sirupsen/logrus"
@@ -85,10 +87,31 @@ type extraHost struct {
 	IP   string
 }
 
+func (eh *extraHost) fromString(s string) error {
+	ps := strings.Split(s, "/")
+	if len(ps) == 2 {
+		eh.name = ps[0]
+		eh.IP = ps[1]
+		return nil
+	}
+	return types.BadRequestErrorf("invalid format for extra host: %s", s)
+}
+
 type parentUpdate struct {
 	eid  string
 	name string
 	ip   string
+}
+
+func (pu *parentUpdate) fromString(s string) error {
+	ps := strings.Split(s, "/")
+	if len(ps) == 3 {
+		pu.eid = ps[0]
+		pu.name = ps[1]
+		pu.ip = ps[2]
+		return nil
+	}
+	return types.BadRequestErrorf("invalid format for extra host: %s", s)
 }
 
 type containerInfo struct {
@@ -650,6 +673,9 @@ func EndpointOptionGeneric(generic map[string]interface{}) EndpointOption {
 // in a list of Key,Value pairs
 func EndpointOptionGenericLabels(labelPairs []string) EndpointOption {
 	return func(ep *endpoint) {
+		if ep.generic == nil {
+			ep.generic = make(map[string]interface{})
+		}
 		ep.generic[netlabel.GenericLabels] = labelPairs
 		// Store endpoint label
 		for i := 0; i < len(labelPairs); i += 2 {
@@ -744,5 +770,52 @@ func JoinOptionUseDefaultSandbox() EndpointOption {
 func JoinOptionGeneric(generic map[string]interface{}) EndpointOption {
 	return func(ep *endpoint) {
 		ep.container.config.generic = generic
+	}
+}
+
+// JoinOptionLabels function returns an option setter for all the labels that apply
+// to the endpoint join operation and are of interest of either libnetwork or Drivers.
+func JoinOptionLabels(labelPairs []string) EndpointOption {
+	return func(ep *endpoint) {
+		if ep.container.config.generic == nil {
+			ep.container.config.generic = make(map[string]interface{})
+		}
+		ep.container.config.generic[netlabel.GenericLabels] = labelPairs
+		for i := 0; i < len(labelPairs); i += 2 {
+			label := labelPairs[i]
+			value := labelPairs[i+1]
+			switch label {
+			case netlabel.HostName:
+				ep.container.config.hostName = value
+			case netlabel.DomainName:
+				ep.container.config.domainName = value
+			case netlabel.HostsPath:
+				ep.container.config.hostsPath = value
+			case netlabel.DNS:
+				ep.container.config.dnsList = append(ep.container.config.dnsList, value)
+			case netlabel.DNSSearch:
+				ep.container.config.dnsSearchList = append(ep.container.config.dnsSearchList, value)
+			case netlabel.UseDefaultSandbox:
+				if bv, err := strconv.ParseBool(value); err == nil {
+					ep.container.config.useDefaultSandBox = bv
+				} else {
+					logrus.Warnf("Invalid format for label %s's value: %s", label, value)
+				}
+			case netlabel.ParentUpdate:
+				pu := new(parentUpdate)
+				if err := pu.fromString(value); err == nil {
+					ep.container.config.parentUpdates = append(ep.container.config.parentUpdates, *pu)
+				} else {
+					logrus.Warnf("Invalid format for label %s's value: %s", label, value)
+				}
+			case netlabel.ExtraHost:
+				eh := new(extraHost)
+				if err := eh.fromString(value); err == nil {
+					ep.container.config.extraHosts = append(ep.container.config.extraHosts, *eh)
+				} else {
+					logrus.Warnf("Invalid format for label %s's value: %s", label, value)
+				}
+			}
+		}
 	}
 }

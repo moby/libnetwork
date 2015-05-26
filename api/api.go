@@ -186,7 +186,7 @@ func (nc *networkCreate) parseOptions() ([]libnetwork.NetworkOption, error) {
 	elements := len(nc.Labels)
 	if elements > 0 {
 		if elements%2 != 0 {
-			return nil, types.BadRequestErrorf("invalid label list, number of elements is not even")
+			return nil, types.BadRequestErrorf("invalid label list in network create, number of elements is not even")
 		}
 		setFctList = append(setFctList, libnetwork.NetworkOptionGenericLabels(nc.Labels))
 	} else if nc.Options != nil {
@@ -203,7 +203,7 @@ func (ec *endpointCreate) parseOptions() ([]libnetwork.EndpointOption, error) {
 	elements := len(ec.Labels)
 	if elements > 0 {
 		if elements%2 != 0 {
-			return nil, types.BadRequestErrorf("invalid label list, number of elements is not even")
+			return nil, types.BadRequestErrorf("invalid label list in endpoint create, number of elements is not even")
 		}
 		setFctList = append(setFctList, libnetwork.EndpointOptionGenericLabels(ec.Labels))
 	} else {
@@ -218,8 +218,18 @@ func (ec *endpointCreate) parseOptions() ([]libnetwork.EndpointOption, error) {
 	return setFctList, nil
 }
 
-func (ej *endpointJoin) parseOptions() []libnetwork.EndpointOption {
+func (ej *endpointJoin) parseOptions() ([]libnetwork.EndpointOption, error) {
+	// Labels have precedence
+	elements := len(ej.Labels)
+	if elements > 0 {
+		if elements%2 != 0 {
+			return nil, types.BadRequestErrorf("invalid label list in endpoint join, number of elements is not even")
+		}
+		return []libnetwork.EndpointOption{libnetwork.JoinOptionLabels(ej.Labels)}, nil
+	}
+
 	var setFctList []libnetwork.EndpointOption
+
 	if ej.HostName != "" {
 		setFctList = append(setFctList, libnetwork.JoinOptionHostname(ej.HostName))
 	}
@@ -250,7 +260,8 @@ func (ej *endpointJoin) parseOptions() []libnetwork.EndpointOption {
 			setFctList = append(setFctList, libnetwork.JoinOptionParentUpdate(p.EndpointID, p.Name, p.Address))
 		}
 	}
-	return setFctList
+
+	return setFctList, nil
 }
 
 /******************
@@ -438,10 +449,16 @@ func procJoinEndpoint(c libnetwork.NetworkController, vars map[string]string, bo
 		return nil, errRsp
 	}
 
-	cd, err := ep.Join(ej.ContainerID, ej.parseOptions()...)
+	options, err := ej.parseOptions()
+	if err != nil {
+		return "", &responseStatus{Status: "Invalid body: " + err.Error(), StatusCode: http.StatusBadRequest}
+	}
+
+	cd, err := ep.Join(ej.ContainerID, options...)
 	if err != nil {
 		return nil, convertNetworkError(err)
 	}
+
 	return cd, &successResponse
 }
 
