@@ -29,19 +29,28 @@ type endpointResource struct {
 type networkCreate struct {
 	Name        string
 	NetworkType string
-	Options     map[string]interface{}
+	Labels      []string // List of k,v pairs
+
+	// Following for backward compatibility
+	Options map[string]interface{}
 }
 
 // endpointCreate represents the body of the "create endpoint" http request message
 type endpointCreate struct {
-	Name         string
+	Name   string
+	Labels []string // List of k,v pairs
+
+	// Following for backward compatibility
 	ExposedPorts []types.TransportPort
 	PortMapping  []types.PortBinding
 }
 
 // endpointJoin represents the expected body of the "join endpoint" or "leave endpoint" http request messages
 type endpointJoin struct {
-	ContainerID       string
+	ContainerID string
+	Labels      []string // List of k,v pairs
+
+	// Following for backward compatibility
 	HostName          string
 	DomainName        string
 	HostsPath         string

@@ -612,12 +612,56 @@ func (ep *endpoint) setupDNS() error {
 	return ep.updateDNS(resolvConf)
 }
 
+// CreateOptionExposedPorts function returns an option setter for the container exposed
+// ports option to be passed to network.CreateEndpoint() method.
+func CreateOptionExposedPorts(exposedPorts []types.TransportPort) EndpointOption {
+	return func(ep *endpoint) {
+		// Defensive copy
+		eps := make([]types.TransportPort, len(exposedPorts))
+		copy(eps, exposedPorts)
+		// Store endpoint label and in generic because driver needs it
+		ep.exposedPorts = eps
+		ep.generic[netlabel.ExposedPorts] = eps
+	}
+}
+
+// CreateOptionPortMapping function returns an option setter for the mapping
+// ports option to be passed to network.CreateEndpoint() method.
+func CreateOptionPortMapping(portBindings []types.PortBinding) EndpointOption {
+	return func(ep *endpoint) {
+		// Store a copy of the bindings as generic data to pass to the driver
+		pbs := make([]types.PortBinding, len(portBindings))
+		copy(pbs, portBindings)
+		ep.generic[netlabel.PortMap] = pbs
+	}
+}
+
 // EndpointOptionGeneric function returns an option setter for a Generic option defined
 // in a Dictionary of Key-Value pair
 func EndpointOptionGeneric(generic map[string]interface{}) EndpointOption {
 	return func(ep *endpoint) {
 		for k, v := range generic {
 			ep.generic[k] = v
+		}
+	}
+}
+
+// EndpointOptionGenericLabels function returns an option setter for a Generic option defined
+// in a list of Key,Value pairs
+func EndpointOptionGenericLabels(labelPairs []string) EndpointOption {
+	return func(ep *endpoint) {
+		ep.generic[netlabel.GenericLabels] = labelPairs
+		// Store endpoint label
+		for i := 0; i < len(labelPairs); i += 2 {
+			if labelPairs[i] == netlabel.ExposedPorts {
+				tp := new(types.TransportPort)
+				err := tp.FromString(labelPairs[i+1])
+				if err != nil {
+					logrus.Warnf("Invalid format for label %s's value: %s", labelPairs[i], labelPairs[i+1])
+				} else {
+					ep.exposedPorts = append(ep.exposedPorts, *tp)
+				}
+			}
 		}
 	}
 }
@@ -691,30 +735,6 @@ func JoinOptionDNSSearch(search string) EndpointOption {
 func JoinOptionUseDefaultSandbox() EndpointOption {
 	return func(ep *endpoint) {
 		ep.container.config.useDefaultSandBox = true
-	}
-}
-
-// CreateOptionExposedPorts function returns an option setter for the container exposed
-// ports option to be passed to network.CreateEndpoint() method.
-func CreateOptionExposedPorts(exposedPorts []types.TransportPort) EndpointOption {
-	return func(ep *endpoint) {
-		// Defensive copy
-		eps := make([]types.TransportPort, len(exposedPorts))
-		copy(eps, exposedPorts)
-		// Store endpoint label and in generic because driver needs it
-		ep.exposedPorts = eps
-		ep.generic[netlabel.ExposedPorts] = eps
-	}
-}
-
-// CreateOptionPortMapping function returns an option setter for the mapping
-// ports option to be passed to network.CreateEndpoint() method.
-func CreateOptionPortMapping(portBindings []types.PortBinding) EndpointOption {
-	return func(ep *endpoint) {
-		// Store a copy of the bindings as generic data to pass to the driver
-		pbs := make([]types.PortBinding, len(portBindings))
-		copy(pbs, portBindings)
-		ep.generic[netlabel.PortMap] = pbs
 	}
 }
 
