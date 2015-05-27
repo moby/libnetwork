@@ -55,9 +55,7 @@ func createBasePath() {
 }
 
 func removeUnusedPaths() {
-	for {
-		time.Sleep(time.Duration(gpmCleanupPeriod))
-
+	for range time.Tick(gpmCleanupPeriod) {
 		gpmLock.Lock()
 		pathList := make([]string, 0, len(garbagePathMap))
 		for path := range garbagePathMap {
@@ -78,13 +76,13 @@ func removeUnusedPaths() {
 func addToGarbagePaths(path string) {
 	gpmLock.Lock()
 	garbagePathMap[path] = true
-	defer gpmLock.Unlock()
+	gpmLock.Unlock()
 }
 
 func removeFromGarbagePaths(path string) {
 	gpmLock.Lock()
 	delete(garbagePathMap, path)
-	defer gpmLock.Unlock()
+	gpmLock.Unlock()
 }
 
 // GenerateKey generates a sandbox key based on the passed
