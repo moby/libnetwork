@@ -3,9 +3,11 @@ package bridge
 import (
 	"errors"
 	"net"
+	"os/exec"
 	"strings"
 	"sync"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/docker/libnetwork/driverapi"
 	"github.com/docker/libnetwork/ipallocator"
 	"github.com/docker/libnetwork/netlabel"
@@ -102,6 +104,12 @@ func newDriver() driverapi.Driver {
 
 // Init registers a new instance of bridge driver
 func Init(dc driverapi.DriverCallback) error {
+	// try to modprobe bridge first
+	// see gh#12177
+	if out, err := exec.Command("modprobe", "-va", "bridge", "nf_nat", "br_netfilter").Output(); err != nil {
+		logrus.Warnf("Running modprobe bridge nf_nat failed with message: %s, error: %v", out, err)
+	}
+
 	return dc.RegisterDriver(networkType, newDriver())
 }
 
