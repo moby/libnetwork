@@ -1,3 +1,5 @@
+// +build !freebsd
+
 package bridge
 
 type setupStep func(*networkConfiguration, *bridgeInterface) error
