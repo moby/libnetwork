@@ -10,6 +10,9 @@ const (
 	// MacAddress constant represents Mac Address config of a Container
 	MacAddress = "io.docker.network.endpoint.macaddress"
 
+	// IPAddress constant represents requesting a specific IP address for a Container
+	IPAddress = "io.docker.network.endpoint.ipaddress"
+
 	// ExposedPorts constant represents exposedports of a Container
 	ExposedPorts = "io.docker.network.endpoint.exposedports"
 

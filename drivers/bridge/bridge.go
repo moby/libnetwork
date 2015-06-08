@@ -58,6 +58,7 @@ type networkConfiguration struct {
 
 // endpointConfiguration represents the user specified configuration for the sandbox endpoint
 type endpointConfiguration struct {
+	IPAddress    net.IP
 	MacAddress   net.HardwareAddr
 	PortBindings []types.PortBinding
 	ExposedPorts []types.TransportPort
@@ -769,7 +770,7 @@ func (d *driver) CreateEndpoint(nid, eid types.UUID, epInfo driverapi.EndpointIn
 	}
 
 	// v4 address for the sandbox side pipe interface
-	ip4, err := ipAllocator.RequestIP(n.bridge.bridgeIPv4, nil)
+	ip4, err := ipAllocator.RequestIP(n.bridge.bridgeIPv4, requestedIPAddress(epConfig))
 	if err != nil {
 		return err
 	}
@@ -1137,6 +1138,14 @@ func parseEndpointOptions(epOptions map[string]interface{}) (*endpointConfigurat
 		}
 	}
 
+	if opt, ok := epOptions[netlabel.IPAddress]; ok {
+		if ip, ok := opt.(net.IP); ok {
+			ec.IPAddress = ip
+		} else {
+			return nil, &ErrInvalidEndpointConfig{}
+		}
+	}
+
 	if opt, ok := epOptions[netlabel.PortMap]; ok {
 		if bs, ok := opt.([]types.PortBinding); ok {
 			ec.PortBindings = bs
@@ -1183,6 +1192,13 @@ func electMacAddress(epConfig *endpointConfiguration) net.HardwareAddr {
 		return epConfig.MacAddress
 	}
 	return netutils.GenerateRandomMAC()
+}
+
+func requestedIPAddress(epConfig *endpointConfiguration) net.IP {
+	if epConfig != nil && epConfig.IPAddress != nil {
+		return epConfig.IPAddress
+	}
+	return nil
 }
 
 // Generates a name to be used for a virtual ethernet
