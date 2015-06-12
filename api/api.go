@@ -101,9 +101,7 @@ func (h *httpHandler) initRouter() {
 			{"/networks/" + nwID + "/endpoints", []string{"partial-id", epPIDQr}, procGetEndpoints},
 			{"/networks/" + nwID + "/endpoints", nil, procGetEndpoints},
 			{"/networks/" + nwID + "/endpoints/" + epID, nil, procGetEndpoint},
-			{"/services", []string{"network", nwNameQr}, procGetServices},
-			{"/services", []string{"name", epNameQr}, procGetServices},
-			{"/services", []string{"partial-id", epPIDQr}, procGetServices},
+			{"/networks/" + nwID + "/endpoints/" + epID + "/info", nil, procGetEndpointInfo},
 			{"/services", nil, procGetServices},
 			{"/services/" + epID, nil, procGetService},
 			{"/services/" + epID + "/backend", nil, procGetContainers},
@@ -195,6 +193,31 @@ func buildContainerResource(ci libnetwork.ContainerInfo) *containerResource {
 	r := &containerResource{}
 	if ci != nil {
 		r.ID = ci.ID()
+	}
+	return r
+}
+
+func buildEndpointInfoResource(epi libnetwork.EndpointInfo) *endpointInfoResource {
+	r := &endpointInfoResource{}
+	if epi != nil {
+		r.Gateway4 = epi.Gateway().String()
+		r.Gateway6 = epi.GatewayIPv6().String()
+		r.Sandbox = epi.SandboxKey()
+		for _, ii := range epi.InterfaceList() {
+			r.Interfaces = append(r.Interfaces, *buildInterfaceResource(ii))
+		}
+	}
+	return r
+}
+
+func buildInterfaceResource(ii libnetwork.InterfaceInfo) *interfaceResource {
+	r := &interfaceResource{}
+	if ii != nil {
+		r.MAC = ii.MacAddress().String()
+		addr := ii.Address()
+		r.Addr = addr.String()
+		addr6 := ii.AddressIPv6()
+		r.Addr6 = addr6.String()
 	}
 	return r
 }
@@ -380,6 +403,18 @@ func procGetEndpoint(c libnetwork.NetworkController, vars map[string]string, bod
 	}
 
 	return buildEndpointResource(ep), &successResponse
+}
+
+func procGetEndpointInfo(c libnetwork.NetworkController, vars map[string]string, body []byte) (interface{}, *responseStatus) {
+	nwT, nwBy := detectNetworkTarget(vars)
+	epT, epBy := detectEndpointTarget(vars)
+
+	ep, errRsp := findEndpoint(c, nwT, epT, nwBy, epBy)
+	if !errRsp.isOK() {
+		return nil, errRsp
+	}
+
+	return buildEndpointInfoResource(ep.Info()), &successResponse
 }
 
 func procGetEndpoints(c libnetwork.NetworkController, vars map[string]string, body []byte) (interface{}, *responseStatus) {
