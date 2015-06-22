@@ -2,7 +2,6 @@ package sandbox
 
 import (
 	"os"
-	"runtime"
 	"testing"
 
 	"github.com/docker/docker/pkg/reexec"
@@ -28,7 +27,6 @@ func TestSandboxCreate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create a new sandbox: %v", err)
 	}
-	runtime.LockOSThread()
 
 	if s.Key() != key {
 		t.Fatalf("s.Key() returned %s. Expected %s", s.Key(), key)
@@ -47,23 +45,19 @@ func TestSandboxCreate(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to add interfaces to sandbox: %v", err)
 		}
-		runtime.LockOSThread()
 	}
 
 	err = s.SetGateway(tbox.Info().Gateway())
 	if err != nil {
 		t.Fatalf("Failed to set gateway to sandbox: %v", err)
 	}
-	runtime.LockOSThread()
 
 	err = s.SetGatewayIPv6(tbox.Info().GatewayIPv6())
 	if err != nil {
 		t.Fatalf("Failed to set ipv6 gateway to sandbox: %v", err)
 	}
-	runtime.LockOSThread()
 
 	verifySandbox(t, s, []string{"0", "1", "2"})
-	runtime.LockOSThread()
 
 	err = s.Destroy()
 	if err != nil {
@@ -84,7 +78,6 @@ func TestSandboxCreateTwice(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create a new sandbox: %v", err)
 	}
-	runtime.LockOSThread()
 
 	// Create another sandbox with the same key to see if we handle it
 	// gracefully.
@@ -92,7 +85,6 @@ func TestSandboxCreateTwice(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create a new sandbox: %v", err)
 	}
-	runtime.LockOSThread()
 
 	err = s.Destroy()
 	if err != nil {
@@ -134,7 +126,6 @@ func TestAddRemoveInterface(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create a new sandbox: %v", err)
 	}
-	runtime.LockOSThread()
 
 	if s.Key() != key {
 		t.Fatalf("s.Key() returned %s. Expected %s", s.Key(), key)
@@ -153,20 +144,16 @@ func TestAddRemoveInterface(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to add interfaces to sandbox: %v", err)
 		}
-		runtime.LockOSThread()
 	}
 
 	verifySandbox(t, s, []string{"0", "1", "2"})
-	runtime.LockOSThread()
 
 	interfaces := s.Info().Interfaces()
 	if err := interfaces[0].Remove(); err != nil {
 		t.Fatalf("Failed to remove interfaces from sandbox: %v", err)
 	}
-	runtime.LockOSThread()
 
 	verifySandbox(t, s, []string{"1", "2"})
-	runtime.LockOSThread()
 
 	i := tbox.Info().Interfaces()[0]
 	if err := s.AddInterface(i.SrcName(), i.DstName(),
@@ -175,10 +162,8 @@ func TestAddRemoveInterface(t *testing.T) {
 		tbox.InterfaceOptions().AddressIPv6(i.AddressIPv6())); err != nil {
 		t.Fatalf("Failed to add interfaces to sandbox: %v", err)
 	}
-	runtime.LockOSThread()
 
 	verifySandbox(t, s, []string{"1", "2", "3"})
-	runtime.LockOSThread()
 
 	err = s.Destroy()
 	if err != nil {
