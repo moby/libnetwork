@@ -137,12 +137,12 @@ func New(cfgOptions ...config.Option) (NetworkController, error) {
 		if err := c.initDataStore(); err != nil {
 			// Failing to initalize datastore is a bad situation to be in.
 			// But it cannot fail creating the Controller
-			log.Debugf("Failed to Initialize Datastore due to %v. Operating in non-clustered mode", err)
+			log.Warnf("Failed to Initialize Datastore due to %v. Operating in non-clustered mode", err)
 		}
 		if err := c.initDiscovery(); err != nil {
 			// Failing to initalize discovery is a bad situation to be in.
 			// But it cannot fail creating the Controller
-			log.Debugf("Failed to Initialize Discovery : %v", err)
+			log.Warnf("Failed to Initialize Discovery : %v", err)
 		}
 	}
 
