@@ -45,6 +45,9 @@ type Endpoint interface {
 
 	// Delete and detaches this endpoint from the network.
 	Delete() error
+
+	// Retrieve the interfaces' statistics from the sandbox
+	Statistics() (map[string]*sandbox.InterfaceStatistics, error)
 }
 
 // EndpointOption is a option setter function type used to pass varios options to Network
@@ -400,6 +403,33 @@ func (ep *endpoint) Delete() error {
 
 	err = driver.DeleteEndpoint(nid, epid)
 	return err
+}
+
+func (ep *endpoint) Statistics() (map[string]*sandbox.InterfaceStatistics, error) {
+	m := make(map[string]*sandbox.InterfaceStatistics)
+
+	ep.Lock()
+	n := ep.network
+	skey := ep.container.data.SandboxKey
+	ep.Unlock()
+
+	n.Lock()
+	c := n.ctrlr
+	n.Unlock()
+
+	sbox := c.sandboxGet(skey)
+	if sbox == nil {
+		return m, nil
+	}
+
+	var err error
+	for _, i := range sbox.Interfaces() {
+		if m[i.DstName], err = i.Statistics(); err != nil {
+			return m, err
+		}
+	}
+
+	return m, nil
 }
 
 func (ep *endpoint) buildHostsFiles() error {

@@ -817,6 +817,15 @@ func TestEndpointJoin(t *testing.T) {
 		t.Fatalf("Expected an non-empty sandbox key for a joined endpoint. Instead found a empty sandbox key")
 	}
 
+	// Attempt retrieval of endpoint interfaces statistics
+	stats, err := ep.Statistics()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := stats["eth0"]; !ok {
+		t.Fatalf("Did not find eth0 statistics")
+	}
+
 	checkSandbox(t, info)
 }
 
