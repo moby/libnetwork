@@ -127,7 +127,7 @@ func (ds *datastore) PutObjectAtomic(kvObject KV) error {
 	if kvObject.Exists() {
 		previous = &store.KVPair{Key: Key(kvObject.Key()...), LastIndex: kvObject.Index()}
 	} else {
-		previous = nil
+		previous = &store.KVPair{}
 	}
 	_, pair, err := ds.store.AtomicPut(Key(kvObject.Key()...), kvObjValue, previous, nil)
 	if err != nil {
