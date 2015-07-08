@@ -138,12 +138,22 @@ func GenerateKey(containerID string) string {
 
 // NewSandbox provides a new sandbox instance created in an os specific way
 // provided a key which uniquely identifies the sandbox
-func NewSandbox(key string, osCreate bool) (Sandbox, error) {
+// osCreate determines if a new namespace should be created (--net=host)
+// customSandbox determines if a predefined sandbox should be used (--net=namesapace)
+func NewSandbox(key string, osCreate bool, customSandbox bool) (Sandbox, error) {
+	if customSandbox {
+		//Verify that the file exists. It should be symlinked at this point
+		if _, err := os.Stat(key); os.IsNotExist(err) {
+			err := fmt.Errorf("Could not make sandbox. No such file or directory: %s", key)
+			return nil, err
+		}
+		return &networkNamespace{path: key}, nil
+	}
+
 	err := createNetworkNamespace(key, osCreate)
 	if err != nil {
 		return nil, err
 	}
-
 	return &networkNamespace{path: key}, nil
 }
 

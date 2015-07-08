@@ -24,7 +24,7 @@ func TestSandboxCreate(t *testing.T) {
 		t.Fatalf("Failed to obtain a key: %v", err)
 	}
 
-	s, err := NewSandbox(key, true)
+	s, err := NewSandbox(key, true, false)
 	if err != nil {
 		t.Fatalf("Failed to create a new sandbox: %v", err)
 	}
@@ -80,7 +80,7 @@ func TestSandboxCreateTwice(t *testing.T) {
 		t.Fatalf("Failed to obtain a key: %v", err)
 	}
 
-	_, err = NewSandbox(key, true)
+	_, err = NewSandbox(key, true, false)
 	if err != nil {
 		t.Fatalf("Failed to create a new sandbox: %v", err)
 	}
@@ -88,7 +88,7 @@ func TestSandboxCreateTwice(t *testing.T) {
 
 	// Create another sandbox with the same key to see if we handle it
 	// gracefully.
-	s, err := NewSandbox(key, true)
+	s, err := NewSandbox(key, true, false)
 	if err != nil {
 		t.Fatalf("Failed to create a new sandbox: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestSandboxGC(t *testing.T) {
 		t.Fatalf("Failed to obtain a key: %v", err)
 	}
 
-	s, err := NewSandbox(key, true)
+	s, err := NewSandbox(key, true, false)
 	if err != nil {
 		t.Fatalf("Failed to create a new sandbox: %v", err)
 	}
@@ -130,7 +130,7 @@ func TestAddRemoveInterface(t *testing.T) {
 		t.Fatalf("Failed to obtain a key: %v", err)
 	}
 
-	s, err := NewSandbox(key, true)
+	s, err := NewSandbox(key, true, false)
 	if err != nil {
 		t.Fatalf("Failed to create a new sandbox: %v", err)
 	}

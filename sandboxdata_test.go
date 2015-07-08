@@ -22,7 +22,7 @@ func TestSandboxAddEmpty(t *testing.T) {
 	ctrlr := createEmptyCtrlr()
 	ep := createEmptyEndpoint()
 
-	if _, err := ctrlr.sandboxAdd(sandbox.GenerateKey("sandbox1"), true, ep); err != nil {
+	if _, err := ctrlr.sandboxAdd(sandbox.GenerateKey("sandbox1"), ep.container.config, ep); err != nil {
 		t.Fatal(err)
 	}
 
@@ -48,15 +48,15 @@ func TestSandboxAddMultiPrio(t *testing.T) {
 
 	sKey := sandbox.GenerateKey("sandbox1")
 
-	if _, err := ctrlr.sandboxAdd(sKey, true, ep1); err != nil {
+	if _, err := ctrlr.sandboxAdd(sKey, ep1.container.config, ep1); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := ctrlr.sandboxAdd(sKey, true, ep2); err != nil {
+	if _, err := ctrlr.sandboxAdd(sKey, ep2.container.config, ep2); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := ctrlr.sandboxAdd(sKey, true, ep3); err != nil {
+	if _, err := ctrlr.sandboxAdd(sKey, ep3.container.config, ep3); err != nil {
 		t.Fatal(err)
 	}
 
@@ -77,7 +77,7 @@ func TestSandboxAddMultiPrio(t *testing.T) {
 	}
 
 	// Re-add ep3 back
-	if _, err := ctrlr.sandboxAdd(sKey, true, ep3); err != nil {
+	if _, err := ctrlr.sandboxAdd(sKey, ep3.container.config, ep3); err != nil {
 		t.Fatal(err)
 	}
 
@@ -109,11 +109,11 @@ func TestSandboxAddSamePrio(t *testing.T) {
 
 	sKey := sandbox.GenerateKey("sandbox1")
 
-	if _, err := ctrlr.sandboxAdd(sKey, true, ep1); err != nil {
+	if _, err := ctrlr.sandboxAdd(sKey, ep1.container.config, ep1); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := ctrlr.sandboxAdd(sKey, true, ep2); err != nil {
+	if _, err := ctrlr.sandboxAdd(sKey, ep2.container.config, ep2); err != nil {
 		t.Fatal(err)
 	}
 
