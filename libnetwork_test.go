@@ -1015,13 +1015,11 @@ func TestEndpointJoin(t *testing.T) {
 		libnetwork.JoinOptionHostname("test"),
 		libnetwork.JoinOptionDomainname("docker.io"),
 		libnetwork.JoinOptionExtraHost("web", "192.168.0.1"))
-	runtime.LockOSThread()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() {
 		err = ep1.Leave(containerID)
-		runtime.LockOSThread()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1082,10 +1080,8 @@ func TestEndpointJoin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime.LockOSThread()
 	defer func() {
 		err = ep2.Leave(containerID)
-		runtime.LockOSThread()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1176,13 +1172,11 @@ func TestEndpointDeleteWithActiveContainer(t *testing.T) {
 		libnetwork.JoinOptionHostname("test"),
 		libnetwork.JoinOptionDomainname("docker.io"),
 		libnetwork.JoinOptionExtraHost("web", "192.168.0.1"))
-	runtime.LockOSThread()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() {
 		err = ep.Leave(containerID)
-		runtime.LockOSThread()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1234,13 +1228,11 @@ func TestEndpointMultipleJoins(t *testing.T) {
 		libnetwork.JoinOptionHostname("test"),
 		libnetwork.JoinOptionDomainname("docker.io"),
 		libnetwork.JoinOptionExtraHost("web", "192.168.0.1"))
-	runtime.LockOSThread()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() {
 		err = ep.Leave(containerID)
-		runtime.LockOSThread()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1300,25 +1292,21 @@ func TestLeaveAll(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to join ep1: %v", err)
 	}
-	runtime.LockOSThread()
 
 	err = ep2.Join("leaveall")
 	if err != nil {
 		t.Fatalf("Failed to join ep2: %v", err)
 	}
-	runtime.LockOSThread()
 
 	err = ep1.Leave("leaveall")
 	if err != nil {
 		t.Fatalf("Failed to leave ep1: %v", err)
 	}
-	runtime.LockOSThread()
 
 	err = controller.LeaveAll("leaveall")
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime.LockOSThread()
 }
 
 func TestEndpointInvalidLeave(t *testing.T) {
@@ -1368,13 +1356,11 @@ func TestEndpointInvalidLeave(t *testing.T) {
 		libnetwork.JoinOptionHostname("test"),
 		libnetwork.JoinOptionDomainname("docker.io"),
 		libnetwork.JoinOptionExtraHost("web", "192.168.0.1"))
-	runtime.LockOSThread()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() {
 		err = ep.Leave(containerID)
-		runtime.LockOSThread()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1434,13 +1420,11 @@ func TestEndpointUpdateParent(t *testing.T) {
 		libnetwork.JoinOptionHostname("test1"),
 		libnetwork.JoinOptionDomainname("docker.io"),
 		libnetwork.JoinOptionExtraHost("web", "192.168.0.1"))
-	runtime.LockOSThread()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() {
 		err = ep1.Leave(containerID)
-		runtime.LockOSThread()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1462,13 +1446,11 @@ func TestEndpointUpdateParent(t *testing.T) {
 		libnetwork.JoinOptionDomainname("docker.io"),
 		libnetwork.JoinOptionHostsPath("/var/lib/docker/test_network/container2/hosts"),
 		libnetwork.JoinOptionParentUpdate(ep1.ID(), "web", "192.168.0.2"))
-	runtime.LockOSThread()
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	err = ep2.Leave("container2")
-	runtime.LockOSThread()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1538,13 +1520,11 @@ func TestEnableIPv6(t *testing.T) {
 	defer controller.LeaveAll(containerID)
 	err = ep1.Join(containerID,
 		libnetwork.JoinOptionResolvConfPath(resolvConfPath))
-	runtime.LockOSThread()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() {
 		err = ep1.Leave(containerID)
-		runtime.LockOSThread()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1691,13 +1671,11 @@ func TestResolvConf(t *testing.T) {
 	defer controller.LeaveAll(containerID)
 	err = ep1.Join(containerID,
 		libnetwork.JoinOptionResolvConfPath(resolvConfPath))
-	runtime.LockOSThread()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() {
 		err = ep1.Leave(containerID)
-		runtime.LockOSThread()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1723,7 +1701,6 @@ func TestResolvConf(t *testing.T) {
 	}
 
 	err = ep1.Leave(containerID)
-	runtime.LockOSThread()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1734,7 +1711,6 @@ func TestResolvConf(t *testing.T) {
 
 	err = ep1.Join(containerID,
 		libnetwork.JoinOptionResolvConfPath(resolvConfPath))
-	runtime.LockOSThread()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1753,14 +1729,12 @@ func TestResolvConf(t *testing.T) {
 	}
 
 	err = ep1.Leave(containerID)
-	runtime.LockOSThread()
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	err = ep1.Join(containerID,
 		libnetwork.JoinOptionResolvConfPath(resolvConfPath))
-	runtime.LockOSThread()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1941,7 +1915,6 @@ func debugf(format string, a ...interface{}) (int, error) {
 func parallelJoin(t *testing.T, ep libnetwork.Endpoint, thrNumber int) {
 	debugf("J%d.", thrNumber)
 	err := ep.Join("racing_container")
-	runtime.LockOSThread()
 	if err != nil {
 		if _, ok := err.(libnetwork.ErrNoContainer); !ok {
 			if _, ok := err.(libnetwork.ErrInvalidJoin); !ok {
@@ -1956,7 +1929,6 @@ func parallelJoin(t *testing.T, ep libnetwork.Endpoint, thrNumber int) {
 func parallelLeave(t *testing.T, ep libnetwork.Endpoint, thrNumber int) {
 	debugf("L%d.", thrNumber)
 	err := ep.Leave("racing_container")
-	runtime.LockOSThread()
 	if err != nil {
 		if _, ok := err.(libnetwork.ErrNoContainer); !ok {
 			if _, ok := err.(libnetwork.ErrInvalidJoin); !ok {
@@ -1984,9 +1956,6 @@ func runParallelTests(t *testing.T, thrNumber int) {
 	if numParallel < numThreads {
 		t.Skip("Skipped because t.parallel was less than ", numThreads)
 	}
-
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
 
 	if thrNumber == first {
 		createGlobalInstance(t)
