@@ -1629,14 +1629,15 @@ func (l *localReader) Read(p []byte) (n int, err error) {
 type localResponseWriter struct {
 	body       []byte
 	statusCode int
+	header     http.Header
 }
 
 func newWriter() *localResponseWriter {
-	return &localResponseWriter{}
+	return &localResponseWriter{header: make(map[string][]string)}
 }
 
 func (f *localResponseWriter) Header() http.Header {
-	return make(map[string][]string, 0)
+	return f.header
 }
 
 func (f *localResponseWriter) Write(data []byte) (int, error) {
@@ -1654,22 +1655,99 @@ func (f *localResponseWriter) WriteHeader(c int) {
 	f.statusCode = c
 }
 
-func TestwriteJSON(t *testing.T) {
-	testCode := 55
-	testData, err := json.Marshal("test data")
-	if err != nil {
-		t.Fatal(err)
+func TestIsSupportedVersion(t *testing.T) {
+	if isSupportedVersion("") {
+		t.Fatalf("isSupportedVersion failed")
 	}
+	if isSupportedVersion("0.1") {
+		t.Fatalf("isSupportedVersion failed")
+	}
+	if isSupportedVersion("1.1") {
+		t.Fatalf("isSupportedVersion failed")
+	}
+	if !isSupportedVersion(currentVersion) {
+		t.Fatalf("isSupportedVersion failed")
+	}
+	if !isSupportedVersion(supportedVersions[0]) {
+		t.Fatalf("isSupportedVersion failed")
+	}
+}
+
+func TestWriteJSON(t *testing.T) {
+	testCode := 55
+	testString := "test data"
+
+	v := "0.9"
+	ct := "application/vnd.libnetwork.v" + v + "+json"
 
 	rsp := newWriter()
-	writeJSON(rsp, testCode, testData)
+	writeJSON(rsp, testCode, testString, v)
 	if rsp.statusCode != testCode {
 		t.Fatalf("writeJSON() failed to set the status code. Expected %d. Got %d", testCode, rsp.statusCode)
 	}
-	if !bytes.Equal(testData, rsp.body) {
-		t.Fatalf("writeJSON() failed to set the body. Expected %s. Got %s", testData, rsp.body)
+	var stringa string
+	err := json.Unmarshal(rsp.body, &stringa)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if testString != stringa {
+		t.Fatalf("writeJSON() failed to set the body. Expected %v. Got %v", testString, stringa)
+	}
+	rct := rsp.Header().Get("Content-Type")
+	if ct != rct {
+		t.Fatalf("writeJSON() failed to set the proper Content-Type. Expected %s. Got %s", ct, rct)
+	}
+}
+
+func TestParseHeadersForVersion(t *testing.T) {
+	header := make(map[string][]string)
+
+	v, rsp := parseHeadersForVersion(header)
+	if !rsp.isOK() {
+		t.Fatalf("Unexpected failure. Got: %v", rsp)
+	}
+	if v != currentVersion {
+		t.Fatalf("Failed to fall back to currrent version on empty accept header. Expected: %s. Got: %s", currentVersion, v)
 	}
 
+	header["Accept"] = []string{"application/json"}
+	v, rsp = parseHeadersForVersion(header)
+	if !rsp.isOK() {
+		t.Fatalf("Unexpected failure. Got: %v", rsp)
+	}
+	if v != currentVersion {
+		t.Fatalf("Failed to fall back to currrent version on empty accept header. Expected: %s. Got: %s", currentVersion, v)
+	}
+
+	header["Accept"] = []string{"whatever"}
+	v, rsp = parseHeadersForVersion(header)
+	if rsp.isOK() {
+		t.Fatalf("Expected failure. Got: %s, %v", v, rsp)
+	}
+
+	header["Accept"] = []string{"application/vnd.libnetwork.v9.0+json"}
+	v, rsp = parseHeadersForVersion(header)
+	if rsp.isOK() {
+		t.Fatalf("Expected failure. Got: %s, %v", v, rsp)
+	}
+
+	header["Accept"] = []string{"application/vnd.libnetwork.v" + currentVersion + "+xml"}
+	v, rsp = parseHeadersForVersion(header)
+	if rsp.isOK() {
+		t.Fatalf("Expected failure. Got: %s, %v", v, rsp)
+	}
+
+	header["Accept"] = []string{"vnd.libnetwork.v" + supportedVersions[0] + "+json"}
+	v, rsp = parseHeadersForVersion(header)
+	if rsp.isOK() {
+		t.Fatalf("Expected failure. Got: %s, %v", v, rsp)
+	}
+
+	header["Accept"] = []string{"application/vnd.libnetwork.v" + supportedVersions[0] + "+json"}
+	v, rsp = parseHeadersForVersion(header)
+	if !rsp.isOK() {
+		t.Fatalf("Unexpected failure. Got: %s, %v", v, rsp)
+	}
 }
 
 func TestHttpHandlerUninit(t *testing.T) {
@@ -1692,7 +1770,7 @@ func TestHttpHandlerUninit(t *testing.T) {
 	}
 
 	rsp := newWriter()
-	req, err := http.NewRequest("GET", "/v1.19/networks", nil)
+	req, err := http.NewRequest("GET", "/networks", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1741,6 +1819,66 @@ func TestHttpHandlerUninit(t *testing.T) {
 	}
 }
 
+func TestHttpBadAcceptHeader(t *testing.T) {
+	defer netutils.SetupTestNetNS(t)()
+
+	rsp := newWriter()
+
+	c, err := libnetwork.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = c.ConfigureNetworkDriver(bridgeNetType, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handleRequest := NewHTTPHandler(c)
+
+	// Create network
+	netName := "one-hundred"
+	nc := networkCreate{Name: netName, NetworkType: bridgeNetType}
+	body, err := json.Marshal(nc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lr := newLocalReader(body)
+	req, err := http.NewRequest("POST", "/networks", lr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Accept", "application/vnd.libnetwork.v8.9+json")
+	handleRequest(rsp, req)
+	if rsp.statusCode != http.StatusNotAcceptable {
+		t.Fatalf("Unexpectded status code. Expected (%d). Got (%d): %s.", http.StatusNotAcceptable, rsp.statusCode, string(rsp.body))
+	}
+	if len(rsp.body) == 0 {
+		t.Fatalf("Empty response body")
+	}
+	req.Header.Set("Accept", "application/vnd.libnetwork.v"+currentVersion+"+json")
+	handleRequest(rsp, req)
+	if rsp.statusCode != http.StatusCreated {
+		t.Fatalf("Unexpectded status code. Expected (%d). Got (%d): %s.", http.StatusCreated, rsp.statusCode, string(rsp.body))
+	}
+
+	req, err = http.NewRequest("GET", "/networks?name="+netName, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Accept", "application/vnd.libnetwork.v"+currentVersion+"+xml")
+	handleRequest(rsp, req)
+	if rsp.statusCode != http.StatusNotAcceptable {
+		t.Fatalf("Unexpectded status code. Expected (%d). Got (%d): %s.", http.StatusNotAcceptable, rsp.statusCode, string(rsp.body))
+	}
+	if len(rsp.body) == 0 {
+		t.Fatalf("Empty response body")
+	}
+	req.Header.Set("Accept", "application/vnd.libnetwork.v"+currentVersion+"+json")
+	handleRequest(rsp, req)
+	if rsp.statusCode != http.StatusOK {
+		t.Fatalf("Unexpectded status code. Expected (%d). Got (%d): %s.", http.StatusOK, rsp.statusCode, string(rsp.body))
+	}
+}
+
 func TestHttpHandlerBadBody(t *testing.T) {
 	defer netutils.SetupTestNetNS(t)()
 
@@ -1750,9 +1888,15 @@ func TestHttpHandlerBadBody(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	err = c.ConfigureNetworkDriver(bridgeNetType, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	handleRequest := NewHTTPHandler(c)
 
-	req, err := http.NewRequest("POST", "/v1.19/networks", &localReader{beBad: true})
+	req, err := http.NewRequest("POST", "/networks", &localReader{beBad: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1763,7 +1907,7 @@ func TestHttpHandlerBadBody(t *testing.T) {
 
 	body := []byte{}
 	lr := newLocalReader(body)
-	req, err = http.NewRequest("POST", "/v1.19/networks", lr)
+	req, err = http.NewRequest("POST", "/networks", lr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1810,7 +1954,7 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	lr := newLocalReader(body)
-	req, err := http.NewRequest("POST", "/v1.19/networks", lr)
+	req, err := http.NewRequest("POST", "/networks", lr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1858,7 +2002,7 @@ func TestEndToEnd(t *testing.T) {
 	b0 := make([]byte, len(rsp.body))
 	copy(b0, rsp.body)
 
-	req, err = http.NewRequest("GET", "/v1.19/networks?name=network-fiftyfive", nil)
+	req, err = http.NewRequest("GET", "/networks?name=network-fiftyfive", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1872,7 +2016,7 @@ func TestEndToEnd(t *testing.T) {
 	}
 
 	// Query network by name
-	req, err = http.NewRequest("GET", "/v1.19/networks?name=culo", nil)
+	req, err = http.NewRequest("GET", "/networks?name=culo", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1889,7 +2033,7 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatalf("Expected empty list. Got %v", list)
 	}
 
-	req, err = http.NewRequest("GET", "/v1.19/networks?name=network-fiftyfive", nil)
+	req, err = http.NewRequest("GET", "/networks?name=network-fiftyfive", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1912,7 +2056,7 @@ func TestEndToEnd(t *testing.T) {
 	// Query network by partial id
 	chars := []byte(nid)
 	partial := string(chars[0 : len(chars)/2])
-	req, err = http.NewRequest("GET", "/v1.19/networks?partial-id="+partial, nil)
+	req, err = http.NewRequest("GET", "/networks?partial-id="+partial, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1933,7 +2077,7 @@ func TestEndToEnd(t *testing.T) {
 	}
 
 	// Get network by id
-	req, err = http.NewRequest("GET", "/v1.19/networks/"+nid, nil)
+	req, err = http.NewRequest("GET", "/networks/"+nid, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1958,7 +2102,7 @@ func TestEndToEnd(t *testing.T) {
 	}
 
 	lr = newLocalReader(eb)
-	req, err = http.NewRequest("POST", "/v1.19/networks/"+nid+"/endpoints", lr)
+	req, err = http.NewRequest("POST", "/networks/"+nid+"/endpoints", lr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1977,7 +2121,7 @@ func TestEndToEnd(t *testing.T) {
 	}
 
 	// Query endpoint(s)
-	req, err = http.NewRequest("GET", "/v1.19/networks/"+nid+"/endpoints", nil)
+	req, err = http.NewRequest("GET", "/networks/"+nid+"/endpoints", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1986,7 +2130,7 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatalf("Expected StatusOK. Got (%d): %s", rsp.statusCode, rsp.body)
 	}
 
-	req, err = http.NewRequest("GET", "/v1.19/networks/"+nid+"/endpoints?name=bla", nil)
+	req, err = http.NewRequest("GET", "/networks/"+nid+"/endpoints?name=bla", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2004,7 +2148,7 @@ func TestEndToEnd(t *testing.T) {
 	}
 
 	// Query endpoint by name
-	req, err = http.NewRequest("GET", "/v1.19/networks/"+nid+"/endpoints?name=ep-TwentyTwo", nil)
+	req, err = http.NewRequest("GET", "/networks/"+nid+"/endpoints?name=ep-TwentyTwo", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2027,7 +2171,7 @@ func TestEndToEnd(t *testing.T) {
 	// Query endpoint by partial id
 	chars = []byte(eid)
 	partial = string(chars[0 : len(chars)/2])
-	req, err = http.NewRequest("GET", "/v1.19/networks/"+nid+"/endpoints?partial-id="+partial, nil)
+	req, err = http.NewRequest("GET", "/networks/"+nid+"/endpoints?partial-id="+partial, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2048,7 +2192,7 @@ func TestEndToEnd(t *testing.T) {
 	}
 
 	// Get endpoint by id
-	req, err = http.NewRequest("GET", "/v1.19/networks/"+nid+"/endpoints/"+eid, nil)
+	req, err = http.NewRequest("GET", "/networks/"+nid+"/endpoints/"+eid, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2064,6 +2208,67 @@ func TestEndToEnd(t *testing.T) {
 	}
 	if epr.Name != "ep-TwentyTwo" || epr.ID != eid {
 		t.Fatalf("Incongruent resource found: %v", epr)
+	}
+}
+
+func TestSupportedURL(t *testing.T) {
+	defer netutils.SetupTestNetNS(t)()
+	netName := "two-million"
+	c, nw := createTestNetwork(t, netName)
+	nid := nw.ID()
+	ep1, err := nw.CreateEndpoint("one")
+	if err != nil {
+		t.Fatal(err)
+	}
+	eid1 := ep1.ID()
+	handleRequest := NewHTTPHandler(c)
+
+	nc := networkCreate{Name: netName, NetworkType: bridgeNetType}
+	ncbody, err := json.Marshal(nc)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	input := []struct {
+		verb string
+		url  string
+		urlv string
+		body []byte
+	}{
+		{"POST", "/networks", "/v1.21/networks", ncbody}, // They should both fail
+		{"GET", "/networks", "/networks", nil},
+		{"GET", "/networks/" + nid, "/v2.18/networks/" + nid, nil},
+		{"GET", "/networks/" + nid + "/endpoints", "/abcdefg/networks/" + nid + "/endpoints", nil},
+		{"GET", "/networks/" + nid + "/endpoints/" + eid1, "/v1.94/networks/" + nid + "/endpoints/" + eid1, nil},
+		{"DELETE", "/networks/" + nid + "/endpoints/" + eid1 + "/abcdef0123456789", "/v0.01/networks/" + nid + "/endpoints/" + eid1 + "/abcdef0123456789", nil},
+	}
+
+	rspu := newWriter()
+	rspv := newWriter()
+
+	for i, a := range input {
+		var lr io.Reader
+		var lru io.Reader
+		if a.body != nil {
+			lr = newLocalReader(a.body)
+			lru = newLocalReader(a.body)
+		}
+		requ, _ := http.NewRequest(a.verb, a.url, lr)
+		requ.Header.Set("Accept", "application/vnd.libnetwork.v"+currentVersion+"+json")
+		reqv, _ := http.NewRequest(a.verb, a.urlv, lru)
+		requ.Header.Set("Accept", "application/vnd.libnetwork.v"+currentVersion+"+json")
+
+		handleRequest(rspu, requ)
+		handleRequest(rspv, reqv)
+		if rspu.statusCode != rspv.statusCode {
+			t.Fatalf("Uncongruent response status code between base API and docker versioned API (%d): %v, %v", i, rspu.statusCode, rspv.statusCode)
+		}
+		if !bytes.Equal(rspu.body, rspv.body) {
+			t.Fatalf("Uncongruent response body between base API and docker versioned API(%d): %v, %v", i, string(rspu.body), string(rspv.body))
+		}
+		if len(rspu.Header()) != len(rspv.Header()) {
+			t.Fatalf("Uncongruent response header between base API and docker versioned API(%d): %v, %v", i, rspu.statusCode, rspv.statusCode)
+		}
 	}
 }
 

@@ -93,7 +93,8 @@ func (cli *NetworkCli) CmdNetworkLs(chain string, args ...string) error {
 	if err != nil {
 		return err
 	}
-	obj, _, err := readBody(cli.call("GET", "/networks", nil, nil))
+
+	obj, _, err := readBody(cli.call("GET", "/networks", nil, libnetworkAcceptHeader))
 	if err != nil {
 		return err
 	}
@@ -149,7 +150,7 @@ func (cli *NetworkCli) CmdNetworkInfo(chain string, args ...string) error {
 		return err
 	}
 
-	obj, _, err := readBody(cli.call("GET", "/networks/"+id, nil, nil))
+	obj, _, err := readBody(cli.call("GET", "/networks/"+id, nil, libnetworkAcceptHeader))
 	if err != nil {
 		return err
 	}
@@ -177,7 +178,7 @@ func (cli *NetworkCli) CmdNetworkInfo(chain string, args ...string) error {
 // is an ID by itself.
 
 func lookupNetworkID(cli *NetworkCli, nameID string) (string, error) {
-	obj, statusCode, err := readBody(cli.call("GET", "/networks?name="+nameID, nil, nil))
+	obj, statusCode, err := readBody(cli.call("GET", "/networks?name="+nameID, nil, libnetworkAcceptHeader))
 	if err != nil {
 		return "", err
 	}
@@ -197,7 +198,7 @@ func lookupNetworkID(cli *NetworkCli, nameID string) (string, error) {
 	}
 
 	// Check for Partial-id
-	obj, statusCode, err = readBody(cli.call("GET", "/networks?partial-id="+nameID, nil, nil))
+	obj, statusCode, err = readBody(cli.call("GET", "/networks?partial-id="+nameID, nil, libnetworkAcceptHeader))
 	if err != nil {
 		return "", err
 	}
