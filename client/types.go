@@ -16,9 +16,10 @@ type networkResource struct {
 
 // serviceResource is the body of the "get service" http response message
 type serviceResource struct {
-	Name    string `json:"name"`
-	ID      string `json:"id"`
-	Network string `json:"network"`
+	Name          string   `json:"name"`
+	ID            string   `json:"id"`
+	Network       string   `json:"network"`
+	InterfaceList []string `json:"interfacelist"`
 }
 
 // backendResource is the body of "get service backend" response message

@@ -292,6 +292,7 @@ func (cli *NetworkCli) CmdServiceInfo(chain string, args ...string) error {
 	fmt.Fprintf(cli.out, "Service Id: %s\n", sr.ID)
 	fmt.Fprintf(cli.out, "\tName: %s\n", sr.Name)
 	fmt.Fprintf(cli.out, "\tNetwork: %s\n", sr.Network)
+	fmt.Fprintf(cli.out, "\tIPList: %s\n", sr.InterfaceList)
 
 	return nil
 }
