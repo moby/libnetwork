@@ -888,6 +888,9 @@ func EndpointOptionGeneric(generic map[string]interface{}) EndpointOption {
 // be passed to endpoint Join method.
 func JoinOptionPriority(prio int) EndpointOption {
 	return func(ep *endpoint) {
+		if ep.container == nil {
+			return
+		}
 		ep.container.config.prio = prio
 	}
 }
@@ -896,6 +899,9 @@ func JoinOptionPriority(prio int) EndpointOption {
 // be passed to endpoint Join method.
 func JoinOptionHostname(name string) EndpointOption {
 	return func(ep *endpoint) {
+		if ep.container == nil {
+			return
+		}
 		ep.container.config.hostName = name
 	}
 }
@@ -904,6 +910,9 @@ func JoinOptionHostname(name string) EndpointOption {
 // be passed to endpoint Join method.
 func JoinOptionDomainname(name string) EndpointOption {
 	return func(ep *endpoint) {
+		if ep.container == nil {
+			return
+		}
 		ep.container.config.domainName = name
 	}
 }
@@ -912,6 +921,9 @@ func JoinOptionDomainname(name string) EndpointOption {
 // be passed to endpoint Join method.
 func JoinOptionHostsPath(path string) EndpointOption {
 	return func(ep *endpoint) {
+		if ep.container == nil {
+			return
+		}
 		ep.container.config.hostsPath = path
 	}
 }
@@ -920,6 +932,9 @@ func JoinOptionHostsPath(path string) EndpointOption {
 // which is a name and IP as strings.
 func JoinOptionExtraHost(name string, IP string) EndpointOption {
 	return func(ep *endpoint) {
+		if ep.container == nil {
+			return
+		}
 		ep.container.config.extraHosts = append(ep.container.config.extraHosts, extraHost{name: name, IP: IP})
 	}
 }
@@ -928,6 +943,9 @@ func JoinOptionExtraHost(name string, IP string) EndpointOption {
 // which needs to update the IP address for the linked container.
 func JoinOptionParentUpdate(eid string, name, ip string) EndpointOption {
 	return func(ep *endpoint) {
+		if ep.container == nil {
+			return
+		}
 		ep.container.config.parentUpdates = append(ep.container.config.parentUpdates, parentUpdate{eid: eid, name: name, ip: ip})
 	}
 }
@@ -936,6 +954,9 @@ func JoinOptionParentUpdate(eid string, name, ip string) EndpointOption {
 // be passed to endpoint Join method.
 func JoinOptionResolvConfPath(path string) EndpointOption {
 	return func(ep *endpoint) {
+		if ep.container == nil {
+			return
+		}
 		ep.container.config.resolvConfPath = path
 	}
 }
@@ -944,6 +965,9 @@ func JoinOptionResolvConfPath(path string) EndpointOption {
 // be passed to endpoint Join method.
 func JoinOptionDNS(dns string) EndpointOption {
 	return func(ep *endpoint) {
+		if ep.container == nil {
+			return
+		}
 		ep.container.config.dnsList = append(ep.container.config.dnsList, dns)
 	}
 }
@@ -952,6 +976,9 @@ func JoinOptionDNS(dns string) EndpointOption {
 // be passed to endpoint Join method.
 func JoinOptionDNSSearch(search string) EndpointOption {
 	return func(ep *endpoint) {
+		if ep.container == nil {
+			return
+		}
 		ep.container.config.dnsSearchList = append(ep.container.config.dnsSearchList, search)
 	}
 }
@@ -960,6 +987,9 @@ func JoinOptionDNSSearch(search string) EndpointOption {
 // be passed to endpoint Join method.
 func JoinOptionUseDefaultSandbox() EndpointOption {
 	return func(ep *endpoint) {
+		if ep.container == nil {
+			return
+		}
 		ep.container.config.useDefaultSandBox = true
 	}
 }
@@ -993,6 +1023,9 @@ func CreateOptionPortMapping(portBindings []types.PortBinding) EndpointOption {
 // endpoint join method. Container Labels are a good example.
 func JoinOptionGeneric(generic map[string]interface{}) EndpointOption {
 	return func(ep *endpoint) {
+		if ep.container == nil {
+			return
+		}
 		ep.container.config.generic = generic
 	}
 }
