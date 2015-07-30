@@ -85,9 +85,10 @@ type resolvConfPathConfig struct {
 type containerConfig struct {
 	hostsPathConfig
 	resolvConfPathConfig
-	generic           map[string]interface{}
-	useDefaultSandBox bool
-	prio              int // higher the value, more the priority
+	generic            map[string]interface{}
+	useDefaultSandBox  bool
+	useCustomNamespace bool
+	prio               int // higher the value, more the priority
 }
 
 type extraHost struct {
@@ -436,7 +437,7 @@ func (ep *endpoint) Join(containerID string, options ...EndpointOption) error {
 		return err
 	}
 
-	sb, err := ctrlr.sandboxAdd(sboxKey, !container.config.useDefaultSandBox, ep)
+	sb, err := ctrlr.sandboxAdd(sboxKey, container.config, ep)
 	if err != nil {
 		return fmt.Errorf("failed sandbox add: %v", err)
 	}
@@ -964,6 +965,14 @@ func JoinOptionUseDefaultSandbox() EndpointOption {
 	}
 }
 
+// JoinOptionUseCustomNamespace function returns an option setter for using a custom namespaced sandbox to
+// be passed to endpoint Join method.
+func JoinOptionUseCustomNamespace() EndpointOption {
+	return func(ep *endpoint) {
+		ep.container.config.useCustomNamespace = true
+	}
+}
+
 // CreateOptionExposedPorts function returns an option setter for the container exposed
 // ports option to be passed to network.CreateEndpoint() method.
 func CreateOptionExposedPorts(exposedPorts []types.TransportPort) EndpointOption {
@@ -993,6 +1002,14 @@ func CreateOptionPortMapping(portBindings []types.PortBinding) EndpointOption {
 // endpoint join method. Container Labels are a good example.
 func JoinOptionGeneric(generic map[string]interface{}) EndpointOption {
 	return func(ep *endpoint) {
-		ep.container.config.generic = generic
+		//Initialize the map if it has not been initialized
+		if ep.container.config.generic == nil {
+			ep.container.config.generic = generic
+			return
+		}
+		//Insert new keys into the map
+		for k, v := range generic {
+			ep.container.config.generic[k] = v
+		}
 	}
 }

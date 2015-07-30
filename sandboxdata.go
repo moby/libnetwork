@@ -3,6 +3,7 @@ package libnetwork
 import (
 	"container/heap"
 	"fmt"
+	"path/filepath"
 	"sync"
 
 	"github.com/Sirupsen/logrus"
@@ -173,13 +174,13 @@ func (s *sandboxData) sandbox() sandbox.Sandbox {
 	return s.sbox
 }
 
-func (c *controller) sandboxAdd(key string, create bool, ep *endpoint) (sandbox.Sandbox, error) {
+func (c *controller) sandboxAdd(key string, opt containerConfig, ep *endpoint) (sandbox.Sandbox, error) {
 	c.Lock()
 	sData, ok := c.sandboxes[key]
 	c.Unlock()
 
 	if !ok {
-		sb, err := sandbox.NewSandbox(key, create)
+		sb, err := sandbox.NewSandbox(key, !opt.useDefaultSandBox, opt.useCustomNamespace)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create new sandbox: %v", err)
 		}
@@ -244,7 +245,10 @@ func (c *controller) LeaveAll(id string) error {
 		}
 	}
 
-	sData.sandbox().Destroy()
+	//Only unmount the network namespace if the container has its own, unshared namespace.
+	if path, _ := filepath.EvalSymlinks(sandbox.GenerateKey(id)); path == "" {
+		sData.sandbox().Destroy()
+	}
 	delete(c.sandboxes, sandbox.GenerateKey(id))
 
 	return nil

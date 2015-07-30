@@ -111,7 +111,7 @@ func (n *network) destroySandbox() {
 }
 
 func (n *network) initSandbox() error {
-	sbox, err := sandbox.NewSandbox(sandbox.GenerateKey(string(n.id)), true)
+	sbox, err := sandbox.NewSandbox(sandbox.GenerateKey(string(n.id)), true, false)
 	if err != nil {
 		return fmt.Errorf("could not create network sandbox: %v", err)
 	}

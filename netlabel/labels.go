@@ -35,6 +35,9 @@ const (
 
 	// OverlayNeighborIP constant represents overlay driver neighbor IP
 	OverlayNeighborIP = DriverPrefix + ".overlay.neighbor_ip"
+
+	//GenericNamespaceOptions constant represents generic options for the namespace driver
+	GenericNamespaceOptions = DriverPrefix + ".namespace.generic"
 )
 
 // Key extracts the key portion of the label
