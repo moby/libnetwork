@@ -14,6 +14,7 @@ import (
 	"syscall"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/docker/docker/pkg/parsers/kernel"
 	"github.com/docker/libnetwork/driverapi"
 	"github.com/docker/libnetwork/ipallocator"
 	"github.com/docker/libnetwork/iptables"
@@ -987,9 +988,20 @@ func (d *driver) CreateEndpoint(nid, eid types.UUID, epInfo driverapi.EndpointIn
 	}
 	ipv4Addr := &net.IPNet{IP: ip4, Mask: n.bridge.bridgeIPv4.Mask}
 
-	// Down the interface before configuring mac address.
-	if err = netlink.LinkSetDown(sbox); err != nil {
-		return fmt.Errorf("could not set link down for container interface %s: %v", containerIfName, err)
+	// its better to check for a specific functionality rather than kernel version.
+	// but the case of bringing down an interface before configuring mac-address seem
+	// like a patch for a very old kernel with no solid functional requirement backing it.
+	// But, this causes very hard to trace timing issues in the later kernels.
+	// Hence it is safe and appropriate to check for Older kernel to eliminate these
+	// hard to trace timing issues.
+	kv, err := kernel.GetKernelVersion()
+	if err != nil {
+		return fmt.Errorf("Failed to get kernel version: %v.", err)
+	} else if kv.Kernel < 3 {
+		// Down the interface before configuring mac address.
+		if err = netlink.LinkSetDown(sbox); err != nil {
+			return fmt.Errorf("could not set link down for container interface %s: %v", containerIfName, err)
+		}
 	}
 
 	// Set the sbox's MAC. If specified, use the one configured by user, otherwise generate one based on IP.
