@@ -570,6 +570,10 @@ func (d *driver) getNetworks() []*bridgeNetwork {
 func (d *driver) CreateNetwork(id types.UUID, option map[string]interface{}) error {
 	var err error
 
+	if d.config == nil {
+		return types.ForbiddenErrorf("cannot create network, bridge driver configuration is missing")
+	}
+
 	// Sanity checks
 	d.Lock()
 	if _, ok := d.networks[id]; ok {
@@ -651,7 +655,7 @@ func (d *driver) CreateNetwork(id types.UUID, option map[string]interface{}) err
 	bridgeSetup.queueStep(setupBridgeIPv4)
 
 	enableIPv6Forwarding := false
-	if d.config != nil && d.config.EnableIPForwarding && config.FixedCIDRv6 != nil {
+	if d.config.EnableIPForwarding && config.FixedCIDRv6 != nil {
 		enableIPv6Forwarding = true
 	}
 
