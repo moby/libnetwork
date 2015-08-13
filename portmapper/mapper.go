@@ -66,7 +66,12 @@ func (pm *PortMapper) Map(container net.Addr, hostIP net.IP, hostPort int, usePr
 }
 
 // MapRange maps the specified container transport address to the host's network address and transport port range
-func (pm *PortMapper) MapRange(container net.Addr, hostIP net.IP, hostPortStart, hostPortEnd int, useProxy bool) (host net.Addr, err error) {
+func (pm *PortMapper) MapRange(container net.Addr, hostIP net.IP, hostPortStart int, hostPortEnd int, useProxy bool) (host net.Addr, err error) {
+	return pm.PreferredMapFromRange(container, hostIP, 0, hostPortStart, hostPortEnd, useProxy)
+}
+
+// PreferredMapFromRange maps the specified container transport address to the host's network address and transport port range, trying the preferred port first
+func (pm *PortMapper) PreferredMapFromRange(container net.Addr, hostIP net.IP, hostPort int, hostPortStart int, hostPortEnd int, useProxy bool) (host net.Addr, err error) {
 	pm.lock.Lock()
 	defer pm.lock.Unlock()
 
@@ -79,7 +84,7 @@ func (pm *PortMapper) MapRange(container net.Addr, hostIP net.IP, hostPortStart,
 	switch container.(type) {
 	case *net.TCPAddr:
 		proto = "tcp"
-		if allocatedHostPort, err = pm.Allocator.RequestPortInRange(hostIP, proto, hostPortStart, hostPortEnd); err != nil {
+		if allocatedHostPort, err = pm.Allocator.RequestPreferredPortInRange(hostIP, proto, hostPort, hostPortStart, hostPortEnd); err != nil {
 			return nil, err
 		}
 
@@ -96,7 +101,7 @@ func (pm *PortMapper) MapRange(container net.Addr, hostIP net.IP, hostPortStart,
 		}
 	case *net.UDPAddr:
 		proto = "udp"
-		if allocatedHostPort, err = pm.Allocator.RequestPortInRange(hostIP, proto, hostPortStart, hostPortEnd); err != nil {
+		if allocatedHostPort, err = pm.Allocator.RequestPreferredPortInRange(hostIP, proto, hostPort, hostPortStart, hostPortEnd); err != nil {
 			return nil, err
 		}
 

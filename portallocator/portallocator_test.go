@@ -254,10 +254,10 @@ func TestPortAllocationWithCustomRange(t *testing.T) {
 		t.Fatalf("Expected error for invalid range %d-%d", 0, end)
 	}
 	if _, err := p.RequestPortInRange(defaultIP, "tcp", start, 0); err == nil {
-		t.Fatalf("Expected error for invalid range %d-%d", 0, end)
+		t.Fatalf("Expected error for invalid range %d-%d", start, 0)
 	}
 	if _, err := p.RequestPortInRange(defaultIP, "tcp", 8081, 8080); err == nil {
-		t.Fatalf("Expected error for invalid range %d-%d", 0, end)
+		t.Fatalf("Expected error for invalid range %d-%d", 8081, 8080)
 	}
 
 	//request a single port
@@ -299,6 +299,57 @@ func TestPortAllocationWithCustomRange(t *testing.T) {
 	//request 3rd port from the range of 2
 	if _, err := p.RequestPortInRange(defaultIP, "tcp", start, end); err != ErrAllPortsAllocated {
 		t.Fatalf("Expected error %s got %s", ErrAllPortsAllocated, err)
+	}
+}
+
+func TestPreferredPortAllocationWithCustomRange(t *testing.T) {
+	p := Get()
+	defer resetPortAllocator()
+
+	start, end := 8083, 8084
+	specificPort := 8000
+
+	//get a preferred port from the range
+	port1, err := p.RequestPreferredPortInRange(defaultIP, "tcp", start, start, end)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if port1 != start {
+		t.Fatalf("Expected preferred port %d, got %d", start, port1)
+	}
+
+	//try for the same port again, should get a different port
+	port2, err := p.RequestPreferredPortInRange(defaultIP, "tcp", start, start, end)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if port2 == start {
+		t.Fatalf("Expected preferred port %d to be busy, but got it allocated", start)
+	}
+
+	//try to get a preferred port from an invalid range for that port
+	if _, err := p.RequestPreferredPortInRange(defaultIP, "tcp", 8100, 8200, 8300); err == nil {
+		t.Fatalf("Expected error for invalid range %d-%d for port %d", 8200, 8300, 8100)
+	}
+
+	//request a single port with empty range
+	port3, err := p.RequestPreferredPortInRange(defaultIP, "tcp", specificPort, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if port3 != specificPort {
+		t.Fatalf("Expected port %d, got %d", specificPort, port3)
+	}
+
+	//request a single port with empty range again, should be busy
+	if port4, err := p.RequestPreferredPortInRange(defaultIP, "tcp", specificPort, 0, 0); err == nil {
+		t.Fatalf("Expected port allocation error, got port: %d", port4)
+	} else {
+		switch err.(type) {
+		case ErrPortAlreadyAllocated:
+		default:
+			t.Fatalf("Expected port allocation error got %s", err)
+		}
 	}
 }
 
