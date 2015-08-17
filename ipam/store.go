@@ -45,21 +45,21 @@ func (a *Allocator) SetValue(value []byte) error {
 	return nil
 }
 
-func subnetsToByteArray(m map[subnetKey]*SubnetInfo) ([]byte, error) {
+func subnetsToByteArray(m map[subnetKey]*net.IPNet) ([]byte, error) {
 	if m == nil {
 		return nil, nil
 	}
 
 	mm := make(map[string]string, len(m))
 	for k, v := range m {
-		mm[k.String()] = v.Subnet.String()
+		mm[k.String()] = v.String()
 	}
 
 	return json.Marshal(mm)
 }
 
-func byteArrayToSubnets(ba []byte) map[subnetKey]*SubnetInfo {
-	m := map[subnetKey]*SubnetInfo{}
+func byteArrayToSubnets(ba []byte) map[subnetKey]*net.IPNet {
+	m := map[subnetKey]*net.IPNet{}
 
 	if ba == nil || len(ba) == 0 {
 		return m
@@ -77,14 +77,12 @@ func byteArrayToSubnets(ba []byte) map[subnetKey]*SubnetInfo {
 			log.Warnf("Failed to decode subnets map entry: (%s, %s)", ks, vs)
 			continue
 		}
-		si := &SubnetInfo{}
 		_, nw, err := net.ParseCIDR(vs)
 		if err != nil {
 			log.Warnf("Failed to decode subnets map entry value: (%s, %s)", ks, vs)
 			continue
 		}
-		si.Subnet = nw
-		m[sk] = si
+		m[sk] = nw
 	}
 	return m
 }

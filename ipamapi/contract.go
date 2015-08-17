@@ -1,11 +1,23 @@
-// Package ipam that specifies the contract the IPAM plugin need to satisfy,
-// decoupling IPAM interface and implementation.
-package ipam
+// Package ipamapi that specifies the contract the IPAM service (built-in or remote) needs to satisfy.
+package ipamapi
 
 import (
 	"errors"
 	"net"
 )
+
+/********************
+ * IPAM plugin types
+ ********************/
+
+// NetworkPluginEndpointType represents the Endpoint Type used by Plugin system
+const NetworkPluginEndpointType = "IPAM"
+
+// Callback provides a Callback interface for registering an IPAM instance into LibNetwork
+type Callback interface {
+	// RegisterDriver provides a way for Remote drivers to dynamically register new NetworkType and associate with a ipam instance
+	RegisterIpam(name string, config Config, allocator Allocator) error
+}
 
 /**************
  * IPAM Errors
@@ -30,9 +42,6 @@ var (
 	ErrBadSubnet                = errors.New("Address space does not contain specified subnet")
 )
 
-// AddressSpace identifies a unique pool of network addresses
-type AddressSpace string
-
 /*******************************
  * IPAM Configuration Interface
  *******************************/
@@ -42,59 +51,22 @@ type AddressSpace string
 // Common key is a addressspace
 type Config interface {
 	// AddSubnet adds a subnet to the specified address space
-	AddSubnet(AddressSpace, *SubnetInfo) error
+	AddSubnet(string, *net.IPNet) error
 	// RemoveSubnet removes a subnet from the specified address space
-	RemoveSubnet(AddressSpace, *net.IPNet) error
-	// AddVendorInfo adds Vendor specific data
-	AddVendorInfo([]byte) error
-}
-
-// SubnetInfo contains the information subnet hosts need in order to communicate
-type SubnetInfo struct {
-	Subnet     *net.IPNet
-	Gateway    net.IP
-	OpaqueData []byte // Vendor specific
+	RemoveSubnet(string, *net.IPNet) error
 }
 
 /*************************
  * IPAM Service Interface
  *************************/
 
-// IPAM defines the interface that needs to be implemented by IPAM service plugin
+// Allocator defines the interface the IPAM service plugins must implement
 // Common key is a unique address space identifier
-type IPAM interface {
+type Allocator interface {
 	// Request address from the specified address space
-	Request(AddressSpace, *AddressRequest) (*AddressResponse, error)
+	Request(string, *net.IPNet, net.IP) (net.IP, error)
 	// Separate API for IPv6
-	RequestV6(AddressSpace, *AddressRequest) (*AddressResponse, error)
+	RequestV6(string, *net.IPNet, net.IP) (net.IP, error)
 	// Release the address from the specified address space
-	Release(AddressSpace, net.IP)
-}
-
-// AddressRequest encloses the information a client
-// needs to pass to IPAM when requesting an address
-type AddressRequest struct {
-	Subnet     net.IPNet // Preferred subnet pool (Optional)
-	Address    net.IP    // Preferred address (Optional)
-	Endpoint   string    // For static IP mapping (Optional)
-	OpaqueData []byte    // Vendor specific request data
-}
-
-// Validate runs syntactic validation on this AddressRequest object
-func (req *AddressRequest) Validate() error {
-	var byteArray []byte = req.Address
-
-	// Check preferred address
-	if byteArray != nil && (&req.Subnet == nil || !req.Subnet.Contains(req.Address)) {
-		return ErrInvalidRequest
-	}
-
-	return nil
-}
-
-// AddressResponse represents the IPAM service's
-// response to an address request
-type AddressResponse struct {
-	Address net.IP
-	Subnet  SubnetInfo
+	Release(string, net.IP)
 }
