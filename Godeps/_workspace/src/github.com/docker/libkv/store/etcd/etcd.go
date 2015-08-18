@@ -33,9 +33,9 @@ const (
 	defaultUpdateTime = 5 * time.Second
 )
 
-// InitializeEtcd creates a new Etcd client given
-// a list of endpoints and an optional tls config
-func InitializeEtcd(addrs []string, options *store.Config) (store.Store, error) {
+// New creates a new Etcd client given a list
+// of endpoints and an optional tls config
+func New(addrs []string, options *store.Config) (store.Store, error) {
 	s := &Etcd{}
 
 	entries := store.CreateEndpoints(addrs, "http")
@@ -122,7 +122,7 @@ func (s *Etcd) Get(key string) (pair *store.KVPair, err error) {
 	if err != nil {
 		if etcdError, ok := err.(*etcd.EtcdError); ok {
 			// Not a Directory or Not a file
-			if etcdError.ErrorCode == 102 || etcdError.ErrorCode == 104 {
+			if etcdError.ErrorCode == 100 || etcdError.ErrorCode == 102 || etcdError.ErrorCode == 104 {
 				return nil, store.ErrKeyNotFound
 			}
 		}
@@ -194,12 +194,6 @@ func (s *Etcd) Exists(key string) (bool, error) {
 // be sent to the channel. Providing a non-nil stopCh can
 // be used to stop watching.
 func (s *Etcd) Watch(key string, stopCh <-chan struct{}) (<-chan *store.KVPair, error) {
-	// Get the current value
-	current, err := s.Get(key)
-	if err != nil {
-		return nil, err
-	}
-
 	// Start an etcd watch.
 	// Note: etcd will send the current value through the channel.
 	etcdWatchCh := make(chan *etcd.Response)
@@ -212,12 +206,23 @@ func (s *Etcd) Watch(key string, stopCh <-chan struct{}) (<-chan *store.KVPair, 
 	go func() {
 		defer close(watchCh)
 
+		// Get the current value
+		current, err := s.Get(key)
+		if err != nil {
+			return
+		}
+
 		// Push the current value through the channel.
 		watchCh <- current
 
 		for {
 			select {
 			case result := <-etcdWatchCh:
+				if result == nil || result.Node == nil {
+					// Something went wrong, exit
+					// No need to stop the chan as the watch already ended
+					return
+				}
 				watchCh <- &store.KVPair{
 					Key:       key,
 					Value:     []byte(result.Node.Value),
@@ -238,12 +243,6 @@ func (s *Etcd) Watch(key string, stopCh <-chan struct{}) (<-chan *store.KVPair, 
 // will be sent to the channel .Providing a non-nil stopCh can
 // be used to stop watching.
 func (s *Etcd) WatchTree(directory string, stopCh <-chan struct{}) (<-chan []*store.KVPair, error) {
-	// Get child values
-	current, err := s.List(directory)
-	if err != nil {
-		return nil, err
-	}
-
 	// Start the watch
 	etcdWatchCh := make(chan *etcd.Response)
 	etcdStopCh := make(chan bool)
@@ -255,12 +254,23 @@ func (s *Etcd) WatchTree(directory string, stopCh <-chan struct{}) (<-chan []*st
 	go func() {
 		defer close(watchCh)
 
+		// Get child values
+		current, err := s.List(directory)
+		if err != nil {
+			return
+		}
+
 		// Push the current value through the channel.
 		watchCh <- current
 
 		for {
 			select {
-			case <-etcdWatchCh:
+			case event := <-etcdWatchCh:
+				if event == nil {
+					// Something went wrong, exit
+					// No need to stop the chan as the watch already ended
+					return
+				}
 				// FIXME: We should probably use the value pushed by the channel.
 				// However, Node.Nodes seems to be empty.
 				if list, err := s.List(directory); err == nil {
@@ -278,11 +288,32 @@ func (s *Etcd) WatchTree(directory string, stopCh <-chan struct{}) (<-chan []*st
 // AtomicPut put a value at "key" if the key has not been
 // modified in the meantime, throws an error if this is the case
 func (s *Etcd) AtomicPut(key string, value []byte, previous *store.KVPair, options *store.WriteOptions) (bool, *store.KVPair, error) {
-	if previous == nil {
-		return false, nil, store.ErrPreviousNotSpecified
-	}
 
-	meta, err := s.client.CompareAndSwap(store.Normalize(key), string(value), 0, "", previous.LastIndex)
+	var meta *etcd.Response
+	var err error
+	if previous != nil {
+		meta, err = s.client.CompareAndSwap(store.Normalize(key), string(value), 0, "", previous.LastIndex)
+	} else {
+		// Interpret previous == nil as Atomic Create
+		meta, err = s.client.Create(store.Normalize(key), string(value), 0)
+		if etcdError, ok := err.(*etcd.EtcdError); ok {
+
+			// Directory doesn't exist.
+			if etcdError.ErrorCode == 104 {
+				// Remove the last element (the actual key)
+				// and create the full directory path
+				err = s.createDirectory(store.GetDirectory(key))
+				if err != nil {
+					return false, nil, err
+				}
+
+				// Now that the directory is created, create the key
+				if _, err := s.client.Create(key, string(value), 0); err != nil {
+					return false, nil, err
+				}
+			}
+		}
+	}
 	if err != nil {
 		if etcdError, ok := err.(*etcd.EtcdError); ok {
 			// Compare Failed
@@ -401,7 +432,7 @@ func (l *etcdLock) Lock() (<-chan struct{}, error) {
 			lastIndex = resp.Node.ModifiedIndex
 		}
 
-		_, err = l.client.CompareAndSwap(key, l.value, l.ttl, "", lastIndex)
+		l.last, err = l.client.CompareAndSwap(key, l.value, l.ttl, "", lastIndex)
 
 		if err == nil {
 			// Leader section
@@ -436,7 +467,7 @@ func (l *etcdLock) holdLock(key string, lockHeld chan struct{}, stopLocking chan
 	for {
 		select {
 		case <-update.C:
-			l.last, err = l.client.Update(key, l.value, l.ttl)
+			l.last, err = l.client.CompareAndSwap(key, l.value, l.ttl, "", l.last.Node.ModifiedIndex)
 			if err != nil {
 				return
 			}
