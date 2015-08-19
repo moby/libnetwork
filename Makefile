@@ -7,7 +7,42 @@ docker = docker run --rm ${dockerargs} ${container_env} ${build_image}
 ciargs = -e "COVERALLS_TOKEN=$$COVERALLS_TOKEN" -e "INSIDECONTAINER=-incontainer=true"
 cidocker = docker run ${ciargs} ${dockerargs} golang:1.4
 
-all: ${build_image}.created
+#Check if a new build image needs to be created
+#Return value 1 : Build image must be created.
+#Build image doesn't exist or Build image exist but Makefile has changed from previous build
+#Return value 0 : No need to create a new build image.
+#Build image exist and Makefile hasn't changed from previous build
+LIBNETWORK_BUILD_DATE=$(shell docker inspect ${build_image}|grep 'Created'|grep -Po '".*?"'|grep -v 'Created' | sed -e 's/^"//'  -e 's/"//')
+ifeq ($(LIBNETWORK_BUILD_DATE),)
+#libnetwork-build doesn't exist
+#Set flag to create libnetwork-build image
+createbuildimage=1
+else
+#libnetwork-build exists
+#Check if Makefile is newer than libnetwork-build
+MAKEFILE_MODIFY_DATE=$(shell stat Makefile|grep Modify|cut -c9-)
+LIBNETWORK_EPOCH=$(shell date --date="${LIBNETWORK_BUILD_DATE}" +"%s")
+MAKEFILE_EPOCH=$(shell date --date="${MAKEFILE_MODIFY_DATE}" +"%s")
+ifeq ($(shell if [ ${LIBNETWORK_EPOCH} -lt ${MAKEFILE_EPOCH} ]; then echo lt; else echo gt; fi),lt)
+#libnetwork-build older than Makefile need to create new image in case
+#install-deps have been modified or because flags have changed of for any other reason
+#Set flag to create libnetwork-build image
+createbuildimage=1
+else
+#libnetwork-build newer than Makefile we don't need to create new image
+#Set flag to avoid creating a new libnetwork-build image
+createbuildimage=0
+endif
+endif
+
+ifeq ($(createbuildimage), 0)
+$(shell touch ${build_image}.created)
+else
+$(shell rm ${build_image}.created)
+endif
+
+
+all:${build_image}.created
 	${docker} make all-local
 
 all-local: check-local build-local
