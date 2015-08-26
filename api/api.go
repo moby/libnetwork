@@ -183,10 +183,19 @@ func buildNetworkResource(nw libnetwork.Network) *networkResource {
 
 func buildEndpointResource(ep libnetwork.Endpoint) *endpointResource {
 	r := &endpointResource{}
+	var iplist []string
 	if ep != nil {
 		r.Name = ep.Name()
 		r.ID = ep.ID()
 		r.Network = ep.Network()
+		// Build a list of ip addrs on this endpoint.
+		for _, iface := range ep.Info().InterfaceList() {
+			if iface.Address().IP != nil && len(iface.Address().IP) > 0 {
+				ip := iface.Address().IP.String()
+				iplist = append(iplist, ip)
+			}
+		}
+		r.InterfaceList = iplist
 	}
 	return r
 }
@@ -639,7 +648,7 @@ func procAttachBackend(c libnetwork.NetworkController, vars map[string]string, b
 	if err != nil {
 		return nil, convertNetworkError(err)
 	}
-	return sv.Info().SandboxKey(), &successResponse
+	return sv.Info(), &successResponse
 }
 
 func procDetachBackend(c libnetwork.NetworkController, vars map[string]string, body []byte) (interface{}, *responseStatus) {
