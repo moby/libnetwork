@@ -54,6 +54,9 @@ type Endpoint interface {
 
 	// Retrieve the interfaces' statistics from the sandbox
 	Statistics() (map[string]*sandbox.InterfaceStatistics, error)
+
+	// Retrieve the interfaces from sandbox, for restoring checkpointed container
+	SandboxInterfaces() []sandbox.Interface
 }
 
 // EndpointOption is a option setter function type used to pass varios options to Network
@@ -581,6 +584,17 @@ func (ep *endpoint) Statistics() (map[string]*sandbox.InterfaceStatistics, error
 	}
 
 	return m, nil
+}
+
+func (ep *endpoint) SandboxInterfaces() []sandbox.Interface {
+	n := ep.network
+
+	n.Lock()
+	c := n.ctrlr
+	n.Unlock()
+
+	sbox := c.sandboxGet(ep.container.data.SandboxKey)
+	return sbox.Info().Interfaces()
 }
 
 func (ep *endpoint) deleteEndpoint() error {
