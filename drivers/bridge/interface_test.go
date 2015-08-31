@@ -3,12 +3,12 @@ package bridge
 import (
 	"testing"
 
-	"github.com/docker/libnetwork/netutils"
+	"github.com/docker/libnetwork/sandbox"
 	"github.com/vishvananda/netlink"
 )
 
 func TestInterfaceDefaultName(t *testing.T) {
-	defer netutils.SetupTestNetNS(t)()
+	defer sandbox.SetupTestOSContext(t)()
 
 	config := &networkConfiguration{}
 	if _ = newInterface(config); config.BridgeName != DefaultBridgeName {
@@ -17,7 +17,7 @@ func TestInterfaceDefaultName(t *testing.T) {
 }
 
 func TestAddressesEmptyInterface(t *testing.T) {
-	defer netutils.SetupTestNetNS(t)()
+	defer sandbox.SetupTestOSContext(t)()
 
 	inf := newInterface(&networkConfiguration{})
 	addrv4, addrsv6, err := inf.addresses()

@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/docker/libnetwork/iptables"
-	"github.com/docker/libnetwork/netutils"
 	"github.com/docker/libnetwork/portmapper"
+	"github.com/docker/libnetwork/sandbox"
 )
 
 const (
@@ -15,7 +15,7 @@ const (
 
 func TestProgramIPTable(t *testing.T) {
 	// Create a test bridge with a basic bridge configuration (name + IPv4).
-	defer netutils.SetupTestNetNS(t)()
+	defer sandbox.SetupTestOSContext(t)()
 	createTestBridge(getBasicTestConfig(), &bridgeInterface{}, t)
 
 	// Store various iptables chain rules we care for.
@@ -39,7 +39,7 @@ func TestProgramIPTable(t *testing.T) {
 
 func TestSetupIPTables(t *testing.T) {
 	// Create a test bridge with a basic bridge configuration (name + IPv4).
-	defer netutils.SetupTestNetNS(t)()
+	defer sandbox.SetupTestOSContext(t)()
 	config := getBasicTestConfig()
 	br := &bridgeInterface{}
 
