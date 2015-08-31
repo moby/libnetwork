@@ -11,6 +11,13 @@ import (
 	flag "github.com/docker/docker/pkg/mflag"
 )
 
+const (
+	apiVersion        = "1.0"
+	acceptHeaderValue = "application/vnd.libnetwork.v" + apiVersion + "+json"
+)
+
+var libnetworkAcceptHeader = map[string][]string{"Accept": []string{acceptHeaderValue}}
+
 // CallFunc provides environment specific call utility to invoke backend functions from UI
 type CallFunc func(string, string, interface{}, map[string][]string) (io.ReadCloser, http.Header, int, error)
 

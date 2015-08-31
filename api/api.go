@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/docker/libnetwork"
@@ -140,12 +141,16 @@ func (h *httpHandler) initRouter() {
 	h.r = mux.NewRouter()
 	for method, routes := range m {
 		for _, route := range routes {
-			r := h.r.Path("/{.*}" + route.url).Methods(method).HandlerFunc(makeHandler(h.c, route.fct))
+
+			hdlr := makeHandler(h.c, route.fct, method)
+
+			r := h.r.Path(route.url).Methods(method).HandlerFunc(hdlr)
 			if route.qrs != nil {
 				r.Queries(route.qrs...)
 			}
 
-			r = h.r.Path(route.url).Methods(method).HandlerFunc(makeHandler(h.c, route.fct))
+			// For docker cli to reach libnetwork rest API
+			r = h.r.Path("/{.*}" + route.url).Methods(method).HandlerFunc(hdlr)
 			if route.qrs != nil {
 				r.Queries(route.qrs...)
 			}
@@ -153,12 +158,41 @@ func (h *httpHandler) initRouter() {
 	}
 }
 
-func makeHandler(ctrl libnetwork.NetworkController, fct processor) http.HandlerFunc {
+const (
+	// Only one Accept value for now. Either empty or the common "application/json",
+	// which will tell the server to return the latest version of data, or
+	// the custom "application/vns.network.vX.Y+json", which allows the client
+	// to specify which version of the data it's interested in to.
+	commonAcceptRegex = `^application/json$`
+	customAcceptRegex = `^application/vnd\.libnetwork\.v\d\.\d\+json$`
+	versionRegex      = `\d\.\d`
+	versionReq        = "version in request"
+)
+
+var (
+	currentVersion     = "1.0"
+	supportedVersions  = []string{currentVersion}
+	commonAcceptHeader = regexp.MustCompile(commonAcceptRegex)
+	customAcceptHeader = regexp.MustCompile(customAcceptRegex)
+)
+
+func makeHandler(ctrl libnetwork.NetworkController, fct processor, method string) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		var (
-			body []byte
-			err  error
+			version string
+			res     interface{}
+			rsp     *responseStatus
+			body    []byte
+			err     error
 		)
+
+		if method == "GET" || method == "POST" {
+			if version, rsp = parseHeadersForVersion(req.Header); !rsp.isOK() {
+				http.Error(w, rsp.Status, rsp.StatusCode)
+				return
+			}
+		}
+
 		if req.Body != nil {
 			body, err = ioutil.ReadAll(req.Body)
 			if err != nil {
@@ -167,11 +201,50 @@ func makeHandler(ctrl libnetwork.NetworkController, fct processor) http.HandlerF
 			}
 		}
 
-		res, rsp := fct(ctrl, mux.Vars(req), body)
+		res, rsp = fct(ctrl, mux.Vars(req), body)
 		if res != nil {
-			writeJSON(w, rsp.StatusCode, res)
+			writeJSON(w, rsp.StatusCode, res, version)
 		}
 	}
+}
+
+func parseHeadersForVersion(headers http.Header) (string, *responseStatus) {
+	verex := regexp.MustCompile(versionRegex)
+
+	acceptHeader := headers.Get("Accept")
+
+	if len(acceptHeader) == 0 {
+		return currentVersion, &successResponse
+	}
+
+	if commonAcceptHeader.MatchString(acceptHeader) {
+		return currentVersion, &successResponse
+	}
+
+	if !customAcceptHeader.MatchString(acceptHeader) {
+		return "", &responseStatus{
+			Status:     fmt.Sprintf("Accept header does not contain expected value. Valid values are \"application/json\" or value conforming to regular expression \"%s\"", customAcceptRegex),
+			StatusCode: http.StatusNotAcceptable,
+		}
+	}
+
+	v := string(verex.Find([]byte(acceptHeader)))
+	if !isSupportedVersion(v) {
+		return "", &responseStatus{Status: "Version not supported: " + v,
+			StatusCode: http.StatusNotAcceptable,
+		}
+	}
+
+	return v, &successResponse
+}
+
+func isSupportedVersion(ver string) bool {
+	for _, s := range supportedVersions {
+		if s == ver {
+			return true
+		}
+	}
+	return false
 }
 
 /*****************
@@ -938,8 +1011,8 @@ func convertNetworkError(err error) *responseStatus {
 	return &responseStatus{Status: err.Error(), StatusCode: code}
 }
 
-func writeJSON(w http.ResponseWriter, code int, v interface{}) error {
-	w.Header().Set("Content-Type", "application/json")
+func writeJSON(w http.ResponseWriter, code int, v interface{}, version string) error {
+	w.Header().Set("Content-Type", "application/vnd.libnetwork.v"+version+"+json")
 	w.WriteHeader(code)
 	return json.NewEncoder(w).Encode(v)
 }
