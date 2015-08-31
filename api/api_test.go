@@ -14,8 +14,8 @@ import (
 	"github.com/docker/docker/pkg/reexec"
 	"github.com/docker/libnetwork"
 	"github.com/docker/libnetwork/netlabel"
-	"github.com/docker/libnetwork/netutils"
 	"github.com/docker/libnetwork/options"
+	"github.com/docker/libnetwork/sandbox"
 	"github.com/docker/libnetwork/types"
 )
 
@@ -172,7 +172,7 @@ func TestJson(t *testing.T) {
 }
 
 func TestCreateDeleteNetwork(t *testing.T) {
-	defer netutils.SetupTestNetNS(t)()
+	defer sandbox.SetupTestOSContext(t)()
 
 	c, err := libnetwork.New()
 	if err != nil {
@@ -250,7 +250,7 @@ func TestCreateDeleteNetwork(t *testing.T) {
 }
 
 func TestGetNetworksAndEndpoints(t *testing.T) {
-	defer netutils.SetupTestNetNS(t)()
+	defer sandbox.SetupTestOSContext(t)()
 
 	c, err := libnetwork.New()
 	if err != nil {
@@ -523,7 +523,7 @@ func TestGetNetworksAndEndpoints(t *testing.T) {
 }
 
 func TestProcGetServices(t *testing.T) {
-	defer netutils.SetupTestNetNS(t)()
+	defer sandbox.SetupTestOSContext(t)()
 
 	c, err := libnetwork.New()
 	if err != nil {
@@ -696,7 +696,7 @@ func TestProcGetServices(t *testing.T) {
 }
 
 func TestProcGetService(t *testing.T) {
-	defer netutils.SetupTestNetNS(t)()
+	defer sandbox.SetupTestOSContext(t)()
 
 	c, nw := createTestNetwork(t, "network")
 	ep1, err := nw.CreateEndpoint("db")
@@ -748,7 +748,7 @@ func TestProcGetService(t *testing.T) {
 }
 
 func TestProcPublishUnpublishService(t *testing.T) {
-	defer netutils.SetupTestNetNS(t)()
+	defer sandbox.SetupTestOSContext(t)()
 
 	c, _ := createTestNetwork(t, "network")
 	vars := make(map[string]string)
@@ -880,7 +880,7 @@ func TestProcPublishUnpublishService(t *testing.T) {
 }
 
 func TestAttachDetachBackend(t *testing.T) {
-	defer netutils.SetupTestNetNS(t)()
+	defer sandbox.SetupTestOSContext(t)()
 
 	c, nw := createTestNetwork(t, "network")
 	ep1, err := nw.CreateEndpoint("db")
@@ -1014,7 +1014,7 @@ func TestDetectGetNetworksInvalidQueryComposition(t *testing.T) {
 }
 
 func TestDetectGetEndpointsInvalidQueryComposition(t *testing.T) {
-	defer netutils.SetupTestNetNS(t)()
+	defer sandbox.SetupTestOSContext(t)()
 
 	c, _ := createTestNetwork(t, "network")
 
@@ -1026,7 +1026,7 @@ func TestDetectGetEndpointsInvalidQueryComposition(t *testing.T) {
 }
 
 func TestDetectGetServicesInvalidQueryComposition(t *testing.T) {
-	defer netutils.SetupTestNetNS(t)()
+	defer sandbox.SetupTestOSContext(t)()
 
 	c, _ := createTestNetwork(t, "network")
 
@@ -1043,7 +1043,7 @@ func TestFindNetworkUtilPanic(t *testing.T) {
 }
 
 func TestFindNetworkUtil(t *testing.T) {
-	defer netutils.SetupTestNetNS(t)()
+	defer sandbox.SetupTestOSContext(t)()
 
 	c, nw := createTestNetwork(t, "network")
 	nid := nw.ID()
@@ -1106,7 +1106,7 @@ func TestFindNetworkUtil(t *testing.T) {
 }
 
 func TestCreateDeleteEndpoints(t *testing.T) {
-	defer netutils.SetupTestNetNS(t)()
+	defer sandbox.SetupTestOSContext(t)()
 
 	c, err := libnetwork.New()
 	if err != nil {
@@ -1232,7 +1232,7 @@ func TestCreateDeleteEndpoints(t *testing.T) {
 }
 
 func TestJoinLeave(t *testing.T) {
-	defer netutils.SetupTestNetNS(t)()
+	defer sandbox.SetupTestOSContext(t)()
 
 	c, err := libnetwork.New()
 	if err != nil {
@@ -1388,7 +1388,7 @@ func TestJoinLeave(t *testing.T) {
 }
 
 func TestFindEndpointUtilPanic(t *testing.T) {
-	defer netutils.SetupTestNetNS(t)()
+	defer sandbox.SetupTestOSContext(t)()
 	defer checkPanic(t)
 	c, nw := createTestNetwork(t, "network")
 	nid := nw.ID()
@@ -1396,14 +1396,14 @@ func TestFindEndpointUtilPanic(t *testing.T) {
 }
 
 func TestFindServiceUtilPanic(t *testing.T) {
-	defer netutils.SetupTestNetNS(t)()
+	defer sandbox.SetupTestOSContext(t)()
 	defer checkPanic(t)
 	c, _ := createTestNetwork(t, "network")
 	findService(c, "random_service", -1)
 }
 
 func TestFindEndpointUtil(t *testing.T) {
-	defer netutils.SetupTestNetNS(t)()
+	defer sandbox.SetupTestOSContext(t)()
 
 	c, nw := createTestNetwork(t, "network")
 	nid := nw.ID()
@@ -1672,7 +1672,7 @@ func TestwriteJSON(t *testing.T) {
 }
 
 func TestHttpHandlerUninit(t *testing.T) {
-	defer netutils.SetupTestNetNS(t)()
+	defer sandbox.SetupTestOSContext(t)()
 
 	c, err := libnetwork.New()
 	if err != nil {
@@ -1736,7 +1736,7 @@ func TestHttpHandlerUninit(t *testing.T) {
 }
 
 func TestHttpHandlerBadBody(t *testing.T) {
-	defer netutils.SetupTestNetNS(t)()
+	defer sandbox.SetupTestOSContext(t)()
 
 	rsp := newWriter()
 
@@ -1768,7 +1768,7 @@ func TestHttpHandlerBadBody(t *testing.T) {
 }
 
 func TestEndToEnd(t *testing.T) {
-	defer netutils.SetupTestNetNS(t)()
+	defer sandbox.SetupTestOSContext(t)()
 
 	rsp := newWriter()
 

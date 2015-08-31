@@ -6,7 +6,7 @@ import (
 
 	"github.com/docker/docker/pkg/reexec"
 	"github.com/docker/libnetwork/netlabel"
-	"github.com/docker/libnetwork/netutils"
+	"github.com/docker/libnetwork/sandbox"
 	"github.com/docker/libnetwork/types"
 )
 
@@ -18,7 +18,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestPortMappingConfig(t *testing.T) {
-	defer netutils.SetupTestNetNS(t)()
+	defer sandbox.SetupTestOSContext(t)()
 	d := newDriver()
 
 	binding1 := types.PortBinding{Proto: types.UDP, Port: uint16(400), HostPort: uint16(54000)}

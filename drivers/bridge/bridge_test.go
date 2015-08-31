@@ -10,13 +10,13 @@ import (
 	"github.com/docker/libnetwork/driverapi"
 	"github.com/docker/libnetwork/iptables"
 	"github.com/docker/libnetwork/netlabel"
-	"github.com/docker/libnetwork/netutils"
+	"github.com/docker/libnetwork/sandbox"
 	"github.com/docker/libnetwork/types"
 	"github.com/vishvananda/netlink"
 )
 
 func TestCreateFullOptions(t *testing.T) {
-	defer netutils.SetupTestNetNS(t)()
+	defer sandbox.SetupTestOSContext(t)()
 	d := newDriver()
 
 	config := &configuration{
@@ -68,7 +68,7 @@ func TestCreateFullOptions(t *testing.T) {
 }
 
 func TestCreate(t *testing.T) {
-	defer netutils.SetupTestNetNS(t)()
+	defer sandbox.SetupTestOSContext(t)()
 	d := newDriver()
 
 	config := &networkConfiguration{BridgeName: DefaultBridgeName}
@@ -97,7 +97,7 @@ func TestCreate(t *testing.T) {
 }
 
 func TestCreateFail(t *testing.T) {
-	defer netutils.SetupTestNetNS(t)()
+	defer sandbox.SetupTestOSContext(t)()
 	d := newDriver()
 
 	config := &networkConfiguration{BridgeName: "dummy0"}
@@ -110,7 +110,7 @@ func TestCreateFail(t *testing.T) {
 }
 
 func TestCreateMultipleNetworks(t *testing.T) {
-	defer netutils.SetupTestNetNS(t)()
+	defer sandbox.SetupTestOSContext(t)()
 	d := newDriver()
 	dd, _ := d.(*driver)
 
@@ -274,7 +274,7 @@ func TestQueryEndpointInfoHairpin(t *testing.T) {
 }
 
 func testQueryEndpointInfo(t *testing.T, ulPxyEnabled bool) {
-	defer netutils.SetupTestNetNS(t)()
+	defer sandbox.SetupTestOSContext(t)()
 	d := newDriver()
 	dd, _ := d.(*driver)
 
@@ -336,7 +336,7 @@ func testQueryEndpointInfo(t *testing.T, ulPxyEnabled bool) {
 }
 
 func TestCreateLinkWithOptions(t *testing.T) {
-	defer netutils.SetupTestNetNS(t)()
+	defer sandbox.SetupTestOSContext(t)()
 	d := newDriver()
 
 	config := &networkConfiguration{BridgeName: DefaultBridgeName}
@@ -391,7 +391,7 @@ func getPortMapping() []types.PortBinding {
 }
 
 func TestLinkContainers(t *testing.T) {
-	defer netutils.SetupTestNetNS(t)()
+	defer sandbox.SetupTestOSContext(t)()
 
 	d := newDriver()
 
@@ -599,7 +599,7 @@ func TestValidateConfig(t *testing.T) {
 }
 
 func TestSetDefaultGw(t *testing.T) {
-	defer netutils.SetupTestNetNS(t)()
+	defer sandbox.SetupTestOSContext(t)()
 	d := newDriver()
 
 	_, subnetv6, _ := net.ParseCIDR("2001:db8:ea9:9abc:b0c4::/80")

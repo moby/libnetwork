@@ -23,6 +23,7 @@ import (
 	"github.com/docker/libnetwork/netlabel"
 	"github.com/docker/libnetwork/netutils"
 	"github.com/docker/libnetwork/options"
+	"github.com/docker/libnetwork/sandbox"
 	"github.com/docker/libnetwork/types"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
@@ -221,7 +222,7 @@ func TestHost(t *testing.T) {
 
 func TestBridge(t *testing.T) {
 	if !netutils.IsRunningInContainer() {
-		defer netutils.SetupTestNetNS(t)()
+		defer sandbox.SetupTestOSContext(t)()
 	}
 
 	ip, subnet, err := net.ParseCIDR("192.168.100.1/24")
@@ -295,7 +296,7 @@ func TestBridge(t *testing.T) {
 
 func TestUnknownDriver(t *testing.T) {
 	if !netutils.IsRunningInContainer() {
-		defer netutils.SetupTestNetNS(t)()
+		defer sandbox.SetupTestOSContext(t)()
 	}
 
 	_, err := createTestNetwork("unknowndriver", "testnetwork", options.Generic{})
@@ -322,7 +323,7 @@ func TestNilRemoteDriver(t *testing.T) {
 
 func TestDuplicateNetwork(t *testing.T) {
 	if !netutils.IsRunningInContainer() {
-		defer netutils.SetupTestNetNS(t)()
+		defer sandbox.SetupTestOSContext(t)()
 	}
 
 	// Creating a default bridge name network (can't be removed)
@@ -343,7 +344,7 @@ func TestDuplicateNetwork(t *testing.T) {
 
 func TestNetworkName(t *testing.T) {
 	if !netutils.IsRunningInContainer() {
-		defer netutils.SetupTestNetNS(t)()
+		defer sandbox.SetupTestOSContext(t)()
 	}
 
 	netOption := options.Generic{
@@ -380,7 +381,7 @@ func TestNetworkName(t *testing.T) {
 
 func TestNetworkType(t *testing.T) {
 	if !netutils.IsRunningInContainer() {
-		defer netutils.SetupTestNetNS(t)()
+		defer sandbox.SetupTestOSContext(t)()
 	}
 
 	netOption := options.Generic{
@@ -407,7 +408,7 @@ func TestNetworkType(t *testing.T) {
 
 func TestNetworkID(t *testing.T) {
 	if !netutils.IsRunningInContainer() {
-		defer netutils.SetupTestNetNS(t)()
+		defer sandbox.SetupTestOSContext(t)()
 	}
 
 	netOption := options.Generic{
@@ -434,7 +435,7 @@ func TestNetworkID(t *testing.T) {
 
 func TestDeleteNetworkWithActiveEndpoints(t *testing.T) {
 	if !netutils.IsRunningInContainer() {
-		defer netutils.SetupTestNetNS(t)()
+		defer sandbox.SetupTestOSContext(t)()
 	}
 
 	netOption := options.Generic{
@@ -475,7 +476,7 @@ func TestDeleteNetworkWithActiveEndpoints(t *testing.T) {
 
 func TestUnknownNetwork(t *testing.T) {
 	if !netutils.IsRunningInContainer() {
-		defer netutils.SetupTestNetNS(t)()
+		defer sandbox.SetupTestOSContext(t)()
 	}
 
 	netOption := options.Generic{
@@ -507,7 +508,7 @@ func TestUnknownNetwork(t *testing.T) {
 
 func TestUnknownEndpoint(t *testing.T) {
 	if !netutils.IsRunningInContainer() {
-		defer netutils.SetupTestNetNS(t)()
+		defer sandbox.SetupTestOSContext(t)()
 	}
 
 	ip, subnet, err := net.ParseCIDR("192.168.100.1/24")
@@ -555,7 +556,7 @@ func TestUnknownEndpoint(t *testing.T) {
 
 func TestNetworkEndpointsWalkers(t *testing.T) {
 	if !netutils.IsRunningInContainer() {
-		defer netutils.SetupTestNetNS(t)()
+		defer sandbox.SetupTestOSContext(t)()
 	}
 
 	// Create network 1 and add 2 endpoint: ep11, ep12
@@ -687,7 +688,7 @@ func TestNetworkEndpointsWalkers(t *testing.T) {
 
 func TestDuplicateEndpoint(t *testing.T) {
 	if !netutils.IsRunningInContainer() {
-		defer netutils.SetupTestNetNS(t)()
+		defer sandbox.SetupTestOSContext(t)()
 	}
 
 	netOption := options.Generic{
@@ -737,7 +738,7 @@ func TestDuplicateEndpoint(t *testing.T) {
 
 func TestControllerQuery(t *testing.T) {
 	if !netutils.IsRunningInContainer() {
-		defer netutils.SetupTestNetNS(t)()
+		defer sandbox.SetupTestOSContext(t)()
 	}
 
 	// Create network 1
@@ -841,7 +842,7 @@ func TestControllerQuery(t *testing.T) {
 
 func TestNetworkQuery(t *testing.T) {
 	if !netutils.IsRunningInContainer() {
-		defer netutils.SetupTestNetNS(t)()
+		defer sandbox.SetupTestOSContext(t)()
 	}
 
 	// Create network 1 and add 2 endpoint: ep11, ep12
@@ -963,7 +964,7 @@ func checkSandbox(t *testing.T, info libnetwork.EndpointInfo) {
 
 func TestEndpointJoin(t *testing.T) {
 	if !netutils.IsRunningInContainer() {
-		defer netutils.SetupTestNetNS(t)()
+		defer sandbox.SetupTestOSContext(t)()
 	}
 
 	// Create network 1 and add 2 endpoint: ep11, ep12
@@ -1101,7 +1102,7 @@ func TestEndpointJoin(t *testing.T) {
 
 func TestEndpointJoinInvalidContainerId(t *testing.T) {
 	if !netutils.IsRunningInContainer() {
-		defer netutils.SetupTestNetNS(t)()
+		defer sandbox.SetupTestOSContext(t)()
 	}
 
 	n, err := createTestNetwork(bridgeNetType, "testnetwork", options.Generic{
@@ -1141,7 +1142,7 @@ func TestEndpointJoinInvalidContainerId(t *testing.T) {
 
 func TestEndpointDeleteWithActiveContainer(t *testing.T) {
 	if !netutils.IsRunningInContainer() {
-		defer netutils.SetupTestNetNS(t)()
+		defer sandbox.SetupTestOSContext(t)()
 	}
 
 	n, err := createTestNetwork(bridgeNetType, "testnetwork", options.Generic{
@@ -1200,7 +1201,7 @@ func TestEndpointDeleteWithActiveContainer(t *testing.T) {
 
 func TestEndpointMultipleJoins(t *testing.T) {
 	if !netutils.IsRunningInContainer() {
-		defer netutils.SetupTestNetNS(t)()
+		defer sandbox.SetupTestOSContext(t)()
 	}
 
 	n, err := createTestNetwork(bridgeNetType, "testnetwork", options.Generic{
@@ -1258,7 +1259,7 @@ func TestEndpointMultipleJoins(t *testing.T) {
 
 func TestLeaveAll(t *testing.T) {
 	if !netutils.IsRunningInContainer() {
-		defer netutils.SetupTestNetNS(t)()
+		defer sandbox.SetupTestOSContext(t)()
 	}
 
 	n, err := createTestNetwork(bridgeNetType, "testnetwork", options.Generic{
@@ -1323,7 +1324,7 @@ func TestLeaveAll(t *testing.T) {
 
 func TestEndpointInvalidLeave(t *testing.T) {
 	if !netutils.IsRunningInContainer() {
-		defer netutils.SetupTestNetNS(t)()
+		defer sandbox.SetupTestOSContext(t)()
 	}
 
 	n, err := createTestNetwork(bridgeNetType, "testnetwork", options.Generic{
@@ -1401,7 +1402,7 @@ func TestEndpointInvalidLeave(t *testing.T) {
 
 func TestEndpointUpdateParent(t *testing.T) {
 	if !netutils.IsRunningInContainer() {
-		defer netutils.SetupTestNetNS(t)()
+		defer sandbox.SetupTestOSContext(t)()
 	}
 
 	n, err := createTestNetwork("bridge", "testnetwork", options.Generic{
@@ -1477,7 +1478,7 @@ func TestEndpointUpdateParent(t *testing.T) {
 
 func TestEnableIPv6(t *testing.T) {
 	if !netutils.IsRunningInContainer() {
-		defer netutils.SetupTestNetNS(t)()
+		defer sandbox.SetupTestOSContext(t)()
 	}
 
 	tmpResolvConf := []byte("search pommesfrites.fr\nnameserver 12.34.56.78\nnameserver 2001:4860:4860::8888")
@@ -1566,7 +1567,7 @@ func TestEnableIPv6(t *testing.T) {
 
 func TestResolvConfHost(t *testing.T) {
 	if !netutils.IsRunningInContainer() {
-		defer netutils.SetupTestNetNS(t)()
+		defer sandbox.SetupTestOSContext(t)()
 	}
 
 	tmpResolvConf := []byte("search localhost.net\nnameserver 127.0.0.1\nnameserver 2001:4860:4860::8888")
@@ -1634,7 +1635,7 @@ func TestResolvConfHost(t *testing.T) {
 
 func TestResolvConf(t *testing.T) {
 	if !netutils.IsRunningInContainer() {
-		defer netutils.SetupTestNetNS(t)()
+		defer sandbox.SetupTestOSContext(t)()
 	}
 
 	tmpResolvConf1 := []byte("search pommesfrites.fr\nnameserver 12.34.56.78\nnameserver 2001:4860:4860::8888")
