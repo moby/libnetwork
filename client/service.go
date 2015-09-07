@@ -275,7 +275,7 @@ func getBackendID(cli *NetworkCli, servID string) (string, error) {
 			}
 		} else {
 			// Only print a message, don't make the caller cli fail for this
-			fmt.Fprintf(cli.out, "Failed to retrieve backend list for service %s (%v)", servID, err)
+			fmt.Fprintf(cli.out, "Failed to retrieve backend list for service %s (%v)\n", servID, err)
 		}
 	}
 
