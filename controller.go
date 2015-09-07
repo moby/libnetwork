@@ -57,6 +57,7 @@ import (
 	"github.com/docker/libnetwork/datastore"
 	"github.com/docker/libnetwork/driverapi"
 	"github.com/docker/libnetwork/hostdiscovery"
+	"github.com/docker/libnetwork/ipamapi"
 	"github.com/docker/libnetwork/netlabel"
 	"github.com/docker/libnetwork/osl"
 	"github.com/docker/libnetwork/types"
@@ -122,11 +123,13 @@ type endpointTable map[string]*endpoint
 type sandboxTable map[string]*sandbox
 
 type controller struct {
-	networks  networkTable
-	drivers   driverTable
-	sandboxes sandboxTable
-	cfg       *config.Config
-	store     datastore.DataStore
+	networks    networkTable
+	drivers     driverTable
+	sandboxes   sandboxTable
+	ipConfig    ipamapi.Config
+	ipAllocator ipamapi.Allocator
+	cfg         *config.Config
+	store       datastore.DataStore
 	sync.Mutex
 }
 
@@ -142,9 +145,6 @@ func New(cfgOptions ...config.Option) (NetworkController, error) {
 		networks:  networkTable{},
 		sandboxes: sandboxTable{},
 		drivers:   driverTable{}}
-	if err := initDrivers(c); err != nil {
-		return nil, err
-	}
 
 	if cfg != nil {
 		if err := c.initDataStore(); err != nil {
@@ -152,6 +152,16 @@ func New(cfgOptions ...config.Option) (NetworkController, error) {
 			// But it cannot fail creating the Controller
 			log.Debugf("Failed to Initialize Datastore due to %v. Operating in non-clustered mode", err)
 		}
+	}
+
+	if err := initIpams(c, c.store); err != nil {
+		return nil, err
+	}
+	if err := initDrivers(c); err != nil {
+		return nil, err
+	}
+
+	if cfg != nil {
 		if err := c.initDiscovery(); err != nil {
 			// Failing to initalize discovery is a bad situation to be in.
 			// But it cannot fail creating the Controller
@@ -239,6 +249,22 @@ func (c *controller) RegisterDriver(networkType string, driver driverapi.Driver,
 			return err
 		}
 	}
+
+	return nil
+}
+
+func (c *controller) RegisterIpam(name string, config ipamapi.Config, allocator ipamapi.Allocator) error {
+	c.Lock()
+	defer c.Unlock()
+
+	if name == "" {
+		return fmt.Errorf("invalid ipam provider name: %s", name)
+	}
+
+	log.Debugf("Registering ipam provider: %s", name)
+
+	c.ipConfig = config
+	c.ipAllocator = allocator
 
 	return nil
 }

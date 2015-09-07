@@ -10,6 +10,7 @@ import (
 	"github.com/docker/libnetwork/bitseq"
 	"github.com/docker/libnetwork/config"
 	"github.com/docker/libnetwork/datastore"
+	"github.com/docker/libnetwork/ipamapi"
 	_ "github.com/docker/libnetwork/netutils"
 )
 
@@ -31,7 +32,7 @@ func getAllocator(t *testing.T, subnet *net.IPNet) *Allocator {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a.AddSubnet("default", &SubnetInfo{Subnet: subnet})
+	a.AddSubnet("default", subnet)
 	return a
 }
 
@@ -100,29 +101,29 @@ func TestAddSubnets(t *testing.T) {
 	}
 
 	_, sub0, _ := net.ParseCIDR("10.0.0.0/8")
-	err = a.AddSubnet("default", &SubnetInfo{Subnet: sub0})
+	err = a.AddSubnet("default", sub0)
 	if err != nil {
 		t.Fatalf("Unexpected failure in adding subent")
 	}
 
-	err = a.AddSubnet("abc", &SubnetInfo{Subnet: sub0})
+	err = a.AddSubnet("abc", sub0)
 	if err != nil {
 		t.Fatalf("Unexpected failure in adding overlapping subents to different address spaces")
 	}
 
-	err = a.AddSubnet("abc", &SubnetInfo{Subnet: sub0})
+	err = a.AddSubnet("abc", sub0)
 	if err == nil {
 		t.Fatalf("Failed to detect overlapping subnets: %s and %s", sub0, sub0)
 	}
 
 	_, sub1, _ := net.ParseCIDR("10.20.2.0/24")
-	err = a.AddSubnet("default", &SubnetInfo{Subnet: sub1})
+	err = a.AddSubnet("default", sub1)
 	if err == nil {
 		t.Fatalf("Failed to detect overlapping subnets: %s and %s", sub0, sub1)
 	}
 
 	_, sub2, _ := net.ParseCIDR("10.128.0.0/9")
-	err = a.AddSubnet("default", &SubnetInfo{Subnet: sub2})
+	err = a.AddSubnet("default", sub2)
 	if err == nil {
 		t.Fatalf("Failed to detect overlapping subnets: %s and %s", sub1, sub2)
 	}
@@ -131,7 +132,7 @@ func TestAddSubnets(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Wrong input, Can't proceed: %s", err.Error())
 	}
-	err = a.AddSubnet("default", &SubnetInfo{Subnet: sub6})
+	err = a.AddSubnet("default", sub6)
 	if err != nil {
 		t.Fatalf("Failed to add v6 subnet: %s", err.Error())
 	}
@@ -140,7 +141,7 @@ func TestAddSubnets(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Wrong input, Can't proceed: %s", err.Error())
 	}
-	err = a.AddSubnet("default", &SubnetInfo{Subnet: sub6})
+	err = a.AddSubnet("default", sub6)
 	if err == nil {
 		t.Fatalf("Failed to detect overlapping v6 subnet")
 	}
@@ -178,7 +179,7 @@ func TestRemoveSubnet(t *testing.T) {
 	}
 
 	input := []struct {
-		addrSpace AddressSpace
+		addrSpace string
 		subnet    string
 	}{
 		{"default", "192.168.0.0/16"},
@@ -196,7 +197,7 @@ func TestRemoveSubnet(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Wrong input, Can't proceed: %s", err.Error())
 		}
-		err = a.AddSubnet(i.addrSpace, &SubnetInfo{Subnet: sub})
+		err = a.AddSubnet(i.addrSpace, sub)
 		if err != nil {
 			t.Fatalf("Failed to apply input. Can't proceed: %s", err.Error())
 		}
@@ -281,21 +282,19 @@ func TestGetSameAddress(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	addSpace := AddressSpace("giallo")
+	addSpace := "giallo"
 	_, subnet, _ := net.ParseCIDR("192.168.100.0/24")
-	if err := a.AddSubnet(addSpace, &SubnetInfo{Subnet: subnet}); err != nil {
+	if err := a.AddSubnet(addSpace, subnet); err != nil {
 		t.Fatal(err)
 	}
 
-	ip := net.ParseIP("192.168.100.250")
-	req := &AddressRequest{Subnet: *subnet, Address: ip}
-
-	_, err = a.Request(addSpace, req)
+	pip := net.ParseIP("192.168.100.250")
+	_, err = a.Request(addSpace, subnet, pip)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, err = a.Request(addSpace, req)
+	_, err = a.Request(addSpace, subnet, pip)
 	if err == nil {
 		t.Fatal(err)
 	}
@@ -319,7 +318,7 @@ func TestGetSubnetList(t *testing.T) {
 		t.Fatal(err)
 	}
 	input := []struct {
-		addrSpace AddressSpace
+		addrSpace string
 		subnet    string
 	}{
 		{"default", "192.168.0.0/16"},
@@ -337,7 +336,7 @@ func TestGetSubnetList(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Wrong input, Can't proceed: %s", err.Error())
 		}
-		err = a.AddSubnet(i.addrSpace, &SubnetInfo{Subnet: sub})
+		err = a.AddSubnet(i.addrSpace, sub)
 		if err != nil {
 			t.Fatalf("Failed to apply input. Can't proceed: %s", err.Error())
 		}
@@ -366,7 +365,7 @@ func TestGetSubnetList(t *testing.T) {
 func TestRequestSyntaxCheck(t *testing.T) {
 	var (
 		subnet   = "192.168.0.0/16"
-		addSpace = AddressSpace("green")
+		addSpace = "green"
 	)
 
 	a, err := NewAllocator(nil)
@@ -376,25 +375,22 @@ func TestRequestSyntaxCheck(t *testing.T) {
 
 	// Add subnet and create base request
 	_, sub, _ := net.ParseCIDR(subnet)
-	a.AddSubnet(addSpace, &SubnetInfo{Subnet: sub})
-	req := &AddressRequest{Subnet: *sub}
+	a.AddSubnet(addSpace, sub)
 
 	// Empty address space request
-	_, err = a.Request("", req)
+	_, err = a.Request("", sub, nil)
 	if err == nil {
 		t.Fatalf("Failed to detect wrong request: empty address space")
 	}
 
 	// Preferred address from different subnet in request
-	req.Address = net.ParseIP("172.17.0.23")
-	_, err = a.Request(addSpace, req)
+	_, err = a.Request(addSpace, sub, net.ParseIP("172.17.0.23"))
 	if err == nil {
 		t.Fatalf("Failed to detect wrong request: preferred IP from different subnet")
 	}
 
 	// Preferred address specified and nil subnet
-	req = &AddressRequest{Address: net.ParseIP("172.17.0.23")}
-	_, err = a.Request(addSpace, req)
+	_, err = a.Request(addSpace, sub, net.ParseIP("172.17.0.23"))
 	if err == nil {
 		t.Fatalf("Failed to detect wrong request: subnet not specified but preferred address specified")
 	}
@@ -433,18 +429,16 @@ func TestRequest(t *testing.T) {
 func TestRelease(t *testing.T) {
 	var (
 		err    error
-		req    *AddressRequest
 		subnet = "192.168.0.0/16"
 	)
 
 	_, sub, _ := net.ParseCIDR(subnet)
 	a := getAllocator(t, sub)
-	req = &AddressRequest{Subnet: *sub}
 	bm := a.addresses[subnetKey{"default", subnet, subnet}]
 
 	// Allocate all addresses
-	for err != ErrNoAvailableIPs {
-		_, err = a.Request("default", req)
+	for err != ipamapi.ErrNoAvailableIPs {
+		_, err = a.Request("default", sub, nil)
 	}
 
 	toRelease := []struct {
@@ -475,7 +469,6 @@ func TestRelease(t *testing.T) {
 	}
 
 	// One by one, relase the address and request again. We should get the same IP
-	req = &AddressRequest{Subnet: *sub}
 	for i, inp := range toRelease {
 		address := net.ParseIP(inp.address)
 		a.Release("default", address)
@@ -483,12 +476,12 @@ func TestRelease(t *testing.T) {
 			t.Fatalf("Failed to update free address count after release. Expected %d, Found: %d", i+1, bm.Unselected())
 		}
 
-		rsp, err := a.Request("default", req)
+		ip, err := a.Request("default", sub, nil)
 		if err != nil {
 			t.Fatalf("Failed to obtain the address: %s", err.Error())
 		}
-		if !address.Equal(rsp.Address) {
-			t.Fatalf("Failed to obtain the same address. Expected: %s, Got: %s", address, rsp.Address)
+		if !address.Equal(ip) {
+			t.Fatalf("Failed to obtain the same address. Expected: %s, Got: %s", address, ip)
 		}
 	}
 }
@@ -533,7 +526,7 @@ func assertGetAddress(t *testing.T, subnet string) {
 
 	start := time.Now()
 	run := 0
-	for err != ErrNoAvailableIPs {
+	for err != ipamapi.ErrNoAvailableIPs {
 		_, err = a.getAddress(sub, bm, nil, v4)
 		run++
 	}
@@ -553,9 +546,8 @@ func assertGetAddress(t *testing.T, subnet string) {
 
 func assertNRequests(t *testing.T, subnet string, numReq int, lastExpectedIP string) {
 	var (
+		ip        net.IP
 		err       error
-		req       *AddressRequest
-		rsp       *AddressResponse
 		printTime = false
 	)
 
@@ -563,19 +555,18 @@ func assertNRequests(t *testing.T, subnet string, numReq int, lastExpectedIP str
 	lastIP := net.ParseIP(lastExpectedIP)
 
 	a := getAllocator(t, sub)
-	req = &AddressRequest{Subnet: *sub}
 
 	i := 0
 	start := time.Now()
 	for ; i < numReq; i++ {
-		rsp, err = a.Request("default", req)
+		ip, err = a.Request("default", sub, nil)
 	}
 	if printTime {
 		fmt.Printf("\nTaken %v, to allocate %d addresses on %s\n", time.Since(start), numReq, subnet)
 	}
 
-	if !lastIP.Equal(rsp.Address) {
-		t.Fatalf("Wrong last IP. Expected %s. Got: %s (err: %v, ind: %d)", lastExpectedIP, rsp.Address.String(), err, i)
+	if !lastIP.Equal(ip) {
+		t.Fatalf("Wrong last IP. Expected %s. Got: %s (err: %v, ind: %d)", lastExpectedIP, ip.String(), err, i)
 	}
 }
 
@@ -584,11 +575,10 @@ func benchmarkRequest(subnet *net.IPNet) {
 
 	a, _ := NewAllocator(nil)
 	a.internalHostSize = 20
-	a.AddSubnet("default", &SubnetInfo{Subnet: subnet})
+	a.AddSubnet("default", subnet)
 
-	req := &AddressRequest{Subnet: *subnet}
-	for err != ErrNoAvailableIPs {
-		_, err = a.Request("default", req)
+	for err != ipamapi.ErrNoAvailableIPs {
+		_, err = a.Request("default", subnet, nil)
 
 	}
 }
