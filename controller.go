@@ -243,6 +243,23 @@ func (c *controller) RegisterDriver(networkType string, driver driverapi.Driver,
 	return nil
 }
 
+// RefreshDriver is api to refresh driver named networkType
+func (c *controller) RefreshDriver(networkType string, driver driverapi.Driver, capability driverapi.Capability) error {
+	c.Lock()
+	defer c.Unlock()
+	if !config.IsValidName(networkType) {
+		return ErrInvalidName(networkType)
+	}
+
+	if _, ok := c.drivers[networkType]; !ok {
+		return driverapi.ErrReActiveRegistration(networkType)
+	}
+
+	c.drivers[networkType] = &driverData{driver, capability}
+	log.Debugf("change scope for network type (%s)", networkType)
+	return nil
+}
+
 // NewNetwork creates a new network of the specified network type. The options
 // are network specific and modeled in a generic way.
 func (c *controller) NewNetwork(networkType, name string, options ...NetworkOption) (Network, error) {

@@ -59,6 +59,11 @@ func (dt *driverTester) RegisterDriver(name string, drv driverapi.Driver,
 	return nil
 }
 
+func (dt *driverTester) RefreshDriver(name string, drv driverapi.Driver,
+	cap driverapi.Capability) error {
+	return &driverapi.ErrNotImplemented{}
+}
+
 func TestOverlayInit(t *testing.T) {
 	if err := Init(&driverTester{t: t}); err != nil {
 		t.Fatal(err)

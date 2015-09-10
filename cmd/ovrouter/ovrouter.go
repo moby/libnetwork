@@ -29,6 +29,10 @@ func (r *router) RegisterDriver(name string, driver driverapi.Driver, c driverap
 	return nil
 }
 
+func (r *router) RefreshDriver(name string, driver driverapi.Driver, c driverapi.Capability) error {
+	return &driverapi.ErrNotImplemented{}
+}
+
 func (ep *endpoint) Interfaces() []driverapi.InterfaceInfo {
 	return nil
 }
