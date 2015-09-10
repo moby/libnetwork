@@ -456,6 +456,16 @@ func (ep *endpoint) getSandbox() (*sandbox, bool) {
 	ps, ok := c.sandboxes[sid]
 	c.Unlock()
 
+	// if sid isn't empty but ps is nil, that means
+	// sandbox is connected remotely
+	if sid != "" && ps == nil {
+		ps = &sandbox{
+			id:          sid,
+			containerID: remoteCID,
+		}
+		ok = true
+	}
+
 	return ps, ok
 }
 
