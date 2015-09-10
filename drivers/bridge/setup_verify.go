@@ -1,7 +1,11 @@
 package bridge
 
 import (
+	"fmt"
+	"net"
+
 	"github.com/vishvananda/netlink"
+	"github.com/vishvananda/netlink/nl"
 )
 
 func setupVerifyAndReconcile(config *networkConfiguration, i *bridgeInterface) error {
@@ -27,12 +31,23 @@ func setupVerifyAndReconcile(config *networkConfiguration, i *bridgeInterface) e
 		return (*IPv6AddrNoMatchError)(bridgeIPv6)
 	}
 
+	gwv4, _, err := getDefaultGatewayFromRouteTable()
+	if err != nil {
+		return err
+	}
+
+	if gwv4 != nil && addrv4.Contains(gwv4) {
+		if _, err := ipAllocator.RequestIP(addrv4.IPNet, gwv4); err != nil {
+			return fmt.Errorf("failed to reserve the default gateway IP %s: %v", gwv4.String(), err)
+		}
+		i.gatewayIPv4 = gwv4
+	}
+
 	// By this time we have either configured a new bridge with an IP address
 	// or made sure an existing bridge's IP matches the configuration
 	// Now is the time to cache these states in the bridgeInterface.
 	i.bridgeIPv4 = addrv4.IPNet
 	i.bridgeIPv6 = bridgeIPv6
-
 	return nil
 }
 
@@ -43,4 +58,25 @@ func findIPv6Address(addr netlink.Addr, addresses []netlink.Addr) bool {
 		}
 	}
 	return false
+}
+
+func getDefaultGatewayFromRouteTable() (gwv4, gwv6 net.IP, err error) {
+	routes, err := netlink.RouteList(nil, netlink.FAMILY_ALL)
+	if err != nil {
+		return
+	}
+
+	for _, r := range routes {
+		if r.Dst != nil || r.Src != nil {
+			continue
+		}
+
+		switch nl.GetIPFamily(r.Gw) {
+		case netlink.FAMILY_V4:
+			gwv4 = r.Gw
+		case netlink.FAMILY_V6:
+			gwv6 = r.Gw
+		}
+	}
+	return
 }
