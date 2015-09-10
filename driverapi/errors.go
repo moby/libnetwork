@@ -54,3 +54,11 @@ func (ar ErrActiveRegistration) Error() string {
 
 // Forbidden denotes the type of this error
 func (ar ErrActiveRegistration) Forbidden() {}
+
+// ErrReActiveRegistration represents an error when a driver isn't registered before so it can't be re-activated
+type ErrReActiveRegistration string
+
+// Error interface for ErrReActiveRegistration
+func (ar ErrReActiveRegistration) Error() string {
+	return fmt.Sprintf("Driver hasn't been registered before for type %q", string(ar))
+}

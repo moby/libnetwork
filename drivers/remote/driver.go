@@ -3,17 +3,20 @@ package remote
 import (
 	"fmt"
 	"net"
+	"strings"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/docker/docker/pkg/plugins"
 	"github.com/docker/libnetwork/driverapi"
 	"github.com/docker/libnetwork/drivers/remote/api"
+	"github.com/docker/libnetwork/netlabel"
 	"github.com/docker/libnetwork/types"
 )
 
 type driver struct {
 	endpoint    *plugins.Client
 	networkType string
+	changeScope chan bool
 }
 
 type maybeError interface {
@@ -21,7 +24,7 @@ type maybeError interface {
 }
 
 func newDriver(name string, client *plugins.Client) driverapi.Driver {
-	return &driver{networkType: name, endpoint: client}
+	return &driver{networkType: name, endpoint: client, changeScope: make(chan bool)}
 }
 
 // Init makes sure a remote driver is registered when a network driver
@@ -31,9 +34,22 @@ func Init(dc driverapi.DriverCallback) error {
 		c := driverapi.Capability{
 			Scope: driverapi.GlobalScope,
 		}
-		if err := dc.RegisterDriver(name, newDriver(name, client), c); err != nil {
+		d := newDriver(name, client)
+		if err := dc.RegisterDriver(name, d, c); err != nil {
 			log.Errorf("error registering driver for %s due to %v", name, err)
+			return
 		}
+		go func() {
+			select {
+			case toChange := <-d.(*driver).changeScope:
+				if toChange {
+					c.Scope = driverapi.LocalScope
+					if err := dc.RefreshDriver(name, newDriver(name, client), c); err != nil {
+						log.Errorf("error registering driver for %s due to %v", name, err)
+					}
+				}
+			}
+		}()
 	})
 	return nil
 }
@@ -42,7 +58,24 @@ func Init(dc driverapi.DriverCallback) error {
 // to be supplied to the remote process out-of-band (e.g., as command
 // line arguments).
 func (d *driver) Config(option map[string]interface{}) error {
-	return &driverapi.ErrNotImplemented{}
+	cs := false
+	netType := d.Type()
+
+	for label, value := range option {
+		// to check if we need to change scope of network plugin to "local"
+		if strings.HasPrefix(label, netlabel.DriverPrefix+"."+netType) {
+			scopeStr := strings.TrimPrefix(label, fmt.Sprintf("%s.%s.", netlabel.DriverPrefix, d.networkType))
+			if scopeStr == "scope" && value == "local" {
+				cs = true
+			}
+		}
+	}
+
+	go func() {
+		d.changeScope <- cs
+	}()
+
+	return nil
 }
 
 func (d *driver) call(methodName string, arg interface{}, retVal maybeError) error {

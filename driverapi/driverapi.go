@@ -109,6 +109,7 @@ type JoinInfo interface {
 type DriverCallback interface {
 	// RegisterDriver provides a way for Remote drivers to dynamically register new NetworkType and associate with a driver instance
 	RegisterDriver(name string, driver Driver, capability Capability) error
+	RefreshDriver(name string, driver Driver, capability Capability) error
 }
 
 // Scope indicates the drivers scope capability
