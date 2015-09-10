@@ -307,7 +307,13 @@ func (c *controller) addNetwork(n *network) error {
 	n.Unlock()
 
 	// Create the network
-	if err := d.CreateNetwork(n.id, n.generic); err != nil {
+	options := make(map[string]interface{})
+	for k, v := range n.generic {
+		options[k] = v
+	}
+	options["network-name"] = n.name
+
+	if err := d.CreateNetwork(n.id, options); err != nil {
 		return err
 	}
 	if err := n.watchEndpoints(); err != nil {
