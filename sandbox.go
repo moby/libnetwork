@@ -279,25 +279,28 @@ func (sb *sandbox) SetKey(basePath string) error {
 	}
 
 	sb.Lock()
-	if sb.osSbox != nil {
-		sb.Unlock()
+	osSbox := sb.osSbox
+	sb.Unlock()
+	if osSbox != nil && sb.config.useDefaultSandBox {
 		return types.ForbiddenErrorf("failed to set sandbox key : already assigned")
 	}
-	sb.Unlock()
-	osSbox, err := osl.GetSandboxForExternalKey(basePath, sb.Key())
-	if err != nil {
-		return err
-	}
-	sb.Lock()
-	sb.osSbox = osSbox
-	sb.Unlock()
-	defer func() {
+
+	if osSbox == nil {
+		osSbox, err = osl.GetSandboxForExternalKey(basePath, sb.Key())
 		if err != nil {
-			sb.Lock()
-			sb.osSbox = nil
-			sb.Unlock()
+			return err
 		}
-	}()
+		sb.Lock()
+		sb.osSbox = osSbox
+		sb.Unlock()
+		defer func() {
+			if err != nil {
+				sb.Lock()
+				sb.osSbox = nil
+				sb.Unlock()
+			}
+		}()
+	}
 
 	for _, ep := range sb.getConnectedEndpoints() {
 		if err = sb.populateNetworkResources(ep); err != nil {
