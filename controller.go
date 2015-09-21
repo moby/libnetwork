@@ -249,7 +249,7 @@ func (c *controller) NewNetwork(networkType, name string, options ...NetworkOpti
 
 	network.processOptions(options...)
 
-	if err := c.addNetwork(network); err != nil {
+	if err := c.addNetwork(network, false); err != nil {
 		return nil, err
 	}
 
@@ -264,7 +264,7 @@ func (c *controller) NewNetwork(networkType, name string, options ...NetworkOpti
 	return network, nil
 }
 
-func (c *controller) addNetwork(n *network) error {
+func (c *controller) addNetwork(n *network, networkFromStore bool) error {
 
 	c.Lock()
 	// Check if a driver for the specified network type is available
@@ -285,9 +285,11 @@ func (c *controller) addNetwork(n *network) error {
 	d := n.driver
 	n.Unlock()
 
-	// Create the network
-	if err := d.CreateNetwork(n.id, n.generic); err != nil {
-		return err
+	if !networkFromStore {
+		// Create the network
+		if err := d.CreateNetwork(n.id, n.generic); err != nil {
+			return err
+		}
 	}
 	if err := n.watchEndpoints(); err != nil {
 		return err

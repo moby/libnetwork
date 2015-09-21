@@ -420,19 +420,32 @@ func (ep *endpoint) Delete() error {
 		}
 	}()
 
-	if err = ep.deleteEndpoint(); err != nil {
+	if err = ep.deleteEndpoint(false); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (ep *endpoint) deleteEndpoint() error {
+func (ep *endpoint) deleteEndpoint(endpointFromStore bool) error {
 	ep.Lock()
 	n := ep.network
 	name := ep.name
 	epid := ep.id
 	ep.Unlock()
+
+	if !endpointFromStore {
+		n.Lock()
+		nid := n.id
+		driver := n.driver
+		n.Unlock()
+		if err := driver.DeleteEndpoint(nid, epid); err != nil {
+			if _, ok := err.(types.ForbiddenError); ok {
+				return err
+			}
+			log.Warnf("driver error deleting endpoint %s : %v", name)
+		}
+	}
 
 	n.Lock()
 	_, ok := n.endpoints[epid]
@@ -441,20 +454,8 @@ func (ep *endpoint) deleteEndpoint() error {
 		return nil
 	}
 
-	nid := n.id
-	driver := n.driver
 	delete(n.endpoints, epid)
 	n.Unlock()
-
-	if err := driver.DeleteEndpoint(nid, epid); err != nil {
-		if _, ok := err.(types.ForbiddenError); ok {
-			n.Lock()
-			n.endpoints[epid] = ep
-			n.Unlock()
-			return err
-		}
-		log.Warnf("driver error deleting endpoint %s : %v", name, err)
-	}
 
 	n.updateSvcRecord(ep, false)
 	return nil

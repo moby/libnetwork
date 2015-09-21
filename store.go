@@ -51,7 +51,7 @@ func (c *controller) newNetworkFromStore(n *network) error {
 	n.endpoints = endpointTable{}
 	n.Unlock()
 
-	return c.addNetwork(n)
+	return c.addNetwork(n, true)
 }
 
 func (c *controller) updateNetworkToStore(n *network) error {
@@ -107,7 +107,7 @@ func (c *controller) newEndpointFromStore(key string, ep *endpoint) error {
 	_, err := n.EndpointByID(id)
 	if err != nil {
 		if _, ok := err.(ErrNoSuchEndpoint); ok {
-			return n.addEndpoint(ep)
+			return n.addEndpoint(ep, true)
 		}
 	}
 	return err
@@ -210,7 +210,7 @@ func (c *controller) watchNetworks() error {
 					if err := c.store.GetObject(datastore.Key(existing.Key()...), &tmp); err != datastore.ErrKeyNotFound {
 						continue
 					}
-					if err := existing.deleteNetwork(); err != nil {
+					if err := existing.deleteNetwork(true); err != nil {
 						log.Debugf("Delete failed %s: %s", existing.name, err)
 					}
 				}
@@ -285,7 +285,7 @@ func (n *network) watchEndpoints() error {
 					if err := cs.GetObject(datastore.Key(existing.Key()...), &tmp); err != datastore.ErrKeyNotFound {
 						continue
 					}
-					if err := existing.deleteEndpoint(); err != nil {
+					if err := existing.deleteEndpoint(true); err != nil {
 						log.Debugf("Delete failed %s: %s", existing.name, err)
 					}
 				}

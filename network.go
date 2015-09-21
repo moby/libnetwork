@@ -240,14 +240,14 @@ func (n *network) Delete() error {
 		return err
 	}
 
-	if err = n.deleteNetwork(); err != nil {
+	if err = n.deleteNetwork(false); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (n *network) deleteNetwork() error {
+func (n *network) deleteNetwork(networkFromStore bool) error {
 	n.Lock()
 	id := n.id
 	d := n.driver
@@ -256,21 +256,23 @@ func (n *network) deleteNetwork() error {
 	n.ctrlr.Unlock()
 	n.Unlock()
 
-	if err := d.DeleteNetwork(n.id); err != nil {
-		// Forbidden Errors should be honored
-		if _, ok := err.(types.ForbiddenError); ok {
-			n.ctrlr.Lock()
-			n.ctrlr.networks[n.id] = n
-			n.ctrlr.Unlock()
-			return err
+	if !networkFromStore {
+		if err := d.DeleteNetwork(n.id); err != nil {
+			// Forbidden Errors should be honored
+			if _, ok := err.(types.ForbiddenError); ok {
+				n.ctrlr.Lock()
+				n.ctrlr.networks[n.id] = n
+				n.ctrlr.Unlock()
+				return err
+			}
+			log.Warnf("driver error deleting network %s : %v", n.name, err)
 		}
-		log.Warnf("driver error deleting network %s : %v", n.name, err)
 	}
 	n.stopWatch()
 	return nil
 }
 
-func (n *network) addEndpoint(ep *endpoint) error {
+func (n *network) addEndpoint(ep *endpoint, endpointFromStore bool) error {
 	var err error
 	n.Lock()
 	n.endpoints[ep.id] = ep
@@ -285,9 +287,11 @@ func (n *network) addEndpoint(ep *endpoint) error {
 		}
 	}()
 
-	err = d.CreateEndpoint(n.id, ep.id, ep, ep.generic)
-	if err != nil {
-		return types.InternalErrorf("failed to create endpoint %s on network %s: %v", ep.Name(), n.Name(), err)
+	if !endpointFromStore {
+		err = d.CreateEndpoint(n.id, ep.id, ep, ep.generic)
+		if err != nil {
+			return types.InternalErrorf("failed to create endpoint %s on network %s: %v", ep.Name(), n.Name(), err)
+		}
 	}
 
 	n.updateSvcRecord(ep, true)
@@ -326,7 +330,7 @@ func (n *network) CreateEndpoint(name string, options ...EndpointOption) (Endpoi
 			}
 		}
 	}()
-	if err = n.addEndpoint(ep); err != nil {
+	if err = n.addEndpoint(ep, false); err != nil {
 		return nil, err
 	}
 	defer func() {
