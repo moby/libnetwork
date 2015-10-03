@@ -168,7 +168,7 @@ func (c *controller) watchNetworks() error {
 	c.Unlock()
 
 	networkKey := datastore.Key(datastore.NetworkKeyPrefix)
-	if err := ensureKeys(networkKey, cs); err != nil {
+	if err := ensureWatchable(networkKey, cs); err != nil {
 		return fmt.Errorf("failed to ensure if the network keys are valid and present in store: %v", err)
 	}
 	nwPairs, err := cs.KVStore().WatchTree(networkKey, nil)
@@ -225,7 +225,7 @@ func (n *network) watchEndpoints() error {
 	n.Unlock()
 
 	endpointKey := datastore.Key(tmp.KeyPrefix()...)
-	if err := ensureKeys(endpointKey, cs); err != nil {
+	if err := ensureWatchable(endpointKey, cs); err != nil {
 		return fmt.Errorf("failed to ensure if the endpoint keys are valid and present in store: %v", err)
 	}
 	epPairs, err := cs.KVStore().WatchTree(endpointKey, stopCh)
@@ -346,7 +346,13 @@ func (c *controller) processEndpointUpdate(ep *endpoint) bool {
 	return false
 }
 
-func ensureKeys(key string, cs datastore.DataStore) error {
+// ensureWatchable ensures that the key named 'path'
+// is watchable by the backend store client.
+//
+// FIXME because etcd cannot watch on a regular key,
+// we enforce 'IsDir' at true so that the key can be
+// considered as a directory and thus be watchable.
+func ensureWatchable(key string, cs datastore.DataStore) error {
 	exists, err := cs.KVStore().Exists(key)
 	if err != nil {
 		return err
@@ -354,7 +360,7 @@ func ensureKeys(key string, cs datastore.DataStore) error {
 	if exists {
 		return nil
 	}
-	return cs.KVStore().Put(key, []byte{}, nil)
+	return cs.KVStore().Put(key, []byte{}, &store.WriteOptions{IsDir: true})
 }
 
 func (c *controller) getLocalStoreConfig(cfg *config.Config) *config.DatastoreCfg {
