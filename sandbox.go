@@ -17,6 +17,10 @@ import (
 	"github.com/docker/libnetwork/types"
 )
 
+const (
+	remoteCID = "remote"
+)
+
 // Sandbox provides the control over the network container entity. It is a one to one mapping with the container.
 type Sandbox interface {
 	// ID returns the ID of the sandbox
@@ -124,6 +128,10 @@ func (sb *sandbox) Key() string {
 
 func (sb *sandbox) Labels() map[string]interface{} {
 	return sb.config.generic
+}
+
+func (sb *sandbox) isRemote() bool {
+	return sb.containerID == remoteCID
 }
 
 func (sb *sandbox) Statistics() (map[string]*osl.InterfaceStatistics, error) {

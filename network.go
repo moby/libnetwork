@@ -611,7 +611,7 @@ func (n *network) updateSvcRecord(ep *endpoint, isAdd bool) {
 
 	var sbList []*sandbox
 	n.WalkEndpoints(func(e Endpoint) bool {
-		if sb, hasSandbox := e.(*endpoint).getSandbox(); hasSandbox {
+		if sb, hasSandbox := e.(*endpoint).getSandbox(); hasSandbox && !sb.isRemote() {
 			sbList = append(sbList, sb)
 		}
 		return false
