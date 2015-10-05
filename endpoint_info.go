@@ -162,11 +162,15 @@ func (ep *endpoint) Interface() driverapi.InterfaceInfo {
 }
 
 func (epi *endpointInterface) SetMacAddress(mac net.HardwareAddr) error {
-	if epi.mac != nil {
-		return types.ForbiddenErrorf("endpoint interface MAC address present (%s). Cannot be modified with %s.", epi.mac, mac)
-	}
 	if mac == nil {
 		return types.BadRequestErrorf("tried to set nil MAC address to endpoint interface")
+	}
+	if epi.mac != nil {
+		if epi.mac.String() != mac.String() {
+			return types.ForbiddenErrorf("endpoint interface MAC address present (%s). Cannot be modified with %s.", epi.mac, mac)
+		}
+		// Setting the same mac-address is okay
+		return nil
 	}
 	epi.mac = types.GetMacCopy(mac)
 	return nil
@@ -175,6 +179,20 @@ func (epi *endpointInterface) SetMacAddress(mac net.HardwareAddr) error {
 func (epi *endpointInterface) SetIPAddress(address *net.IPNet) error {
 	if address.IP == nil {
 		return types.BadRequestErrorf("tried to set nil IP address to endpoint interface")
+	}
+	if epi.addr != nil && address.IP.To4() != nil {
+		if !types.CompareIPNet(epi.addr, address) {
+			return types.ForbiddenErrorf("endpoint ipv4 address already present (%s). Cannot be modified with %s.", epi.addr, address)
+		}
+		// Setting the same ip-address is okay
+		return nil
+	}
+	if epi.addrv6 != nil && address.IP.To4() == nil {
+		if !types.CompareIPNet(epi.addrv6, address) {
+			return types.ForbiddenErrorf("endpoint ipv6 address already present (%s). Cannot be modified with %s.", epi.addrv6, address)
+		}
+		// Setting the same ipv6-address is okay
+		return nil
 	}
 	if address.IP.To4() == nil {
 		return setAddress(&epi.addrv6, address)
