@@ -18,7 +18,7 @@ touch ${BATS_LOG}
 rm ${BATS_LOG}
 
 teardown() {
-  echo "$BATS_TEST_NAME
+    echo "$BATS_TEST_NAME
 ----------
 $output
 ----------
@@ -31,18 +31,18 @@ EXTRA_ARGS='--tlsverify --tlscacert=/var/lib/boot2docker/ca.pem --tlskey=/var/li
 TMP_EXTRA_ARGS_FILE=/tmp/tmp_extra_args
 DAEMON_CFG_FILE=${BATS_TEST_DIRNAME}/daemon.cfg
 set_extra_config() {
-  if [ -f ${TMP_EXTRA_ARGS_FILE} ];
-  then
+    if [ -f ${TMP_EXTRA_ARGS_FILE} ];
+    then
     rm ${TMP_EXTRA_ARGS_FILE}
-  fi
-  echo -n "${EXTRA_ARGS_CFG}='"  > ${TMP_EXTRA_ARGS_FILE}
-  echo -n "$1 "  >> ${TMP_EXTRA_ARGS_FILE}
-  echo "${EXTRA_ARGS}'"  >> ${TMP_EXTRA_ARGS_FILE}
+    fi
+    echo -n "${EXTRA_ARGS_CFG}='"  > ${TMP_EXTRA_ARGS_FILE}
+    echo -n "$1 "  >> ${TMP_EXTRA_ARGS_FILE}
+    echo "${EXTRA_ARGS}'"  >> ${TMP_EXTRA_ARGS_FILE}
 }
 
 if [ ! -e $MACHINE_ROOT/$MACHINE_BIN_NAME ]; then
-  echo "${MACHINE_ROOT}/${MACHINE_BIN_NAME} not found"
-  exit 1
+    echo "${MACHINE_ROOT}/${MACHINE_BIN_NAME} not found"
+    exit 1
 fi
 
 function machine() {

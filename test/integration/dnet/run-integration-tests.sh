@@ -26,10 +26,10 @@ trap "cleanup_containers" EXIT SIGINT
 function cleanup_containers() {
     for c in "${!cmap[@]}";
     do
-	docker stop $c || true
-	if [ -z "$CIRCLECI" ]; then
-	    docker rm -f $c || true
-	fi
+        docker stop $c || true
+        if [ -z "$CIRCLECI" ]; then
+            docker rm -f $c || true
+        fi
     done
 
     unset cmap

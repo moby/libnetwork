@@ -14,24 +14,24 @@ function get_sbox_id() {
 }
 
 function net_connect() {
-	dnet_cmd $(inst_id2port ${1}) service publish ${2}.${3}
-	dnet_cmd $(inst_id2port ${1}) service attach ${2} ${2}.${3}
+    dnet_cmd $(inst_id2port ${1}) service publish ${2}.${3}
+    dnet_cmd $(inst_id2port ${1}) service attach ${2} ${2}.${3}
 }
 
 function net_disconnect() {
-	dnet_cmd $(inst_id2port ${1}) service detach ${2} ${2}.${3}
-	dnet_cmd $(inst_id2port ${1}) service unpublish ${2}.${3}
+    dnet_cmd $(inst_id2port ${1}) service detach ${2} ${2}.${3}
+    dnet_cmd $(inst_id2port ${1}) service unpublish ${2}.${3}
 }
 
 function start_consul() {
     stop_consul
     docker run -d \
-	   --name=pr_consul \
-	   -p 8500:8500 \
-	   -p 8300-8302:8300-8302/tcp \
-	   -p 8300-8302:8300-8302/udp \
-	   -h consul \
-	   progrium/consul -server -bootstrap
+        --name=pr_consul \
+        -p 8500:8500 \
+        -p 8300-8302:8300-8302/tcp \
+        -p 8300-8302:8300-8302/udp \
+        -h consul \
+        progrium/consul -server -bootstrap
     sleep 2
 }
 
@@ -40,7 +40,7 @@ function stop_consul() {
     docker stop pr_consul || true
     # You cannot destroy a container in Circle CI. So do not attempt destroy in circleci
     if [ -z "$CIRCLECI" ]; then
-	docker rm -f pr_consul || true
+        docker rm -f pr_consul || true
     fi
 }
 
@@ -60,23 +60,23 @@ function start_dnet() {
 
     while [ -n "$1" ]
     do
-	if [[ "$1" =~ ^[0-9]+$ ]]
-	then
-	    hport=$1
-	    cport=$1
-	    hopt="-H tcp://0.0.0.0:${cport}"
-	else
-	    neighip=$1
-	fi
-	shift
+        if [[ "$1" =~ ^[0-9]+$ ]]
+        then
+            hport=$1
+            cport=$1
+            hopt="-H tcp://0.0.0.0:${cport}"
+        else
+            neighip=$1
+        fi
+        shift
     done
 
     bridge_ip=$(docker inspect --format '{{.NetworkSettings.Gateway}}' pr_consul)
 
     if [ -z "$neighip" ]; then
-	labels="\"com.docker.network.driver.overlay.bind_interface=eth0\""
+        labels="\"com.docker.network.driver.overlay.bind_interface=eth0\""
     else
-	labels="\"com.docker.network.driver.overlay.bind_interface=eth0\", \"com.docker.network.driver.overlay.neighbor_ip=${neighip}\""
+        labels="\"com.docker.network.driver.overlay.bind_interface=eth0\", \"com.docker.network.driver.overlay.neighbor_ip=${neighip}\""
     fi
 
     echo "parsed values: " ${name} ${hport} ${cport} ${hopt} ${neighip} ${labels}
@@ -100,22 +100,22 @@ title = "LibNetwork Configuration file for ${name}"
       address = "${bridge_ip}:8500"
 EOF
     docker run \
-	   -d \
-	   --name=${name}  \
-	   --privileged \
-	   -p ${hport}:${cport} \
-	   -v $(pwd)/:/go/src/github.com/docker/libnetwork \
-	   -v /tmp:/tmp \
-	   -v $(pwd)/${TMPC_ROOT}:/scratch \
-	   -v /usr/local/bin/runc:/usr/local/bin/runc \
-	   -w /go/src/github.com/docker/libnetwork \
-	   golang:1.4 ./cmd/dnet/dnet -d -D ${hopt} -c ${tomlfile}
+        -d \
+        --name=${name}  \
+        --privileged \
+        -p ${hport}:${cport} \
+        -v $(pwd)/:/go/src/github.com/docker/libnetwork \
+        -v /tmp:/tmp \
+        -v $(pwd)/${TMPC_ROOT}:/scratch \
+        -v /usr/local/bin/runc:/usr/local/bin/runc \
+        -w /go/src/github.com/docker/libnetwork \
+        golang:1.4 ./cmd/dnet/dnet -d -D ${hopt} -c ${tomlfile}
     sleep 3
 }
 
 function skip_for_circleci() {
     if [ -n "$CIRCLECI" ]; then
-	skip
+        skip
     fi
 }
 
@@ -127,7 +127,7 @@ function stop_dnet() {
     docker stop ${name} || true
     # You cannot destroy a container in Circle CI. So do not attempt destroy in circleci
     if [ -z "$CIRCLECI" ]; then
-	docker rm -f ${name} || true
+        docker rm -f ${name} || true
     fi
 }
 
