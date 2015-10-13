@@ -27,7 +27,7 @@ func TestBuildDefault(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		expected := "127.0.0.1\tlocalhost\n::1\tlocalhost ip6-localhost ip6-loopback\nfe00::0\tip6-localnet\nff00::0\tip6-mcastprefix\nff02::1\tip6-allnodes\nff02::2\tip6-allrouters\n"
+		expected := "127.0.0.1\tlocalhost localhost.localdomain\n::1\tlocalhost localhost.localdomain ip6-localhost ip6-loopback\nfe00::0\tip6-localnet\nff00::0\tip6-mcastprefix\nff02::1\tip6-allnodes\nff02::2\tip6-allrouters\n"
 
 		if expected != string(content) {
 			t.Fatalf("Expected to find '%s' got '%s'", expected, content)
