@@ -37,48 +37,42 @@ function run_bridge_tests() {
 function run_overlay_consul_tests() {
     ## Test overlay network with consul
     ## Setup
-    start_dnet 1 consul 1>>${INTEGRATION_ROOT}/test.log 2>&1
-    cmap[dnet-1-consul]=dnet-1-consul
-    start_dnet 2 consul 1>>${INTEGRATION_ROOT}/test.log 2>&1
-    cmap[dnet-2-consul]=dnet-2-consul
-    start_dnet 3 consul 1>>${INTEGRATION_ROOT}/test.log 2>&1
-    cmap[dnet-3-consul]=dnet-3-consul
+    start_dnet 1 consul-overlay 1>>${INTEGRATION_ROOT}/test.log 2>&1
+    cmap[dnet-1-consul-overlay]=dnet-1-consul-overlay
+    start_dnet 2 consul-overlay 1>>${INTEGRATION_ROOT}/test.log 2>&1
+    cmap[dnet-2-consul-overlay]=dnet-2-consul-overlay
+    start_dnet 3 consul-overlay 1>>${INTEGRATION_ROOT}/test.log 2>&1
+    cmap[dnet-3-consul-overlay]=dnet-3-consul-overlay
 
     ## Run the test cases
     ./integration-tmp/bin/bats ./test/integration/dnet/overlay-consul.bats
 
     ## Teardown
-    stop_dnet 1 consul 1>>${INTEGRATION_ROOT}/test.log 2>&1
-    unset cmap[dnet-1-consul]
-    stop_dnet 2 consul 1>>${INTEGRATION_ROOT}/test.log 2>&1
-    unset cmap[dnet-2-consul]
-    stop_dnet 3 consul 1>>${INTEGRATION_ROOT}/test.log 2>&1
-    unset cmap[dnet-3-consul]
+    stop_dnet 1 consul-overlay 1>>${INTEGRATION_ROOT}/test.log 2>&1
+    unset cmap[dnet-1-consul-overlay]
+    stop_dnet 2 consul-overlay 1>>${INTEGRATION_ROOT}/test.log 2>&1
+    unset cmap[dnet-2-consul-overlay]
+    stop_dnet 3 consul-overlay 1>>${INTEGRATION_ROOT}/test.log 2>&1
+    unset cmap[dnet-3-consul-overlay]
 }
 
 function run_overlay_zk_tests() {
     ## Test overlay network with zookeeper
-    start_zookeeper 1>>${INTEGRATION_ROOT}/test.log 2>&1
-    cmap[zookeeper_server]=zookeeper_server
-
-    start_dnet 1 zookeeper 1>>${INTEGRATION_ROOT}/test.log 2>&1
-    cmap[dnet-1-zookeeper]=dnet-1-zookeeper
-    start_dnet 2 zookeeper 1>>${INTEGRATION_ROOT}/test.log 2>&1
-    cmap[dnet-2-zookeeper]=dnet-2-zookeeper
-    start_dnet 3 zookeeper 1>>${INTEGRATION_ROOT}/test.log 2>&1
-    cmap[dnet-3-zookeeper]=dnet-3-zookeeper
+    start_dnet 1 zookeeper-overlay 1>>${INTEGRATION_ROOT}/test.log 2>&1
+    cmap[dnet-1-zookeeper-overlay]=dnet-1-zookeeper-overlay
+    start_dnet 2 zookeeper-overlay 1>>${INTEGRATION_ROOT}/test.log 2>&1
+    cmap[dnet-2-zookeeper-overlay]=dnet-2-zookeeper-overlay
+    start_dnet 3 zookeeper-overlay 1>>${INTEGRATION_ROOT}/test.log 2>&1
+    cmap[dnet-3-zookeeper-overlay]=dnet-3-zookeeper-overlay
 
     ./integration-tmp/bin/bats ./test/integration/dnet/overlay-zookeeper.bats
 
-    stop_dnet 1 zookeeper 1>>${INTEGRATION_ROOT}/test.log 2>&1
-    unset cmap[dnet-1-zookeeper]
-    stop_dnet 2 zookeeper 1>>${INTEGRATION_ROOT}/test.log 2>&1
-    unset cmap[dnet-2-zookeeper]
-    stop_dnet 3 zookeeper 1>>${INTEGRATION_ROOT}/test.log 2>&1
-    unset cmap[dnet-3-zookeeper]
-
-    stop_zookeeper 1>>${INTEGRATION_ROOT}/test.log 2>&1
-    unset cmap[zookeeper_server]
+    stop_dnet 1 zookeeper-overlay 1>>${INTEGRATION_ROOT}/test.log 2>&1
+    unset cmap[dnet-1-zookeeper-overlay]
+    stop_dnet 2 zookeeper-overlay 1>>${INTEGRATION_ROOT}/test.log 2>&1
+    unset cmap[dnet-2-zookeeper-overlay]
+    stop_dnet 3 zookeeper-overlay 1>>${INTEGRATION_ROOT}/test.log 2>&1
+    unset cmap[dnet-3-zookeeper-overlay]
 }
 
 function run_dnet_tests() {
@@ -100,27 +94,50 @@ function run_simple_tests() {
     unset cmap[dnet-1-simple]
 }
 
-function run_multi_tests() {
+function run_multi_consul_tests() {
     # Test multi node configuration with a global scope test driver
 
     ## Setup
-    start_dnet 1 multi 1>>${INTEGRATION_ROOT}/test.log 2>&1
-    cmap[dnet-1-multi]=dnet-1-multi
-    start_dnet 2 multi 1>>${INTEGRATION_ROOT}/test.log 2>&1
-    cmap[dnet-2-multi]=dnet-2-multi
-    start_dnet 3 multi 1>>${INTEGRATION_ROOT}/test.log 2>&1
-    cmap[dnet-3-multi]=dnet-3-multi
+    start_dnet 1 consul-multi 1>>${INTEGRATION_ROOT}/test.log 2>&1
+    cmap[dnet-1-consul-multi]=dnet-1-consul-multi
+    start_dnet 2 consul-multi 1>>${INTEGRATION_ROOT}/test.log 2>&1
+    cmap[dnet-2-consul-multi]=dnet-2-consul-multi
+    start_dnet 3 consul-multi 1>>${INTEGRATION_ROOT}/test.log 2>&1
+    cmap[dnet-3-consul-multi]=dnet-3-consul-multi
 
     ## Run the test cases
     ./integration-tmp/bin/bats ./test/integration/dnet/multi.bats
 
     ## Teardown
-    stop_dnet 1 multi 1>>${INTEGRATION_ROOT}/test.log 2>&1
-    unset cmap[dnet-1-multi]
-    stop_dnet 2 multi 1>>${INTEGRATION_ROOT}/test.log 2>&1
-    unset cmap[dnet-2-multi]
-    stop_dnet 3 multi 1>>${INTEGRATION_ROOT}/test.log 2>&1
-    unset cmap[dnet-3-multi]
+    stop_dnet 1 consul-multi 1>>${INTEGRATION_ROOT}/test.log 2>&1
+    unset cmap[dnet-1-consul-multi]
+    stop_dnet 2 consul-multi 1>>${INTEGRATION_ROOT}/test.log 2>&1
+    unset cmap[dnet-2-consul-multi]
+    stop_dnet 3 consul-multi 1>>${INTEGRATION_ROOT}/test.log 2>&1
+    unset cmap[dnet-3-consul-multi]
+}
+
+function run_multi_zk_tests() {
+    # Test multi node configuration with a global scope test driver
+
+    ## Setup
+    start_dnet 1 zookeeper-multi 1>>${INTEGRATION_ROOT}/test.log 2>&1
+    cmap[dnet-1-zookeeper-multi]=dnet-1-zookeeper-multi
+    start_dnet 2 zookeeper-multi 1>>${INTEGRATION_ROOT}/test.log 2>&1
+    cmap[dnet-2-zookeeper-multi]=dnet-2-zookeeper-multi
+    start_dnet 3 zookeeper-multi 1>>${INTEGRATION_ROOT}/test.log 2>&1
+    cmap[dnet-3-zookeeper-multi]=dnet-3-zookeeper-multi
+
+    ## Run the test cases
+    ./integration-tmp/bin/bats ./test/integration/dnet/multi.bats
+
+    ## Teardown
+    stop_dnet 1 zookeeper-multi 1>>${INTEGRATION_ROOT}/test.log 2>&1
+    unset cmap[dnet-1-zookeeper-multi]
+    stop_dnet 2 zookeeper-multi 1>>${INTEGRATION_ROOT}/test.log 2>&1
+    unset cmap[dnet-2-zookeeper-multi]
+    stop_dnet 3 zookeeper-multi 1>>${INTEGRATION_ROOT}/test.log 2>&1
+    unset cmap[dnet-3-zookeeper-multi]
 }
 
 source ./test/integration/dnet/helpers.bash
@@ -143,14 +160,17 @@ fi
 start_consul 1>>${INTEGRATION_ROOT}/test.log 2>&1
 cmap[pr_consul]=pr_consul
 
+start_zookeeper 1>>${INTEGRATION_ROOT}/test.log 2>&1
+cmap[zookeeper_server]=zookeeper_server
+
 if [ -z "$SUITES" ]; then
     if [ -n "$CIRCLECI" ]
     then
 	# We can only run a limited list of suites in circleci because of the
 	# old kernel and limited docker environment.
-	suites="dnet simple multi"
+	suites="dnet simple multi_consul multi_zk"
     else
-	suites="dnet simple multi bridge overlay_consul overlay_zk"
+	suites="dnet simple multi_consul multi_zk bridge overlay_consul overlay_zk"
     fi
 else
     suites="$SUITES"
@@ -165,3 +185,6 @@ done
 # Suite teardowm
 stop_consul 1>>${INTEGRATION_ROOT}/test.log 2>&1
 unset cmap[pr_consul]
+
+stop_zookeeper 1>>${INTEGRATION_ROOT}/test.log 2>&1
+unset cmap[zookeeper_server]

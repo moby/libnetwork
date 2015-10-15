@@ -129,7 +129,7 @@ function start_dnet() {
     mkdir -p /tmp/dnet/${name}
     tomlfile="/tmp/dnet/${name}/libnetwork.toml"
 
-    if [ "$store" = "zookeeper" ]; then
+    if [ "$store" =~ ^zookeeper-* ]; then
 	read discovery provider address < <(parse_discovery_str zk://${bridge_ip}:2182)
     else
 	read discovery provider address < <(parse_discovery_str consul://${bridge_ip}:8500)
