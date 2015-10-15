@@ -6,7 +6,7 @@ Libnetwork has a default, built-in ipam driver and allows third party ipam drive
 
 ## Remote Ipam driver
 
-On the same line of remote network driver registration (see [remote.md] for more details), Libnetwork initializes the `ipams.remote` package with the `Init()` function, it passes a `ipamapi.Callback` as a parameter, which implements `RegisterOpamDriver()`. The remote driver package uses this interface to register remote drivers with Libnetwork's `NetworkController`, by supplying it in a `plugins.Handle` callback.  The remote drivers register and communicate with libnetwork via the Docker plugin package. The `ipams.remote` provides the proxy for the remote driver processes.
+On the same line of remote network driver registration (see [Remote Drivers](remote.md) for more details), Libnetwork initializes the `ipams.remote` package with the `Init()` function, it passes a `ipamapi.Callback` as a parameter, which implements `RegisterIpamDriver()`. The remote driver package uses this interface to register remote drivers with Libnetwork's `NetworkController`, by supplying it in a `plugins.Handle` callback.  The remote drivers register and communicate with libnetwork via the Docker plugin package. The `ipams.remote` provides the proxy for the remote driver processes.
 
 
 ## Protocol
@@ -79,28 +79,39 @@ In the list of configurations, each element has the following form:
 
 
 On network creation, libnetwork will iterate the list and perform the following requests to ipam driver:
-1) Request the address pool and pass the options along via `RequestPool()`.
-2) Request the network gateway address if specified. Otherwise request any address from the pool to be used as network gateway. This is done via `RequestAddress()`.
-3) Request each of the specified auxiliary addresses via `RequestAddress()`.
+
+1. Request the address pool and pass the options along via `RequestPool()`
+
+2. Request the network gateway address if specified. Otherwise request any address from the pool to be used as network gateway. This is done via `RequestAddress()`
+
+3. Request each of the specified auxiliary addresses via `RequestAddress()`
 
 If the list of ipv4 configurations is empty, libnetwork will automatically add one empty `IpamConf` structure. This will cause libnetwork to request ipam driver an ipv4 address pool of the driver choice on the configured address space, if specified, or on the ipam driver default address space otherwise. If the ipam driver is not able to provide an address pool, network creation will fail.
 If the list of ipv6 configurations is empty, libnetwork will not take any action.
 The data retrieved from the ipam driver during the execution of point 1) to 3) will be stored in the network structure as a list of `IpamInfo` structures for IPv6 and for IPv6.
+Network creation will fail if any of the above operation does not succeed, i.e it returns a non-nil error. It will also fail if the gateway address returned by the ipam driver is nil.
 
 On endpoint creation, libnetwork will iterate over the list of configs and perform the following operation:
-1) Request an IPv4 address from the ipv4 pool and assign it to the endpoint interface ipv4 address. If successful, stop iterating.
-2) Request an IPv6 address from the ipv6 pool (if exists) and assign it to the endpoint interface ipv6 address. If successful, stop iterating.
 
-Endpoint creation will fail if any of the above operation does not succeed
+1. Request an IPv4 address from the ipv4 pool and assign it to the endpoint interface ipv4 address. If successful, stop iterating.
+
+2. Request an IPv6 address from the ipv6 pool (if exists) and assign it to the endpoint interface ipv6 address. If successful, stop iterating.
+
+Endpoint creation will fail if any of the above operation does not succeed. It will also fail if the address returned by the ipam driver is nil.
 
 On endpoint deletion, libnetwork will perform the following operations:
-1) Release the endpoint interface IPv4 address
-2) Release the endpoint interface IPv6 address if present
+
+1. Release the endpoint interface IPv4 address
+
+2. Release the endpoint interface IPv6 address if present
 
 On Network deletion libnetwork will iterate the list of `IpamData` structures and perform the following requests to ipam driver:
-1) Release the network gateway address via `ReleaseAddress()`
-2) Release each of the auxiliary addresses via `ReleaseAddress()`
-3) Release the pool via `ReleasePool()`
+
+1. Release the network gateway address via `ReleaseAddress()`
+
+2. Release each of the auxiliary addresses via `ReleaseAddress()`
+
+3. Release the pool via `ReleasePool()`
 
 ### GetDefaultAddressSpaces
 

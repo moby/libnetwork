@@ -638,7 +638,19 @@ func (ep *endpoint) assignAddress() error {
 	if err != nil {
 		return err
 	}
-	return ep.assignAddressVersion(6, ipam)
+
+	err = ep.assignAddressVersion(6, ipam)
+	if err != nil {
+		return err
+	}
+
+	// Verify Ipam driver returned valid IP addresses for this endpoint
+	if ep.Iface().Address() == nil || (len(n.ipamV6Info) != 0 && ep.Iface().AddressIPv6() == nil) {
+		return types.InternalErrorf("invalid address returned by ipam driver %q for the endpoint's interface: IPv4: %v, IPv6: %v",
+			n.ipamType, ep.Iface().Address(), ep.Iface().AddressIPv6())
+	}
+
+	return nil
 }
 
 func (ep *endpoint) assignAddressVersion(ipVer int, ipam ipamapi.Ipam) error {

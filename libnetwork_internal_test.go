@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"strings"
 	"testing"
 
 	"github.com/docker/libnetwork/datastore"
@@ -302,7 +303,7 @@ func TestAuxAddresses(t *testing.T) {
 	}
 	defer c.Stop()
 
-	n := &network{ipamType: ipamapi.DefaultIPAM, ctrlr: c.(*controller)}
+	n := &network{ipamType: ipamapi.DefaultIPAM, networkType: "bridge", ctrlr: c.(*controller)}
 
 	input := []struct {
 		masterPool   string
@@ -430,4 +431,89 @@ func (b *badDriver) DiscoverDelete(dType driverapi.DiscoveryType, data interface
 }
 func (b *badDriver) Type() string {
 	return badDriverName
+}
+
+func TestValidateIpam(t *testing.T) {
+	c := &controller{ipamDrivers: ipamTable{}}
+	bi := badIpamDriver{}
+	c.ipamDrivers[badIpamDriverName] = &ipamData{driver: &bi}
+	n := &network{ipamType: badIpamDriverName, addrSpace: "any", ctrlr: c}
+	ep := &endpoint{name: "ep1", network: n, generic: make(map[string]interface{}), iface: &endpointInterface{}}
+
+	// check v4 bad data
+	n.ipamV4Config = []*IpamConf{&IpamConf{}}
+
+	runIpamAllocateCheck(n, t)
+	runIpamAssignCheck(ep, t)
+
+	// make v4 work fine and test validation on v6
+	bi.pool, _ = types.ParseCIDR("192.168.0.0/16")
+	bi.address, _ = types.ParseCIDR("192.168.0.23/16")
+	bi.poolV6, _ = types.ParseCIDR("2001:2002::/64")
+	n.ipamV6Config = []*IpamConf{&IpamConf{PreferredPool: "2001:2002::/64"}}
+
+	runIpamAllocateCheck(n, t)
+	runIpamAssignCheck(ep, t)
+
+}
+
+func runIpamAllocateCheck(n *network, t *testing.T) {
+	err := n.ipamAllocate()
+	if err == nil {
+		t.Fatalf("allocation validation should have failed")
+	}
+	if _, ok := err.(types.InternalError); !ok {
+		t.Fatalf("unexpected failure error type: %v", err)
+	}
+	if !strings.Contains(err.Error(), "invalid") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func runIpamAssignCheck(ep *endpoint, t *testing.T) {
+	err := ep.assignAddress()
+	if err == nil {
+		t.Fatalf("allocation validation should have failed")
+	}
+	if _, ok := err.(types.InternalError); !ok {
+		t.Fatalf("unexpected failure error type: %v", err)
+	}
+	if !strings.Contains(err.Error(), "invalid") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+var badIpamDriverName = "bad ipam"
+
+type badIpamDriver struct {
+	pool      *net.IPNet
+	address   *net.IPNet
+	poolV6    *net.IPNet
+	addressV6 *net.IPNet
+}
+
+func (b *badIpamDriver) GetDefaultAddressSpaces() (string, string, error) {
+	return "", "", nil
+}
+func (b *badIpamDriver) RequestPool(addressSpace, pool, subPool string, options map[string]string, v6 bool) (string, *net.IPNet, map[string]string, error) {
+	var pid string
+	p := b.pool
+	if v6 {
+		p = b.poolV6
+		pid = "v6poolid"
+	}
+	return pid, p, nil, nil
+}
+func (b *badIpamDriver) ReleasePool(poolID string) error {
+	return nil
+}
+func (b *badIpamDriver) RequestAddress(poolID string, pref net.IP, ops map[string]string) (*net.IPNet, map[string]string, error) {
+	addr := b.address
+	if poolID == "v6poolid" {
+		addr = b.addressV6
+	}
+	return addr, nil, nil
+}
+func (b *badIpamDriver) ReleaseAddress(string, net.IP) error {
+	return nil
 }

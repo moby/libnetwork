@@ -828,7 +828,6 @@ func (n *network) getController() *controller {
 }
 
 func (n *network) ipamAllocate() error {
-	// For now also exclude bridge from using new ipam
 	if n.Type() == "host" || n.Type() == "null" {
 		return nil
 	}
@@ -849,13 +848,19 @@ func (n *network) ipamAllocate() error {
 		return err
 	}
 
-	defer func() {
-		if err != nil {
-			n.ipamReleaseVersion(4, ipam)
-		}
-	}()
+	err = n.ipamAllocateVersion(6, ipam)
+	if err != nil {
+		return err
+	}
 
-	return n.ipamAllocateVersion(6, ipam)
+	// Verify Ipam driver returned a valid Pool and Gateway for each internally or externally supplied IpamConf
+	for _, ipd := range append(n.getIPInfo(4), n.getIPInfo(6)...) {
+		if ipd.Pool == nil || ipd.Gateway == nil {
+			return types.InternalErrorf("invalid pool and/or gateway returned by ipam driver %q: (%v,%v)", n.ipamType, ipd.Pool, ipd.Gateway)
+		}
+	}
+
+	return nil
 }
 
 func (n *network) ipamAllocateVersion(ipVer int, ipam ipamapi.Ipam) error {
@@ -946,7 +951,6 @@ func (n *network) ipamAllocateVersion(ipVer int, ipam ipamapi.Ipam) error {
 }
 
 func (n *network) ipamRelease() {
-	// For now exclude host and null
 	if n.Type() == "host" || n.Type() == "null" {
 		return
 	}
