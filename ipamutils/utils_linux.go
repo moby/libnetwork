@@ -8,8 +8,11 @@ import (
 	"github.com/docker/libnetwork/netutils"
 	"github.com/docker/libnetwork/osl"
 	"github.com/docker/libnetwork/resolvconf"
+	"github.com/docker/libnetwork/types"
 	"github.com/vishvananda/netlink"
 )
+
+const defaultInterface = "docker0"
 
 // ElectInterfaceAddresses looks for an interface on the OS with the specified name
 // and returns its IPv4 and IPv6 addresses in CIDR form. If the interface does not exist,
@@ -48,6 +51,8 @@ func ElectInterfaceAddresses(name string) (*net.IPNet, []*net.IPNet, error) {
 		if err != nil {
 			return nil, nil, err
 		}
+		// Make sure docker behaviour for default bridge is preserved
+		v4Net = adjustIfDefaultInterface(name, v4Net)
 	}
 
 	return v4Net, v6Nets, nil
@@ -71,4 +76,12 @@ func FindAvailableNetwork(list []*net.IPNet) (*net.IPNet, error) {
 		}
 	}
 	return nil, fmt.Errorf("no available network")
+}
+
+func adjustIfDefaultInterface(name string, nw *net.IPNet) *net.IPNet {
+	if name == defaultInterface && nw.String() == "172.17.0.0/16" {
+		dw, _ := types.ParseCIDR("172.17.42.1/16")
+		return dw
+	}
+	return nw
 }
