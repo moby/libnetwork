@@ -157,6 +157,7 @@ type network struct {
 	generic      options.Generic
 	dbIndex      uint64
 	svcRecords   svcMap
+	ignoreSvcs   bool
 	dbExists     bool
 	persist      bool
 	stopWatchCh  chan struct{}
@@ -298,6 +299,7 @@ func (n *network) CopyTo(o datastore.KVObject) error {
 	dstN.networkType = n.networkType
 	dstN.ipamType = n.ipamType
 	dstN.enableIPv6 = n.enableIPv6
+	dstN.ignoreSvcs = n.ignoreSvcs
 	dstN.persist = n.persist
 	dstN.postIPv6 = n.postIPv6
 	dstN.dbIndex = n.dbIndex
@@ -356,6 +358,7 @@ func (n *network) MarshalJSON() ([]byte, error) {
 	netMap["ipamType"] = n.ipamType
 	netMap["addrSpace"] = n.addrSpace
 	netMap["enableIPv6"] = n.enableIPv6
+	netMap["ignoreSvcs"] = n.ignoreSvcs
 	if n.generic != nil {
 		netMap["generic"] = n.generic
 	}
@@ -452,10 +455,13 @@ func (n *network) UnmarshalJSON(b []byte) (err error) {
 			return err
 		}
 	}
+	if v, ok := netMap["ignoreSvcs"]; ok {
+		n.ignoreSvcs = v.(bool)
+	}
 	return nil
 }
 
-// NetworkOption is a option setter function type used to pass varios options to
+// NetworkOption is a option setter function type used to pass various options to
 // NewNetwork method. The various setter functions of type NetworkOption are
 // provided by libnetwork, they look like NetworkOptionXXXX(...)
 type NetworkOption func(n *network)
@@ -467,6 +473,9 @@ func NetworkOptionGeneric(generic map[string]interface{}) NetworkOption {
 		n.generic = generic
 		if _, ok := generic[netlabel.EnableIPv6]; ok {
 			n.enableIPv6 = generic[netlabel.EnableIPv6].(bool)
+		}
+		if _, ok := generic[netlabel.IgnoreSvcs]; ok {
+			n.ignoreSvcs = generic[netlabel.IgnoreSvcs].(bool)
 		}
 	}
 }
@@ -506,6 +515,12 @@ func NetworkOptionDriverOpts(opts map[string]string) NetworkOption {
 			var err error
 			if n.enableIPv6, err = strconv.ParseBool(val); err != nil {
 				log.Warnf("Failed to parse %s' value: %s (%s)", netlabel.EnableIPv6, val, err.Error())
+			}
+		}
+		if val, ok := opts[netlabel.IgnoreSvcs]; ok {
+			var err error
+			if n.ignoreSvcs, err = strconv.ParseBool(val); err != nil {
+				log.Warnf("Failed to parse %s' value: %s (%s)", netlabel.IgnoreSvcs, val, err.Error())
 			}
 		}
 	}
@@ -782,7 +797,7 @@ func (n *network) EndpointByID(id string) (Endpoint, error) {
 }
 
 func (n *network) updateSvcRecord(ep *endpoint, localEps []*endpoint, isAdd bool) {
-	if ep.isAnonymous() {
+	if ep.isAnonymous() || n.ignoreSvcs {
 		return
 	}
 
