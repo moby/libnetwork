@@ -36,6 +36,9 @@ type Network interface {
 	// specified unique name. The options parameter carry driver specific options.
 	CreateEndpoint(name string, options ...EndpointOption) (Endpoint, error)
 
+	// Alters the options of a network
+	ModifyOptions(opts map[string]string) error
+
 	// Delete the network.
 	Delete() error
 
@@ -505,11 +508,17 @@ func NetworkOptionDriverOpts(opts map[string]string) NetworkOption {
 		if n.generic == nil {
 			n.generic = make(map[string]interface{})
 		}
+		if n.generic[netlabel.GenericData] == nil {
+			n.generic[netlabel.GenericData] = make(map[string]string)
+		}
 		if opts == nil {
 			opts = make(map[string]string)
 		}
-		// Store the options
-		n.generic[netlabel.GenericData] = opts
+		// Merge the options with existing values
+		datamap := n.generic[netlabel.GenericData].(map[string]string)
+		for k, v := range opts {
+			datamap[k] = v
+		}
 		// Decode and store the endpoint options of libnetwork interest
 		if val, ok := opts[netlabel.EnableIPv6]; ok {
 			var err error
@@ -534,6 +543,18 @@ func NetworkOptionDeferIPv6Alloc(enable bool) NetworkOption {
 	return func(n *network) {
 		n.postIPv6 = enable
 	}
+}
+
+// ModifyOptions alters the options of an existing network
+func (n *network) ModifyOptions(opts map[string]string) error {
+	for key := range opts {
+		if key == netlabel.IgnoreSvcs {
+			continue
+		}
+		return types.BadRequestErrorf("Key %s may not be altered on networks", key)
+	}
+	n.processOptions(NetworkOptionDriverOpts(opts))
+	return nil
 }
 
 func (n *network) processOptions(options ...NetworkOption) {
@@ -797,7 +818,7 @@ func (n *network) EndpointByID(id string) (Endpoint, error) {
 }
 
 func (n *network) updateSvcRecord(ep *endpoint, localEps []*endpoint, isAdd bool) {
-	if ep.isAnonymous() || n.ignoreSvcs {
+	if ep.isAnonymous() || (isAdd && n.ignoreSvcs) {
 		return
 	}
 
