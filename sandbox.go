@@ -217,7 +217,7 @@ func (sb *sandbox) delete(force bool) error {
 	}
 	// Container is going away. Path cache in etchosts is most
 	// likely not required any more. Drop it.
-	etchosts.Drop(sb.config.hostsPath)
+	etchosts.Drop(sb.hostsPath())
 
 	if sb.resolver != nil {
 		sb.resolver.Stop()
@@ -714,25 +714,42 @@ func (sb *sandbox) clearNetworkResources(origEp *endpoint) error {
 }
 
 const (
-	defaultPrefix = "/var/lib/docker/network/files"
-	dirPerm       = 0755
-	filePerm      = 0644
+	dirPerm  = 0755
+	filePerm = 0644
 )
 
-func (sb *sandbox) buildHostsFile() error {
+// hostsPath returns the path location for the sandbox hosts file.
+// It initializes the path based on the controller data directory
+// if the config path is empty.
+func (sb *sandbox) hostsPath() string {
 	if sb.config.hostsPath == "" {
-		sb.config.hostsPath = defaultPrefix + "/" + sb.id + "/hosts"
+		sb.config.hostsPath = filepath.Join(sb.controller.DataDir(), sb.id, "hosts")
 	}
+	return sb.config.hostsPath
+}
 
-	dir, _ := filepath.Split(sb.config.hostsPath)
+// resolvConfPath returns the path location for the sandbox resolvConf file.
+// It initializes the path based on the controller data directory
+// if the config path is empty.
+func (sb *sandbox) resolvConfPath() string {
+	if sb.config.resolvConfPath == "" {
+		sb.config.resolvConfPath = filepath.Join(sb.controller.DataDir(), sb.id, "resolv.conf")
+	}
+	return sb.config.resolvConfPath
+}
+
+func (sb *sandbox) buildHostsFile() error {
+	hostsPath := sb.hostsPath()
+
+	dir, _ := filepath.Split(hostsPath)
 	if err := createBasePath(dir); err != nil {
 		return err
 	}
 
 	// This is for the host mode networking
 	if sb.config.originHostsPath != "" {
-		if err := copyFile(sb.config.originHostsPath, sb.config.hostsPath); err != nil && !os.IsNotExist(err) {
-			return types.InternalErrorf("could not copy source hosts file %s to %s: %v", sb.config.originHostsPath, sb.config.hostsPath, err)
+		if err := copyFile(sb.config.originHostsPath, hostsPath); err != nil && !os.IsNotExist(err) {
+			return types.InternalErrorf("could not copy source hosts file %s to %s: %v", sb.config.originHostsPath, hostsPath, err)
 		}
 		return nil
 	}
@@ -742,7 +759,7 @@ func (sb *sandbox) buildHostsFile() error {
 		extraContent = append(extraContent, etchosts.Record{Hosts: extraHost.name, IP: extraHost.IP})
 	}
 
-	return etchosts.Build(sb.config.hostsPath, "", sb.config.hostName, sb.config.domainName, extraContent)
+	return etchosts.Build(hostsPath, "", sb.config.hostName, sb.config.domainName, extraContent)
 }
 
 func (sb *sandbox) updateHostsFile(ifaceIP string) error {
@@ -766,13 +783,13 @@ func (sb *sandbox) updateHostsFile(ifaceIP string) error {
 }
 
 func (sb *sandbox) addHostsEntries(recs []etchosts.Record) {
-	if err := etchosts.Add(sb.config.hostsPath, recs); err != nil {
+	if err := etchosts.Add(sb.hostsPath(), recs); err != nil {
 		log.Warnf("Failed adding service host entries to the running container: %v", err)
 	}
 }
 
 func (sb *sandbox) deleteHostsEntries(recs []etchosts.Record) {
-	if err := etchosts.Delete(sb.config.hostsPath, recs); err != nil {
+	if err := etchosts.Delete(sb.hostsPath(), recs); err != nil {
 		log.Warnf("Failed deleting service host entries to the running container: %v", err)
 	}
 }
@@ -785,7 +802,7 @@ func (sb *sandbox) updateParentHosts() error {
 		if pSb == nil {
 			continue
 		}
-		if err := etchosts.Update(pSb.(*sandbox).config.hostsPath, update.ip, update.name); err != nil {
+		if err := etchosts.Update(pSb.(*sandbox).hostsPath(), update.ip, update.name); err != nil {
 			return err
 		}
 	}
@@ -795,22 +812,19 @@ func (sb *sandbox) updateParentHosts() error {
 
 func (sb *sandbox) setupDNS() error {
 	var newRC *resolvconf.File
+	resolvConfPath := sb.resolvConfPath()
 
-	if sb.config.resolvConfPath == "" {
-		sb.config.resolvConfPath = defaultPrefix + "/" + sb.id + "/resolv.conf"
-	}
+	sb.config.resolvConfHashFile = resolvConfPath + ".hash"
 
-	sb.config.resolvConfHashFile = sb.config.resolvConfPath + ".hash"
-
-	dir, _ := filepath.Split(sb.config.resolvConfPath)
+	dir, _ := filepath.Split(resolvConfPath)
 	if err := createBasePath(dir); err != nil {
 		return err
 	}
 
 	// This is for the host mode networking
 	if sb.config.originResolvConfPath != "" {
-		if err := copyFile(sb.config.originResolvConfPath, sb.config.resolvConfPath); err != nil {
-			return fmt.Errorf("could not copy source resolv.conf file %s to %s: %v", sb.config.originResolvConfPath, sb.config.resolvConfPath, err)
+		if err := copyFile(sb.config.originResolvConfPath, resolvConfPath); err != nil {
+			return fmt.Errorf("could not copy source resolv.conf file %s to %s: %v", sb.config.originResolvConfPath, resolvConfPath, err)
 		}
 		return nil
 	}
@@ -836,7 +850,7 @@ func (sb *sandbox) setupDNS() error {
 		if len(sb.config.dnsOptionsList) > 0 {
 			dnsOptionsList = sb.config.dnsOptionsList
 		}
-		newRC, err = resolvconf.Build(sb.config.resolvConfPath, dnsList, dnsSearchList, dnsOptionsList)
+		newRC, err = resolvconf.Build(resolvConfPath, dnsList, dnsSearchList, dnsOptionsList)
 		if err != nil {
 			return err
 		}
@@ -846,7 +860,7 @@ func (sb *sandbox) setupDNS() error {
 			return err
 		}
 		// No contention on container resolv.conf file at sandbox creation
-		if err := ioutil.WriteFile(sb.config.resolvConfPath, newRC.Content, filePerm); err != nil {
+		if err := ioutil.WriteFile(resolvConfPath, newRC.Content, filePerm); err != nil {
 			return types.InternalErrorf("failed to write unhaltered resolv.conf file content when setting up dns for sandbox %s: %v", sb.ID(), err)
 		}
 	}
@@ -861,15 +875,16 @@ func (sb *sandbox) setupDNS() error {
 
 func (sb *sandbox) updateDNS(ipv6Enabled bool) error {
 	var (
-		currHash string
-		hashFile = sb.config.resolvConfHashFile
+		currHash       string
+		hashFile       = sb.config.resolvConfHashFile
+		resolvConfPath = sb.resolvConfPath()
 	)
 
 	if len(sb.config.dnsList) > 0 || len(sb.config.dnsSearchList) > 0 || len(sb.config.dnsOptionsList) > 0 {
 		return nil
 	}
 
-	currRC, err := resolvconf.GetSpecific(sb.config.resolvConfPath)
+	currRC, err := resolvconf.GetSpecific(resolvConfPath)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return err
@@ -899,7 +914,7 @@ func (sb *sandbox) updateDNS(ipv6Enabled bool) error {
 	}
 
 	// for atomic updates to these files, use temporary files with os.Rename:
-	dir := path.Dir(sb.config.resolvConfPath)
+	dir := path.Dir(resolvConfPath)
 	tmpHashFile, err := ioutil.TempFile(dir, "hash")
 	if err != nil {
 		return err
@@ -926,7 +941,7 @@ func (sb *sandbox) updateDNS(ipv6Enabled bool) error {
 	if err = os.Rename(tmpHashFile.Name(), hashFile); err != nil {
 		return err
 	}
-	return os.Rename(tmpResolvFile.Name(), sb.config.resolvConfPath)
+	return os.Rename(tmpResolvFile.Name(), resolvConfPath)
 }
 
 // Embedded DNS server has to be enabled for this sandbox. Rebuild the container's
