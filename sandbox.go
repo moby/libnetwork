@@ -721,8 +721,13 @@ func (sb *sandbox) setupDNS() error {
 		}
 	} else {
 		// Replace any localhost/127.* (at this point we have no info about ipv6, pass it as true)
-		if newRC, err = resolvconf.FilterResolvDNS(currRC.Content, true); err != nil {
-			return err
+		// Don't do this for default sandbox (host networking)
+		if sb.config.useDefaultSandBox {
+			newRC = currRC
+		} else {
+			if newRC, err = resolvconf.FilterResolvDNS(currRC.Content, true); err != nil {
+				return err
+			}
 		}
 		// No contention on container resolv.conf file at sandbox creation
 		if err := ioutil.WriteFile(sb.config.resolvConfPath, newRC.Content, filePerm); err != nil {
@@ -743,6 +748,7 @@ func (sb *sandbox) updateDNS(ipv6Enabled bool) error {
 		currHash string
 		hashFile = sb.config.resolvConfHashFile
 	)
+	var newRC *resolvconf.File
 
 	if len(sb.config.dnsList) > 0 || len(sb.config.dnsSearchList) > 0 || len(sb.config.dnsOptionsList) > 0 {
 		return nil
@@ -772,9 +778,14 @@ func (sb *sandbox) updateDNS(ipv6Enabled bool) error {
 	}
 
 	// replace any localhost/127.* and remove IPv6 nameservers if IPv6 disabled.
-	newRC, err := resolvconf.FilterResolvDNS(currRC.Content, ipv6Enabled)
-	if err != nil {
-		return err
+	// Don't do this for default sandbox (host networking)
+	if sb.config.useDefaultSandBox {
+		newRC = currRC
+	} else {
+		newRC, err = resolvconf.FilterResolvDNS(currRC.Content, ipv6Enabled)
+		if err != nil {
+			return err
+		}
 	}
 
 	// for atomic updates to these files, use temporary files with os.Rename:

@@ -211,3 +211,25 @@ func TestSandboxAddSamePrio(t *testing.T) {
 
 	osl.GC()
 }
+
+func TestDefaultSandboxAddEmpty(t *testing.T) {
+	ctrlr := createEmptyCtrlr()
+
+	var sboxOptions []SandboxOption
+	sboxOptions = append(sboxOptions, OptionUseDefaultSandbox())
+
+	sbx, err := ctrlr.NewSandbox("sandbox0", sboxOptions...)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := sbx.Delete(); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(ctrlr.sandboxes) != 0 {
+		t.Fatalf("controller sandboxes is not empty. len = %d", len(ctrlr.sandboxes))
+	}
+
+	osl.GC()
+}
