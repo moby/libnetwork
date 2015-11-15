@@ -29,7 +29,6 @@ type Allocator struct {
 	// Predefined pools for default address spaces
 	predefined map[string][]*net.IPNet
 	addrSpaces map[string]*addrSpace
-	// stores        []datastore.Datastore
 	// Allocated addresses in each address space's subnet
 	addresses map[SubnetKey]*bitseq.Handle
 	sync.Mutex
