@@ -544,17 +544,12 @@ func (ep *endpoint) sbLeave(sbox Sandbox, options ...EndpointOption) error {
 		}
 	}
 
-	if err := sb.clearNetworkResources(ep); err != nil {
-		log.Warnf("Could not cleanup network resources on container %s disconnect: %v", ep.name, err)
-	}
-
-	// Update the store about the sandbox detach only after we
-	// have completed sb.clearNetworkresources above to avoid
-	// spurious logs when cleaning up the sandbox when the daemon
-	// ungracefully exits and restarts before completing sandbox
-	// detach but after store has been updated.
 	if err := n.getController().updateToStore(ep); err != nil {
 		return err
+	}
+
+	if err := sb.clearNetworkResources(ep); err != nil {
+		log.Warnf("Could not cleanup network resources on container %s disconnect: %v", ep.name, err)
 	}
 
 	sb.deleteHostsEntries(n.getSvcRecords(ep))
