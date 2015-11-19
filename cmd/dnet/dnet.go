@@ -344,7 +344,7 @@ func startTestDriver() error {
 }
 
 func newDnetConnection(val string) (*dnetConnection, error) {
-	url, err := parsers.ParseHost(DefaultHTTPHost, DefaultUnixSocket, val)
+	url, err := parsers.ParseDockerDaemonHost(DefaultHTTPHost, DefaultUnixSocket, val)
 	if err != nil {
 		return nil, err
 	}
