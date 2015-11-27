@@ -747,8 +747,8 @@ func (sb *sandbox) updateDNS(ipv6Enabled bool) error {
 	var (
 		currHash string
 		hashFile = sb.config.resolvConfHashFile
+		newRC    *resolvconf.File
 	)
-	var newRC *resolvconf.File
 
 	if len(sb.config.dnsList) > 0 || len(sb.config.dnsSearchList) > 0 || len(sb.config.dnsOptionsList) > 0 {
 		return nil
