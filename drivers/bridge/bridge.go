@@ -1047,8 +1047,12 @@ func (d *driver) DeleteEndpoint(nid, eid string) error {
 		}
 	}()
 
+	n.Lock()
+	config := n.config
+	n.Unlock()
+	
 	// Remove port mappings. Do not stop endpoint delete on unmap failure
-	n.releasePorts(ep)
+	n.releasePorts(ep, config.DefaultBindingIP)
 
 	// Try removal of link. Discard error: it is a best effort.
 	// Also make sure defer does not see this error either.
