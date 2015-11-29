@@ -243,7 +243,7 @@ func (c *ChainInfo) ForwardOutgoing(action Action, source net.IP, destination ne
 			return ChainError{Chain: "FORWARD", Output: output}
 		}
 	}
-	
+
 	return nil
 }
 

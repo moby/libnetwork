@@ -1050,7 +1050,7 @@ func (d *driver) DeleteEndpoint(nid, eid string) error {
 	n.Lock()
 	config := n.config
 	n.Unlock()
-	
+
 	// Remove port mappings. Do not stop endpoint delete on unmap failure
 	n.releasePorts(ep, config.DefaultBindingIP)
 

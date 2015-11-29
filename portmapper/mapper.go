@@ -60,12 +60,12 @@ func (pm *PortMapper) SetIptablesChain(c *iptables.ChainInfo, bridgeName string)
 	pm.bridgeName = bridgeName
 }
 
-// sets correct outgoing route 
+// sets correct outgoing route
 func (pm *PortMapper) SetupOutgoingRoute(hostIP net.IP, containerIP net.IP) error {
 	return pm.forwardOutgoing(iptables.Append, hostIP, containerIP)
 }
 
-// releases used outgoing route 
+// releases used outgoing route
 func (pm *PortMapper) DestroyOutgoingRoute(hostIP net.IP, containerIP net.IP) error {
 	return pm.forwardOutgoing(iptables.Delete, hostIP, containerIP)
 }
@@ -193,7 +193,7 @@ func (pm *PortMapper) Unmap(host net.Addr) error {
 	case *net.UDPAddr:
 		return pm.Allocator.ReleasePort(a.IP, "udp", a.Port)
 	}
-	
+
 	return nil
 }
 

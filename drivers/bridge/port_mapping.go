@@ -86,7 +86,7 @@ func (n *bridgeNetwork) allocatePort(bnd *types.PortBinding, containerIP, defHos
 	if err != nil {
 		return err
 	}
-	
+
 	// setup outgoing route
 	if err := n.portMapper.SetupOutgoingRoute(bnd.HostIP, containerIP); err != nil {
 		return err
@@ -108,11 +108,11 @@ func (n *bridgeNetwork) allocatePort(bnd *types.PortBinding, containerIP, defHos
 
 func (n *bridgeNetwork) releasePorts(ep *bridgeEndpoint, reqDefBindIP net.IP) error {
 	defHostIP := defaultBindingIP
-	
+
 	if reqDefBindIP != nil {
 		defHostIP = reqDefBindIP
 	}
-  
+
 	return n.releasePortsInternal(ep.portMapping, ep.addr.IP, defHostIP)
 }
 
@@ -125,7 +125,7 @@ func (n *bridgeNetwork) releasePortsInternal(bindings []types.PortBinding, conta
 			errorBuf.WriteString(fmt.Sprintf("\ncould not release %v because of %v", m, err))
 		}
 	}
-  
+
 	n.portMapper.DestroyOutgoingRoute(defaultHostIP, containerIP)
 
 	if errorBuf.Len() != 0 {
@@ -140,8 +140,8 @@ func (n *bridgeNetwork) releasePort(bnd types.PortBinding, containerIP net.IP) e
 	if err != nil {
 		return err
 	}
-	
+
 	n.portMapper.DestroyOutgoingRoute(bnd.HostIP, containerIP)
-	
+
 	return n.portMapper.Unmap(host)
 }
