@@ -386,6 +386,9 @@ func (ep *endpoint) sbJoin(sbox Sandbox, options ...EndpointOption) error {
 		}
 	}()
 
+	// Watch for service records
+	network.getController().watchSvcRecord(ep)
+
 	address := ""
 	if ip := ep.getFirstInterfaceAddress(); ip != nil {
 		address = ip.String()
@@ -393,9 +396,6 @@ func (ep *endpoint) sbJoin(sbox Sandbox, options ...EndpointOption) error {
 	if err = sb.updateHostsFile(address, network.getSvcRecords(ep)); err != nil {
 		return err
 	}
-
-	// Watch for service records
-	network.getController().watchSvcRecord(ep)
 
 	if err = sb.updateDNS(network.enableIPv6); err != nil {
 		return err
@@ -584,7 +584,8 @@ func (ep *endpoint) Delete() error {
 	ep.Lock()
 	epid := ep.id
 	name := ep.name
-	if ep.sandboxID != "" {
+	sb, _ := n.getController().SandboxByID(ep.sandboxID)
+	if sb != nil {
 		ep.Unlock()
 		return &ActiveContainerError{name: name, id: epid}
 	}
