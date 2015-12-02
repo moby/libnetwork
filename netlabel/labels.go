@@ -27,8 +27,11 @@ const (
 	// ExposedPorts constant represents the container's Exposed Ports
 	ExposedPorts = Prefix + ".endpoint.exposedports"
 
-	//EnableIPv6 constant represents enabling IPV6 at network level
+	// EnableIPv6 constant represents enabling IPV6 at network level
 	EnableIPv6 = Prefix + ".enable_ipv6"
+
+	// IgnoreSvcs represents ignoring service registration at network level
+	IgnoreSvcs = Prefix + ".ignore_svcs"
 
 	// DriverMTU constant represents the MTU size for the network driver
 	DriverMTU = DriverPrefix + ".mtu"

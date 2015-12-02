@@ -36,6 +36,9 @@ type Network interface {
 	// specified unique name. The options parameter carry driver specific options.
 	CreateEndpoint(name string, options ...EndpointOption) (Endpoint, error)
 
+	// Alters the options of a network
+	ModifyOptions(opts map[string]string) error
+
 	// Delete the network.
 	Delete() error
 
@@ -157,6 +160,7 @@ type network struct {
 	generic      options.Generic
 	dbIndex      uint64
 	svcRecords   svcMap
+	ignoreSvcs   bool
 	dbExists     bool
 	persist      bool
 	stopWatchCh  chan struct{}
@@ -298,6 +302,7 @@ func (n *network) CopyTo(o datastore.KVObject) error {
 	dstN.networkType = n.networkType
 	dstN.ipamType = n.ipamType
 	dstN.enableIPv6 = n.enableIPv6
+	dstN.ignoreSvcs = n.ignoreSvcs
 	dstN.persist = n.persist
 	dstN.postIPv6 = n.postIPv6
 	dstN.dbIndex = n.dbIndex
@@ -356,6 +361,7 @@ func (n *network) MarshalJSON() ([]byte, error) {
 	netMap["ipamType"] = n.ipamType
 	netMap["addrSpace"] = n.addrSpace
 	netMap["enableIPv6"] = n.enableIPv6
+	netMap["ignoreSvcs"] = n.ignoreSvcs
 	if n.generic != nil {
 		netMap["generic"] = n.generic
 	}
@@ -452,10 +458,13 @@ func (n *network) UnmarshalJSON(b []byte) (err error) {
 			return err
 		}
 	}
+	if v, ok := netMap["ignoreSvcs"]; ok {
+		n.ignoreSvcs = v.(bool)
+	}
 	return nil
 }
 
-// NetworkOption is a option setter function type used to pass varios options to
+// NetworkOption is a option setter function type used to pass various options to
 // NewNetwork method. The various setter functions of type NetworkOption are
 // provided by libnetwork, they look like NetworkOptionXXXX(...)
 type NetworkOption func(n *network)
@@ -467,6 +476,9 @@ func NetworkOptionGeneric(generic map[string]interface{}) NetworkOption {
 		n.generic = generic
 		if _, ok := generic[netlabel.EnableIPv6]; ok {
 			n.enableIPv6 = generic[netlabel.EnableIPv6].(bool)
+		}
+		if _, ok := generic[netlabel.IgnoreSvcs]; ok {
+			n.ignoreSvcs = generic[netlabel.IgnoreSvcs].(bool)
 		}
 	}
 }
@@ -496,16 +508,28 @@ func NetworkOptionDriverOpts(opts map[string]string) NetworkOption {
 		if n.generic == nil {
 			n.generic = make(map[string]interface{})
 		}
+		if n.generic[netlabel.GenericData] == nil {
+			n.generic[netlabel.GenericData] = make(map[string]string)
+		}
 		if opts == nil {
 			opts = make(map[string]string)
 		}
-		// Store the options
-		n.generic[netlabel.GenericData] = opts
+		// Merge the options with existing values
+		datamap := n.generic[netlabel.GenericData].(map[string]string)
+		for k, v := range opts {
+			datamap[k] = v
+		}
 		// Decode and store the endpoint options of libnetwork interest
 		if val, ok := opts[netlabel.EnableIPv6]; ok {
 			var err error
 			if n.enableIPv6, err = strconv.ParseBool(val); err != nil {
 				log.Warnf("Failed to parse %s' value: %s (%s)", netlabel.EnableIPv6, val, err.Error())
+			}
+		}
+		if val, ok := opts[netlabel.IgnoreSvcs]; ok {
+			var err error
+			if n.ignoreSvcs, err = strconv.ParseBool(val); err != nil {
+				log.Warnf("Failed to parse %s' value: %s (%s)", netlabel.IgnoreSvcs, val, err.Error())
 			}
 		}
 	}
@@ -519,6 +543,18 @@ func NetworkOptionDeferIPv6Alloc(enable bool) NetworkOption {
 	return func(n *network) {
 		n.postIPv6 = enable
 	}
+}
+
+// ModifyOptions alters the options of an existing network
+func (n *network) ModifyOptions(opts map[string]string) error {
+	for key := range opts {
+		if key == netlabel.IgnoreSvcs {
+			continue
+		}
+		return types.BadRequestErrorf("Key %s may not be altered on networks", key)
+	}
+	n.processOptions(NetworkOptionDriverOpts(opts))
+	return nil
 }
 
 func (n *network) processOptions(options ...NetworkOption) {
@@ -788,7 +824,7 @@ func (n *network) EndpointByID(id string) (Endpoint, error) {
 }
 
 func (n *network) updateSvcRecord(ep *endpoint, localEps []*endpoint, isAdd bool) {
-	if ep.isAnonymous() {
+	if ep.isAnonymous() || (isAdd && n.ignoreSvcs) {
 		return
 	}
 
