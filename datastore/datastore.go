@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/docker/libkv"
 	"github.com/docker/libkv/store"
@@ -136,7 +137,9 @@ func makeDefaultScopes() map[string]*ScopeCfg {
 			Provider: string(store.BOLTDB),
 			Address:  defaultPrefix + "/local-kv.db",
 			Config: &store.Config{
-				Bucket: "libnetwork",
+				Bucket:            "libnetwork",
+				PersistConnection: true,
+				ConnectionTimeout: 30 * time.Second,
 			},
 		},
 	}
@@ -210,6 +213,8 @@ func newClient(scope string, kv string, addr string, config *store.Config, cache
 	if kv == string(store.BOLTDB) {
 		// Parse file path
 		addrs = strings.Split(addr, ",")
+		config.PersistConnection = true
+		config.ConnectionTimeout = 30 * time.Second
 	} else {
 		// Parse URI
 		parts := strings.SplitN(addr, "/", 2)

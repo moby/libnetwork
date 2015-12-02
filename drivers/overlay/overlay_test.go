@@ -25,6 +25,7 @@ func setupDriver(t *testing.T) *driverTester {
 	if err := dt.d.configure(); err != nil {
 		t.Fatal(err)
 	}
+	defer dt.d.store.Close()
 
 	iface, err := net.InterfaceByName("eth0")
 	if err != nil {
@@ -96,6 +97,7 @@ func TestOverlayNilConfig(t *testing.T) {
 	if err := dt.d.configure(); err != nil {
 		t.Fatal(err)
 	}
+	defer dt.d.store.Close()
 
 	cleanupDriver(t, dt)
 }
