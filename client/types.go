@@ -34,9 +34,9 @@ type SandboxResource struct {
 
 // networkCreate is the expected body of the "create network" http request message
 type networkCreate struct {
-	Name        string   `json:"name"`
-	NetworkType string   `json:"network_type"`
-	DriverOpts  []string `json:"driver_opts"`
+	Name        string            `json:"name"`
+	NetworkType string            `json:"network_type"`
+	DriverOpts  map[string]string `json:"driver_opts"`
 }
 
 // serviceCreate represents the body of the "publish service" http request message
