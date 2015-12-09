@@ -132,3 +132,16 @@ func TestOverlayType(t *testing.T) {
 			dt.d.Type())
 	}
 }
+
+func TestOverlayOldStorageFormat(t *testing.T) {
+	n := &network{}
+	n.SetValue([]byte(`[{"SubnetIP":"10.0.0.0/24","GwIP":"10.0.0.1/24","Vni":256}]`))
+	if len(n.subnets) != 1 {
+		t.Fatal("Error loading old format data")
+	}
+	for _, subnet := range n.subnets {
+		if subnet.vni != 256 || subnet.subnetIP.String() != "10.0.0.0/24" || subnet.gwIP.String() != "10.0.0.1/24" {
+			t.Fatal("Error parsing old format data")
+		}
+	}
+}

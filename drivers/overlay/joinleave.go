@@ -100,6 +100,10 @@ func (d *driver) Join(nid, eid string, sboxKey string, jinfo driverapi.JoinInfo,
 		}
 	}
 
+	if n.disableDefaultGW {
+		jinfo.DisableGatewayService()
+	}
+
 	d.peerDbAdd(nid, eid, ep.addr.IP, ep.addr.Mask, ep.mac,
 		net.ParseIP(d.bindAddress), true)
 	d.pushLocalEndpointEvent("join", nid, eid)

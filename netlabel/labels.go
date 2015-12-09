@@ -41,6 +41,9 @@ const (
 
 	// Gateway represents the gateway for the network
 	Gateway = Prefix + ".gateway"
+
+	// DisableDefaultGW tells libnetwork not to provide Default GW for the container
+	DisableDefaultGW = DriverPrefix + ".disable_default_gateway"
 )
 
 var (
