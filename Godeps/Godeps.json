@@ -100,11 +100,6 @@
 			"Rev": "949270ba7ca3c93f25a13abf68d5e0e4c05be08a"
 		},
 		{
-			"ImportPath": "github.com/docker/docker/pkg/proxy",
-			"Comment": "v1.4.1-6485-g949270b",
-			"Rev": "949270ba7ca3c93f25a13abf68d5e0e4c05be08a"
-		},
-		{
 			"ImportPath": "github.com/docker/docker/pkg/random",
 			"Comment": "v1.4.1-6485-g949270b",
 			"Rev": "949270ba7ca3c93f25a13abf68d5e0e4c05be08a"
@@ -145,14 +140,19 @@
 			"Rev": "949270ba7ca3c93f25a13abf68d5e0e4c05be08a"
 		},
 		{
-			"ImportPath": "github.com/docker/docker/pkg/tlsconfig",
+			"ImportPath": "github.com/docker/docker/pkg/units",
 			"Comment": "v1.4.1-6485-g949270b",
 			"Rev": "949270ba7ca3c93f25a13abf68d5e0e4c05be08a"
 		},
 		{
-			"ImportPath": "github.com/docker/docker/pkg/units",
-			"Comment": "v1.4.1-6485-g949270b",
-			"Rev": "949270ba7ca3c93f25a13abf68d5e0e4c05be08a"
+			"ImportPath": "github.com/docker/go-connections/proxy",
+			"Comment": "v0.1.0",
+			"Rev": "0fcec54ac8341f3247d8c358074d270f4853253a"
+		},
+		{
+			"ImportPath": "github.com/docker/go-connections/tlsconfig",
+			"Comment": "v0.1.0",
+			"Rev": "0fcec54ac8341f3247d8c358074d270f4853253a"
 		},
 		{
 			"ImportPath": "github.com/docker/libkv",

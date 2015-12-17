@@ -14,8 +14,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/docker/docker/pkg/proxy"
 	"github.com/docker/docker/pkg/reexec"
+	"github.com/docker/go-connections/proxy"
 )
 
 const userlandProxyCommandName = "docker-proxy"
