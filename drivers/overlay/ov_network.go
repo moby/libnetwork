@@ -11,6 +11,7 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/libnetwork/datastore"
 	"github.com/docker/libnetwork/driverapi"
+	"github.com/docker/libnetwork/netlabel"
 	"github.com/docker/libnetwork/netutils"
 	"github.com/docker/libnetwork/osl"
 	"github.com/docker/libnetwork/resolvconf"
@@ -53,8 +54,13 @@ type network struct {
 	once      *sync.Once
 	initEpoch int
 	initErr   error
-	subnets   []*subnet
+	*networkConfiguration
 	sync.Mutex
+}
+
+type networkConfiguration struct {
+	subnets          []*subnet
+	disableDefaultGW bool
 }
 
 func (d *driver) CreateNetwork(id string, option map[string]interface{}, ipV4Data, ipV6Data []driverapi.IPAMData) error {
@@ -69,12 +75,13 @@ func (d *driver) CreateNetwork(id string, option map[string]interface{}, ipV4Dat
 	}
 
 	n := &network{
-		id:        id,
-		driver:    d,
-		endpoints: endpointTable{},
-		once:      &sync.Once{},
-		subnets:   []*subnet{},
+		id:                   id,
+		driver:               d,
+		endpoints:            endpointTable{},
+		once:                 &sync.Once{},
+		networkConfiguration: &networkConfiguration{subnets: []*subnet{}},
 	}
+	n.parseNetworkOptions(option)
 
 	for _, ipd := range ipV4Data {
 		s := &subnet{
@@ -448,19 +455,7 @@ func (n *network) KeyPrefix() []string {
 }
 
 func (n *network) Value() []byte {
-	netJSON := []*subnetJSON{}
-
-	for _, s := range n.subnets {
-		sj := &subnetJSON{
-			SubnetIP: s.subnetIP.String(),
-			GwIP:     s.gwIP.String(),
-			Vni:      s.vni,
-		}
-		netJSON = append(netJSON, sj)
-	}
-
-	b, err := json.Marshal(netJSON)
-
+	b, err := json.Marshal(n.networkConfiguration)
 	if err != nil {
 		return []byte{}
 	}
@@ -485,25 +480,35 @@ func (n *network) Skip() bool {
 }
 
 func (n *network) SetValue(value []byte) error {
-	var newNet bool
-	netJSON := []*subnetJSON{}
-
-	err := json.Unmarshal(value, &netJSON)
-	if err != nil {
-		return err
+	var nc *networkConfiguration
+	newNet := n.networkConfiguration == nil || len(n.subnets) == 0
+	if err := json.Unmarshal(value, &nc); err != nil {
+		// compatible with previous format
+		nc = &networkConfiguration{subnets: []*subnet{}}
+		netJSON := []*subnetJSON{}
+		err := json.Unmarshal(value, &netJSON)
+		if err != nil {
+			return err
+		}
+		for _, nj := range netJSON {
+			gwIP, _ := types.ParseCIDR(nj.GwIP)
+			subnetIP, _ := types.ParseCIDR(nj.SubnetIP)
+			nc.subnets = append(nc.subnets, &subnet{
+				vni:      nj.Vni,
+				gwIP:     gwIP,
+				subnetIP: subnetIP,
+			})
+		}
 	}
 
-	if len(n.subnets) == 0 {
-		newNet = true
+	if newNet {
+		n.networkConfiguration = &networkConfiguration{subnets: []*subnet{}}
 	}
-
-	for _, sj := range netJSON {
-		subnetIPstr := sj.SubnetIP
-		gwIPstr := sj.GwIP
-		vni := sj.Vni
-
-		subnetIP, _ := types.ParseCIDR(subnetIPstr)
-		gwIP, _ := types.ParseCIDR(gwIPstr)
+	n.disableDefaultGW = nc.disableDefaultGW
+	for _, s := range nc.subnets {
+		vni := s.vni
+		subnetIP := s.subnetIP
+		gwIP := s.gwIP
 
 		if newNet {
 			s := &subnet{
@@ -625,5 +630,64 @@ func (n *network) getMatchingSubnet(ip *net.IPNet) *subnet {
 			return s
 		}
 	}
+	return nil
+}
+
+func (n *network) parseNetworkOptions(option map[string]interface{}) {
+	if genData, ok := option[netlabel.GenericData]; ok && genData != nil {
+		if m, ok := genData.(map[string]string); ok {
+			if _, ok := m[netlabel.DisableDefaultGW]; ok {
+				n.disableDefaultGW = true
+			}
+		}
+	}
+}
+
+func (s *subnet) MarshalJSON() ([]byte, error) {
+	m := make(map[string]interface{})
+	m["vni"] = s.vni
+	m["gwIP"] = s.gwIP.String()
+	m["subnetIP"] = s.subnetIP.String()
+	return json.Marshal(m)
+}
+
+func (s *subnet) UnmarshalJSON(b []byte) error {
+	var (
+		err  error
+		nMap map[string]interface{}
+	)
+	if err = json.Unmarshal(b, &nMap); err != nil {
+		return err
+	}
+	s.vni = uint32(nMap["vni"].(float64))
+	if s.gwIP, err = types.ParseCIDR(nMap["gwIP"].(string)); err != nil {
+		return types.InternalErrorf("failed to decode overlay gateway address IPv4 after json unmarshal: %s", nMap["gwIP"].(string))
+	}
+	if s.subnetIP, err = types.ParseCIDR(nMap["subnetIP"].(string)); err != nil {
+		return types.InternalErrorf("failed to decode overlay subnet address IPv4 after json unmarshal: %s", nMap["subnetIP"].(string))
+	}
+	return nil
+}
+
+func (nc *networkConfiguration) MarshalJSON() ([]byte, error) {
+	m := make(map[string]interface{})
+	m["disableDefaultGW"] = nc.disableDefaultGW
+	m["subnets"] = nc.subnets
+	return json.Marshal(m)
+}
+
+func (nc *networkConfiguration) UnmarshalJSON(b []byte) error {
+	var (
+		err     error
+		nMap    map[string]interface{}
+		subnets []*subnet
+	)
+	if err = json.Unmarshal(b, &nMap); err != nil {
+		return err
+	}
+	nc.disableDefaultGW = nMap["disableDefaultGW"].(bool)
+	sj, _ := json.Marshal(nMap["subnets"])
+	json.Unmarshal(sj, &subnets)
+	nc.subnets = subnets
 	return nil
 }

@@ -41,6 +41,8 @@ func (cli *NetworkCli) CmdNetwork(chain string, args ...string) error {
 func (cli *NetworkCli) CmdNetworkCreate(chain string, args ...string) error {
 	cmd := cli.Subcmd(chain, "create", "NETWORK-NAME", "Creates a new network with a name specified by the user", false)
 	flDriver := cmd.String([]string{"d", "-driver"}, "", "Driver to manage the Network")
+	flOpts := NewMapOpts(nil, nil)
+	cmd.Var(flOpts, []string{"o", "-opt"}, "set driver specific options")
 	cmd.Require(flag.Exact, 1)
 	err := cmd.ParseFlags(args, true)
 	if err != nil {
@@ -48,8 +50,7 @@ func (cli *NetworkCli) CmdNetworkCreate(chain string, args ...string) error {
 	}
 
 	// Construct network create request body
-	var driverOpts []string
-	nc := networkCreate{Name: cmd.Arg(0), NetworkType: *flDriver, DriverOpts: driverOpts}
+	nc := networkCreate{Name: cmd.Arg(0), NetworkType: *flDriver, DriverOpts: flOpts.GetAll()}
 	obj, _, err := readBody(cli.call("POST", "/networks", nc, nil))
 	if err != nil {
 		return err
