@@ -1,5 +1,4 @@
-// Package proxy provides a network Proxy interface and implementations for TCP
-// and UDP.
+// Package proxy provides a network Proxy interface and implementations for TCP and UDP.
 package proxy
 
 import (
