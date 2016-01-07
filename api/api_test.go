@@ -10,6 +10,7 @@ import (
 	"os"
 	"regexp"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/docker/docker/pkg/reexec"
@@ -1836,14 +1837,39 @@ func TestEndToEnd(t *testing.T) {
 		netlabel.DriverMTU:  "1460",
 	}
 
+	v4Conf := IPAMConfig{
+		Subnet:  "10.10.0.0/16",
+		IPRange: "10.10.1.0/24",
+		Gateway: "10.10.255.254",
+		AuxAddress: map[string]string{
+			bridge.DefaultGatewayV4AuxKey: "10.10.1.1",
+		},
+		Options: map[string]string{
+			netlabel.Gateway: "false",
+		},
+	}
+
+	v6Conf := IPAMConfig{
+		Subnet:  "2002:2003:2004:2005::/64",
+		IPRange: "2002:2003:2004:2005:abcd:abcd:abcd::/112",
+		Gateway: "2002:2003:2004:2005::1099",
+		AuxAddress: map[string]string{
+			bridge.DefaultGatewayV6AuxKey: "2002:2003:2004:2005::1199",
+		},
+		Options: map[string]string{
+			netlabel.Gateway: "false",
+		},
+	}
+
+	ipOps := IPAM{Driver: "", Config: []IPAMConfig{v4Conf, v6Conf}}
+
 	// Create network
-	nc := networkCreate{Name: "network-fiftyfive", NetworkType: bridgeNetType, DriverOpts: ops}
+	nc := networkCreate{Name: "network-fiftyfive", NetworkType: bridgeNetType, DriverOpts: ops, Ipam: ipOps}
 	body, err := json.Marshal(nc)
 	if err != nil {
 		t.Fatal(err)
 	}
-	lr := newLocalReader(body)
-	req, err := http.NewRequest("POST", "/v1.19/networks", lr)
+	req, err := http.NewRequest("POST", "/v1.19/networks", strings.NewReader(string(body)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1859,6 +1885,32 @@ func TestEndToEnd(t *testing.T) {
 	err = json.Unmarshal(rsp.body, &nid)
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	// Verify Ipam config data
+	nw, err := c.NetworkByID(nid)
+	if err != nil {
+		t.Fatalf("Cannot find expected network in controller db (%s)", nid)
+	}
+	ipd, v4, v6 := nw.Info().IpamConfig()
+	if ipd != "default" {
+		t.Fatalf("Unexpected ipam driver. Expected \"default\". Got \"%s\"", ipd)
+	}
+	if v4 == nil || len(v4) != 1 {
+		t.Fatalf("Unexpected ipam ipv4 config: %v", v4)
+	}
+	if v4[0].PreferredPool != v4Conf.Subnet || v4[0].SubPool != v4Conf.IPRange || v4[0].Gateway != v4Conf.Gateway ||
+		v4[0].AuxAddresses[bridge.DefaultGatewayV4AuxKey] != v4Conf.AuxAddress[bridge.DefaultGatewayV4AuxKey] ||
+		v4[0].Options[netlabel.Gateway] != v4Conf.Options[netlabel.Gateway] {
+		t.Fatalf("Incongruent ipv4 config returned by libnetwork.Got: %+v", v4[0])
+	}
+	if v6 == nil || len(v6) != 1 {
+		t.Fatalf("Unexpected ipam ipv6 config: %v", v6)
+	}
+	if v6[0].PreferredPool != v6Conf.Subnet || v6[0].SubPool != v6Conf.IPRange || v6[0].Gateway != v6Conf.Gateway ||
+		v6[0].AuxAddresses[bridge.DefaultGatewayV6AuxKey] != v6Conf.AuxAddress[bridge.DefaultGatewayV6AuxKey] ||
+		v6[0].Options[netlabel.Gateway] != v6Conf.Options[netlabel.Gateway] {
+		t.Fatalf("Incongruent ipv6 config returned by libnetwork.Got: %+v", v6[0])
 	}
 
 	// Query networks collection
@@ -1990,7 +2042,7 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	lr = newLocalReader(eb)
+	lr := newLocalReader(eb)
 	req, err = http.NewRequest("POST", "/v1.19/networks/"+nid+"/endpoints", lr)
 	if err != nil {
 		t.Fatal(err)

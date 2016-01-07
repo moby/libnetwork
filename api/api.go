@@ -288,6 +288,27 @@ func procCreateNetwork(c libnetwork.NetworkController, vars map[string]string, b
 	if len(create.DriverOpts) > 0 {
 		options = append(options, libnetwork.NetworkOptionDriverOpts(create.DriverOpts))
 	}
+	ipV4Configs := []*libnetwork.IpamConf{}
+	ipV6Configs := []*libnetwork.IpamConf{}
+	for _, cfg := range create.Ipam.Config {
+		ipConf := &libnetwork.IpamConf{
+			PreferredPool: cfg.Subnet,
+			SubPool:       cfg.IPRange,
+			Gateway:       cfg.Gateway,
+			AuxAddresses:  cfg.AuxAddress,
+			Options:       cfg.Options,
+		}
+		if ipConf.PreferredPool != "" {
+			if nw, err := types.ParseCIDR(ipConf.PreferredPool); err == nil && nw.IP.To4() == nil {
+				ipV6Configs = append(ipV6Configs, ipConf)
+				continue
+			}
+		}
+		ipV4Configs = append(ipV4Configs, ipConf)
+	}
+
+	options = append(options, libnetwork.NetworkOptionIpam(create.Ipam.Driver, "", ipV4Configs, ipV6Configs))
+
 	nw, err := c.NewNetwork(create.NetworkType, create.Name, options...)
 	if err != nil {
 		return "", convertNetworkError(err)
