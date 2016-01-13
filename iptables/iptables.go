@@ -214,6 +214,18 @@ func (c *ChainInfo) Forward(action Action, ip net.IP, port int, proto, destAddr 
 		return ChainError{Chain: "FORWARD", Output: output}
 	}
 
+	if output, err := Raw("-t", string(Filter), string(action), c.Name,
+		"-i", bridgeName,
+		"!", "-o", bridgeName,
+		"-p", proto,
+		"-s", destAddr,
+		"--sport", strconv.Itoa(destPort),
+		"-j", "ACCEPT"); err != nil {
+		return err
+	} else if len(output) != 0 {
+		return ChainError{Chain: "FORWARD", Output: output}
+	}
+
 	if output, err := Raw("-t", string(Nat), string(action), "POSTROUTING",
 		"-p", proto,
 		"-s", destAddr,

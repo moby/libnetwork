@@ -84,6 +84,10 @@ func (n *bridgeNetwork) allocatePort(bnd *types.PortBinding, containerIP, defHos
 		return err
 	}
 
+	if err := ensureReturnRule(ExposedChain); err != nil {
+		logrus.Warnf("Failed to ensure return rule as last in %s chain: %v", ExposedChain, err)
+	}
+
 	// Save the host port (regardless it was or not specified in the binding)
 	switch netAddr := host.(type) {
 	case *net.TCPAddr:

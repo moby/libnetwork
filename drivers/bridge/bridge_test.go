@@ -811,13 +811,18 @@ func TestSetDefaultGw(t *testing.T) {
 
 func TestCleanupIptableRules(t *testing.T) {
 	defer testutils.SetupTestOSContext(t)()
+
+	d := newDriver()
+	d.config = &configuration{EnableIPTables: true}
+
 	bridgeChain := []iptables.ChainInfo{
-		{Name: DockerChain, Table: iptables.Nat},
+		{Name: ExposedChain, Table: iptables.Nat},
 		{Name: DockerChain, Table: iptables.Filter},
+		{Name: ExposedChain, Table: iptables.Filter},
 		{Name: IsolationChain, Table: iptables.Filter},
 	}
-	if _, _, _, err := setupIPChains(&configuration{EnableIPTables: true}); err != nil {
-		t.Fatalf("Error setting up ip chains: %v", err)
+	if err := d.setupIPChains(); err != nil {
+		t.Fatal(err)
 	}
 	for _, chainInfo := range bridgeChain {
 		if !iptables.ExistChain(chainInfo.Name, chainInfo.Table) {
