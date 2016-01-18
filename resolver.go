@@ -4,14 +4,15 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"syscall"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/docker/libnetwork/iptables"
 	"github.com/miekg/dns"
 )
 
-// Resolver represents the embedded DNS server in Docker. It operates
-// by listening on container's loopback interface for DNS queries.
+// Resolver represents the embedded DNS server in Docker. It listens
+// on an IP in the loopback range in the container's namespace
 type Resolver interface {
 	// Start starts the name server for the container
 	Start() error
@@ -91,12 +92,30 @@ func (r *resolver) Start() error {
 	if r.err != nil {
 		return r.err
 	}
-	s := &dns.Server{Handler: r, PacketConn: r.conn}
+	errCh := make(chan error)
+
+	s := &dns.Server{Handler: r, PacketConn: r.conn,
+		NotifyStartedFunc: func() {
+			if r.conn == nil {
+				errCh <- fmt.Errorf("listener socket is not open")
+				return
+			}
+			file, err := r.conn.File()
+			if err != nil {
+				errCh <- err
+				return
+			}
+			// miekg/dns library sets the socket option IP_PKTINFO which resets
+			// the non-blocking mode. Set it back here so that read from socket
+			// blocks on the net poller. Otherwise it would block on Read system
+			// call costing a OS thread per socket.
+			errCh <- syscall.SetNonblock(int(file.Fd()), true)
+		}}
 	r.server = s
 	go func() {
 		s.ActivateAndServe()
 	}()
-	return nil
+	return <-errCh
 }
 
 func (r *resolver) Stop() {
