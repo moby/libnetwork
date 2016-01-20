@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
+	"path/filepath"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/libnetwork/types"
@@ -16,11 +17,10 @@ import (
 	"github.com/opencontainers/runc/libcontainer/configs"
 )
 
-const udsBase = "/var/lib/docker/network/files/"
 const success = "success"
 
 // processSetKeyReexec is a private function that must be called only on an reexec path
-// It expects 3 args { [0] = "libnetwork-setkey", [1] = <container-id>, [2] = <controller-id> }
+// It expects 3 args { [0] = "libnetwork-setkey", [1] = <container-id>, [2] = <controller-socket-path> }
 // It also expects libcontainer.State as a json string in <stdin>
 // Refer to https://github.com/opencontainers/runc/pull/160/ for more information
 func processSetKeyReexec() {
@@ -33,7 +33,7 @@ func processSetKeyReexec() {
 		}
 	}()
 
-	// expecting 3 args {[0]="libnetwork-setkey", [1]=<container-id>, [2]=<controller-id> }
+	// expecting 3 args {[0]="libnetwork-setkey", [1]=<container-id>, [2]=<controller-socket-path> }
 	if len(os.Args) < 3 {
 		err = fmt.Errorf("Re-exec expects 3 args, received : %d", len(os.Args))
 		return
@@ -50,20 +50,20 @@ func processSetKeyReexec() {
 		return
 	}
 
-	controllerID := os.Args[2]
+	controllerSocketPath := os.Args[2]
 	key := state.NamespacePaths[configs.NamespaceType("NEWNET")]
 
-	err = SetExternalKey(controllerID, containerID, key)
+	err = SetExternalKey(controllerSocketPath, containerID, key)
 	return
 }
 
 // SetExternalKey provides a convenient way to set an External key to a sandbox
-func SetExternalKey(controllerID string, containerID string, key string) error {
+func SetExternalKey(controllerSocketPath string, containerID string, key string) error {
 	keyData := setKeyData{
 		ContainerID: containerID,
 		Key:         key}
 
-	c, err := net.Dial("unix", udsBase+controllerID+".sock")
+	c, err := net.Dial("unix", controllerSocketPath)
 	if err != nil {
 		return err
 	}
@@ -105,10 +105,11 @@ func processReturn(r io.Reader) error {
 }
 
 func (c *controller) startExternalKeyListener() error {
+	udsBase := filepath.Join(c.DataDir(), "files")
 	if err := os.MkdirAll(udsBase, 0600); err != nil {
 		return err
 	}
-	uds := udsBase + c.id + ".sock"
+	uds := filepath.Join(udsBase, c.id+".sock")
 	l, err := net.Listen("unix", uds)
 	if err != nil {
 		return err

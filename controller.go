@@ -150,10 +150,10 @@ type controller struct {
 	sync.Mutex
 }
 
-// New creates a new instance of network controller.
-func New(cfgOptions ...config.Option) (NetworkController, error) {
-	var cfg *config.Config
-	cfg = &config.Config{
+// newControllerConfig creates a new configuration based in
+// the options supplied. It also loads the default scopes for it.
+func newControllerConfig(cfgOptions ...config.Option) *config.Config {
+	cfg := &config.Config{
 		Daemon: config.DaemonCfg{
 			DriverCfg: make(map[string]interface{}),
 		},
@@ -164,6 +164,12 @@ func New(cfgOptions ...config.Option) (NetworkController, error) {
 		cfg.ProcessOptions(cfgOptions...)
 	}
 	cfg.LoadDefaultScopes(cfg.Daemon.DataDir)
+	return cfg
+}
+
+// New creates a new instance of network controller.
+func New(cfgOptions ...config.Option) (NetworkController, error) {
+	cfg := newControllerConfig(cfgOptions...)
 
 	c := &controller{
 		id:          stringid.GenerateRandomID(),
@@ -729,4 +735,10 @@ func (c *controller) Stop() {
 	c.closeStores()
 	c.stopExternalKeyListener()
 	osl.GC()
+}
+
+// DataDir returns the path to where
+// the network controller stores container data.
+func (c *controller) DataDir() string {
+	return c.cfg.Daemon.DataDir
 }

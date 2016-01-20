@@ -1,6 +1,9 @@
 package libnetwork
 
 import (
+	"io/ioutil"
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/docker/libnetwork/config"
@@ -10,8 +13,15 @@ import (
 	"github.com/docker/libnetwork/testutils"
 )
 
-func createEmptyCtrlr() *controller {
-	return &controller{sandboxes: sandboxTable{}}
+func createEmptyCtrlr(t *testing.T) (*controller, func()) {
+	ctrlr := &controller{sandboxes: sandboxTable{}}
+
+	tmp, err := ioutil.TempDir("", "libnetwork-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctrlr.cfg = newControllerConfig(config.OptionDataDir(tmp))
+	return ctrlr, func() { os.RemoveAll(tmp) }
 }
 
 func getTestEnv(t *testing.T) (NetworkController, Network, Network) {
@@ -58,7 +68,8 @@ func getTestEnv(t *testing.T) (NetworkController, Network, Network) {
 }
 
 func TestSandboxAddEmpty(t *testing.T) {
-	ctrlr := createEmptyCtrlr()
+	ctrlr, cleanup := createEmptyCtrlr(t)
+	defer cleanup()
 
 	sbx, err := ctrlr.NewSandbox("sandbox0")
 	if err != nil {
@@ -210,4 +221,37 @@ func TestSandboxAddSamePrio(t *testing.T) {
 	}
 
 	osl.GC()
+}
+
+func TestSandboxDataDir(t *testing.T) {
+	ctrlr, cleanup := createEmptyCtrlr(t)
+	defer cleanup()
+
+	sbx, err := ctrlr.NewSandbox("sandbox0")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s, ok := sbx.(*sandbox)
+	if !ok {
+		t.Fatal("Sandbox is not a sandbox struct")
+	}
+
+	h := s.hostsPath()
+	if !strings.HasPrefix(h, ctrlr.DataDir()) {
+		t.Fatalf("Expected %s to be the hosts parent directory, got %s", ctrlr.DataDir(), h)
+	}
+
+	r := s.resolvConfPath()
+	if !strings.HasPrefix(r, ctrlr.DataDir()) {
+		t.Fatalf("Expected %s to be the resolv conf parent directory, got %s", ctrlr.DataDir(), r)
+	}
+
+	defer func() {
+		if err := sbx.Delete(); err != nil {
+			t.Fatal(err)
+		}
+
+		osl.GC()
+	}()
 }
