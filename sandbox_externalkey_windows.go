@@ -17,7 +17,7 @@ func processSetKeyReexec() {
 }
 
 // SetExternalKey provides a convenient way to set an External key to a sandbox
-func SetExternalKey(controllerID string, containerID string, key string) error {
+func SetExternalKey(controllerSocketPath string, containerID string, key string) error {
 	return types.NotImplementedErrorf("SetExternalKey isn't supported on non linux systems")
 }
 

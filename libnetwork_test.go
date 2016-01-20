@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -1325,7 +1326,8 @@ func externalKeyTest(t *testing.T, reexec bool) {
 	}
 
 	if reexec {
-		err := reexecSetKey("ValidKey", containerID, controller.ID())
+		sockPath := filepath.Join(controller.Config().Daemon.DataDir, "ValidKey.sock")
+		err := reexecSetKey(sockPath, containerID, controller.ID())
 		if err != nil {
 			t.Fatalf("SetExternalKey failed with %v", err)
 		}
