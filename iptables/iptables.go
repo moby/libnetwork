@@ -221,6 +221,32 @@ func (c *ChainInfo) Forward(action Action, ip net.IP, port int, proto, destAddr 
 	return nil
 }
 
+func (c *ChainInfo) ForwardOutgoing(action Action, source net.IP, destination net.IP) error {
+	// SNAT or MASQUERADE
+	if source.IsGlobalUnicast() {
+		if output, err := Raw("-t", string(Nat), string(action), "POSTROUTING",
+			"-p", "all",
+			"-s", destination.String(),
+			"-j", "SNAT",
+			"--to-source", source.String()); err != nil {
+			return err
+		} else if len(output) != 0 {
+			return ChainError{Chain: "FORWARD", Output: output}
+		}
+	} else {
+		if output, err := Raw("-t", string(Nat), string(action), "POSTROUTING",
+			"-p", "all",
+			"-s", destination.String(),
+			"-j", "MASQUERADE"); err != nil {
+			return err
+		} else if len(output) != 0 {
+			return ChainError{Chain: "FORWARD", Output: output}
+		}
+	}
+
+	return nil
+}
+
 // Link adds reciprocal ACCEPT rule for two supplied IP addresses.
 // Traffic is allowed from ip1 to ip2 and vice-versa
 func (c *ChainInfo) Link(action Action, ip1, ip2 net.IP, port int, proto string, bridgeName string) error {
