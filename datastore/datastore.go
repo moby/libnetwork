@@ -13,6 +13,7 @@ import (
 	"github.com/docker/libkv/store/consul"
 	"github.com/docker/libkv/store/etcd"
 	"github.com/docker/libkv/store/zookeeper"
+	"github.com/docker/libnetwork/discoverapi"
 	"github.com/docker/libnetwork/types"
 )
 
@@ -251,6 +252,29 @@ func NewDataStore(scope string, cfg *ScopeCfg) (DataStore, error) {
 	}
 
 	return newClient(scope, cfg.Client.Provider, cfg.Client.Address, cfg.Client.Config, cached)
+}
+
+// NewDataStoreFromUpdate creates a new instance of LibKV data store starting from the datastore update data
+func NewDataStoreFromUpdate(scope string, dsu discoverapi.DatastoreUpdateData) (DataStore, error) {
+	sCfg, ok := dsu.Config.(*store.Config)
+	if !ok {
+		return nil, fmt.Errorf("cannot parse store config in datastore update data: %v", dsu.Config)
+	}
+
+	scopeCfg := &ScopeCfg{
+		Client: ScopeClientCfg{
+			Address:  dsu.Address,
+			Provider: dsu.Provider,
+			Config:   sCfg,
+		},
+	}
+
+	ds, err := NewDataStore(scope, scopeCfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to construct datastore client from datastore update data %v: %v", dsu, err)
+	}
+
+	return ds, err
 }
 
 func (ds *datastore) Close() {

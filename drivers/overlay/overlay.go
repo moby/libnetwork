@@ -12,6 +12,7 @@ import (
 	"github.com/docker/libnetwork/driverapi"
 	"github.com/docker/libnetwork/idm"
 	"github.com/docker/libnetwork/netlabel"
+	"github.com/docker/libnetwork/types"
 	"github.com/hashicorp/serf/serf"
 )
 
@@ -24,6 +25,8 @@ const (
 	vxlanPort    = 4789
 	vxlanVethMTU = 1450
 )
+
+var initVxlanIdm = make(chan (bool), 1)
 
 type driver struct {
 	eventCh      chan serf.Event
@@ -97,18 +100,41 @@ func (d *driver) configure() error {
 			d.store, err = datastore.NewDataStore(datastore.GlobalScope, cfg)
 			if err != nil {
 				err = fmt.Errorf("failed to initialize data store: %v", err)
-				return
 			}
-		}
-
-		d.vxlanIdm, err = idm.New(d.store, "vxlan-id", vxlanIDStart, vxlanIDEnd)
-		if err != nil {
-			err = fmt.Errorf("failed to initialize vxlan id manager: %v", err)
-			return
 		}
 	})
 
-	return err
+	if err != nil {
+		return err
+	}
+
+	if d.store == nil {
+		return types.NoServiceErrorf("datastore is not available")
+	}
+
+	if d.vxlanIdm == nil {
+		return d.initializeVxlanIdm()
+	}
+
+	return nil
+}
+
+func (d *driver) initializeVxlanIdm() error {
+	var err error
+
+	initVxlanIdm <- true
+	defer func() { <-initVxlanIdm }()
+
+	if d.vxlanIdm != nil {
+		return nil
+	}
+
+	d.vxlanIdm, err = idm.New(d.store, "vxlan-id", vxlanIDStart, vxlanIDEnd)
+	if err != nil {
+		return fmt.Errorf("failed to initialize vxlan id manager: %v", err)
+	}
+
+	return nil
 }
 
 func (d *driver) Type() string {
@@ -187,12 +213,27 @@ func (d *driver) pushLocalEndpointEvent(action, nid, eid string) {
 
 // DiscoverNew is a notification for a new discovery event, such as a new node joining a cluster
 func (d *driver) DiscoverNew(dType discoverapi.DiscoveryType, data interface{}) error {
-	if dType == discoverapi.NodeDiscovery {
+	switch dType {
+	case discoverapi.NodeDiscovery:
 		nodeData, ok := data.(discoverapi.NodeDiscoveryData)
 		if !ok || nodeData.Address == "" {
 			return fmt.Errorf("invalid discovery data")
 		}
 		d.nodeJoin(nodeData.Address, nodeData.Self)
+	case discoverapi.DatastoreUpdate:
+		var err error
+		if d.store != nil {
+			return types.ForbiddenErrorf("cannot accept datastore update: Overlay driver has a datastore configured already")
+		}
+		dsu, ok := data.(discoverapi.DatastoreUpdateData)
+		if !ok {
+			return types.InternalErrorf("incorrect data in datastore update notification: %v", data)
+		}
+		d.store, err = datastore.NewDataStoreFromUpdate(datastore.GlobalScope, dsu)
+		if err != nil {
+			return types.InternalErrorf("failed to initialize data store: %v", err)
+		}
+	default:
 	}
 	return nil
 }
