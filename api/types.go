@@ -38,6 +38,7 @@ type networkCreate struct {
 	NetworkType string            `json:"network_type"`
 	DriverOpts  map[string]string `json:"driver_opts"`
 	NetworkOpts map[string]string `json:"network_opts"`
+	Ipam        IPAM              `json:"ipam"`
 }
 
 // endpointCreate represents the body of the "create endpoint" http request message
@@ -86,4 +87,19 @@ type serviceDelete struct {
 type extraHost struct {
 	Name    string `json:"name"`
 	Address string `json:"address"`
+}
+
+// IPAM represents IP Address Management
+type IPAM struct {
+	Driver string       `json:"driver"`
+	Config []IPAMConfig `json:"config"`
+}
+
+// IPAMConfig represents IPAM configurations
+type IPAMConfig struct {
+	Subnet     string            `json:"subnet,omitempty"`
+	IPRange    string            `json:"ip_range,omitempty"`
+	Gateway    string            `json:"gateway,omitempty"`
+	AuxAddress map[string]string `json:"auxiliary_address,omitempty"`
+	Options    map[string]string `json:"options,omitempty"`
 }
