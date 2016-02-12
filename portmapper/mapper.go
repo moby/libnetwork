@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/docker/docker/pkg/locker"
 	"github.com/docker/libnetwork/iptables"
 	"github.com/docker/libnetwork/portallocator"
 )
@@ -37,6 +38,7 @@ type PortMapper struct {
 	// udp:ip:port
 	currentMappings map[string]*mapping
 	lock            sync.Mutex
+	rangeLock       *locker.Locker
 
 	Allocator *portallocator.PortAllocator
 }
@@ -51,6 +53,7 @@ func NewWithPortAllocator(allocator *portallocator.PortAllocator) *PortMapper {
 	return &PortMapper{
 		currentMappings: make(map[string]*mapping),
 		Allocator:       allocator,
+		rangeLock:       locker.New(),
 	}
 }
 
@@ -67,15 +70,14 @@ func (pm *PortMapper) Map(container net.Addr, hostIP net.IP, hostPort int, usePr
 
 // MapRange maps the specified container transport address to the host's network address and transport port range
 func (pm *PortMapper) MapRange(container net.Addr, hostIP net.IP, hostPortStart, hostPortEnd int, useProxy bool) (host net.Addr, err error) {
-	pm.lock.Lock()
-	defer pm.lock.Unlock()
-
 	var (
 		m                 *mapping
 		proto             string
 		allocatedHostPort int
 	)
-
+	lockKey := fmt.Sprintf("%s:%d-%d", hostIP, hostPortStart, hostPortEnd)
+	pm.rangeLock.Lock(lockKey)
+	defer pm.rangeLock.Unlock(lockKey)
 	switch container.(type) {
 	case *net.TCPAddr:
 		proto = "tcp"
@@ -123,7 +125,10 @@ func (pm *PortMapper) MapRange(container net.Addr, hostIP net.IP, hostPortStart,
 	}()
 
 	key := getKey(m.host)
-	if _, exists := pm.currentMappings[key]; exists {
+	pm.lock.Lock()
+	_, exists := pm.currentMappings[key]
+	pm.lock.Unlock()
+	if exists {
 		return nil, ErrPortMappedForIP
 	}
 
@@ -132,25 +137,19 @@ func (pm *PortMapper) MapRange(container net.Addr, hostIP net.IP, hostPortStart,
 		return nil, err
 	}
 
-	cleanup := func() error {
-		// need to undo the iptables rules before we return
+	if err := m.userlandProxy.Start(); err != nil {
 		m.userlandProxy.Stop()
+		// need to undo the iptables rules before we return
 		pm.forward(iptables.Delete, m.proto, hostIP, allocatedHostPort, containerIP.String(), containerPort)
 		if err := pm.Allocator.ReleasePort(hostIP, m.proto, allocatedHostPort); err != nil {
-			return err
-		}
-
-		return nil
-	}
-
-	if err := m.userlandProxy.Start(); err != nil {
-		if err := cleanup(); err != nil {
 			return nil, fmt.Errorf("Error during port allocation cleanup: %v", err)
 		}
 		return nil, err
 	}
-
+	pm.lock.Lock()
 	pm.currentMappings[key] = m
+	pm.lock.Unlock()
+
 	return m.host, nil
 }
 
