@@ -97,6 +97,11 @@
 			"Rev": "577cf61afad695f0ba226cdf8a995a8c78883e51"
 		},
 		{
+			"ImportPath": "github.com/docker/docker/pkg/locker",
+			"Comment": "v1.4.1-8734-g577cf61",
+			"Rev": "577cf61afad695f0ba226cdf8a995a8c78883e51"
+		},
+		{
 			"ImportPath": "github.com/docker/docker/pkg/longpath",
 			"Comment": "v1.4.1-8734-g577cf61",
 			"Rev": "577cf61afad695f0ba226cdf8a995a8c78883e51"
