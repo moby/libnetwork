@@ -46,6 +46,8 @@ type driver struct {
 
 // Init registers a new instance of overlay driver
 func Init(dc driverapi.DriverCallback, config map[string]interface{}) error {
+	var err error
+
 	c := driverapi.Capability{
 		DataScope: datastore.GlobalScope,
 	}
@@ -59,13 +61,7 @@ func Init(dc driverapi.DriverCallback, config map[string]interface{}) error {
 	}
 
 	if data, ok := config[netlabel.GlobalKVClient]; ok {
-		var err error
-		dsc, ok := data.(discoverapi.DatastoreConfigData)
-		if !ok {
-			return types.InternalErrorf("incorrect data in datastore configuration: %v", data)
-		}
-		d.store, err = datastore.NewDataStoreFromConfig(dsc)
-		if err != nil {
+		if d.store, err = datastore.NewDataStoreFromConfig(data); err != nil {
 			return types.InternalErrorf("failed to initialize data store: %v", err)
 		}
 	}
@@ -204,11 +200,7 @@ func (d *driver) DiscoverNew(dType discoverapi.DiscoveryType, data interface{}) 
 		if d.store != nil {
 			return types.ForbiddenErrorf("cannot accept datastore configuration: Overlay driver has a datastore configured already")
 		}
-		dsc, ok := data.(discoverapi.DatastoreConfigData)
-		if !ok {
-			return types.InternalErrorf("incorrect data in datastore configuration: %v", data)
-		}
-		d.store, err = datastore.NewDataStoreFromConfig(dsc)
+		d.store, err = datastore.NewDataStoreFromConfig(data)
 		if err != nil {
 			return types.InternalErrorf("failed to initialize data store: %v", err)
 		}

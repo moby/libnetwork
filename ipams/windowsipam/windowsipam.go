@@ -22,8 +22,8 @@ type allocator struct {
 }
 
 // GetInit registers the built-in ipam service with libnetwork
-func GetInit(ipamName string) func(ic ipamapi.Callback, l, g interface{}) error {
-	return func(ic ipamapi.Callback, l, g interface{}) error {
+func GetInit(ipamName string) func(ic ipamapi.Callback, config map[string]interface{}) error {
+	return func(ic ipamapi.Callback, config map[string]interface{}) error {
 		return ic.RegisterIpamDriver(ipamName, &allocator{})
 	}
 }

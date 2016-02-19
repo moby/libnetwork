@@ -3,6 +3,7 @@ package libnetwork
 import (
 	"strings"
 
+	"github.com/docker/libnetwork/datastore"
 	"github.com/docker/libnetwork/discoverapi"
 	"github.com/docker/libnetwork/driverapi"
 	"github.com/docker/libnetwork/ipamapi"
@@ -25,6 +26,21 @@ func initDrivers(c *controller) error {
 	}
 
 	return nil
+}
+
+func insertDatastoreConfig(scopes map[string]*datastore.ScopeCfg, config map[string]interface{}) {
+	for k, v := range scopes {
+		if !v.IsValid() {
+			continue
+		}
+
+		config[netlabel.MakeKVClient(k)] = discoverapi.DatastoreConfigData{
+			Scope:    k,
+			Provider: v.Client.Provider,
+			Address:  v.Client.Address,
+			Config:   v.Client.Config,
+		}
+	}
 }
 
 func makeDriverConfig(c *controller, ntype string) map[string]interface{} {
@@ -54,27 +70,19 @@ func makeDriverConfig(c *controller, ntype string) map[string]interface{} {
 		return config
 	}
 
-	for k, v := range c.cfg.Scopes {
-		if !v.IsValid() {
-			continue
-		}
-		config[netlabel.MakeKVClient(k)] = discoverapi.DatastoreConfigData{
-			Scope:    k,
-			Provider: v.Client.Provider,
-			Address:  v.Client.Address,
-			Config:   v.Client.Config,
-		}
-	}
+	insertDatastoreConfig(c.cfg.Scopes, config)
 
 	return config
 }
 
-func initIpams(ic ipamapi.Callback, lDs, gDs interface{}) error {
-	for _, fn := range [](func(ipamapi.Callback, interface{}, interface{}) error){
+func initIpams(ic ipamapi.Callback) error {
+	config := make(map[string]interface{})
+	insertDatastoreConfig(ic.(*controller).cfg.Scopes, config)
+	for _, fn := range [](func(ipamapi.Callback, map[string]interface{}) error){
 		builtinIpam.Init,
 		remoteIpam.Init,
 	} {
-		if err := fn(ic, lDs, gDs); err != nil {
+		if err := fn(ic, config); err != nil {
 			return err
 		}
 	}

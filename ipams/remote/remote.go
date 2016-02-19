@@ -29,7 +29,7 @@ func newAllocator(name string, client *plugins.Client) ipamapi.Ipam {
 }
 
 // Init registers a remote ipam when its plugin is activated
-func Init(cb ipamapi.Callback, l, g interface{}) error {
+func Init(cb ipamapi.Callback, config map[string]interface{}) error {
 	plugins.Handle(ipamapi.PluginEndpointType, func(name string, client *plugins.Client) {
 		a := newAllocator(name, client)
 		if cps, err := a.(*allocator).getCapabilities(); err == nil {
