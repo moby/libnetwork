@@ -720,6 +720,15 @@ func (n *network) CreateEndpoint(name string, options ...EndpointOption) (Endpoi
 			ep.iface.mac = mac
 		}
 	}
+	// This may change depending how Aliases are transmitted by daemon
+	if opt, ok := ep.generic[netlabel.IPAliases]; ok {
+		if aliases, ok := opt.([]*net.IPNet); ok {
+			for _, alias := range aliases {
+				// Aliases are not allocated
+				ep.iface.ipAliases = append(ep.iface.ipAliases, alias)
+			}
+		}
+	}
 
 	ipam, err := n.getController().getIPAM(n.ipamType)
 	if err != nil {

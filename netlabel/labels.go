@@ -44,6 +44,9 @@ const (
 
 	// Internal constant represents that the network is internal which disables default gateway service
 	Internal = Prefix + ".internal"
+
+	// IPAliases represents additional IPs to assign to interface
+	IPAliases = Prefix + ".ip_aliases"
 )
 
 var (
