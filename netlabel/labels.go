@@ -24,6 +24,12 @@ const (
 	// MacAddress constant represents Mac Address config of a Container
 	MacAddress = Prefix + ".endpoint.macaddress"
 
+	// NetworkID constant represents the network ID
+	NetworkID = Prefix + ".id"
+
+	// EndpointID constant represents the endpoint ID
+	EndpointID = Prefix + ".endpoint.id"
+
 	// ExposedPorts constant represents the container's Exposed Ports
 	ExposedPorts = Prefix + ".endpoint.exposedports"
 

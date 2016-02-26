@@ -79,4 +79,6 @@ type Ipam interface {
 // Capability represents the requirements and capabilities of the IPAM driver
 type Capability struct {
 	RequiresMACAddress bool
+	RequiresEndpointID bool
+	RequiresNetworkID  bool
 }
