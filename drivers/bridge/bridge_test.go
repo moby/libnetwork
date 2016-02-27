@@ -51,6 +51,7 @@ func TestCreateFullOptions(t *testing.T) {
 	if err := d.configure(genericOption); err != nil {
 		t.Fatalf("Failed to setup driver config: %v", err)
 	}
+	defer d.store.Close()
 
 	netOption := make(map[string]interface{})
 	netOption[netlabel.EnableIPv6] = true
@@ -109,6 +110,7 @@ func TestCreateFullOptionsLabels(t *testing.T) {
 	if err := d.configure(genericOption); err != nil {
 		t.Fatalf("Failed to setup driver config: %v", err)
 	}
+	defer d.store.Close()
 
 	bndIPs := "127.0.0.1"
 	nwV6s := "2001:db8:2600:2700:2800::/80"
@@ -202,6 +204,7 @@ func TestCreate(t *testing.T) {
 	if err := d.configure(nil); err != nil {
 		t.Fatalf("Failed to setup driver config: %v", err)
 	}
+	defer d.store.Close()
 
 	netconfig := &networkConfiguration{BridgeName: DefaultBridgeName}
 	genericOption := make(map[string]interface{})
@@ -227,6 +230,7 @@ func TestCreateFail(t *testing.T) {
 	if err := d.configure(nil); err != nil {
 		t.Fatalf("Failed to setup driver config: %v", err)
 	}
+	defer d.store.Close()
 
 	netconfig := &networkConfiguration{BridgeName: "dummy0", DefaultBridge: true}
 	genericOption := make(map[string]interface{})
@@ -250,6 +254,7 @@ func TestCreateMultipleNetworks(t *testing.T) {
 	if err := d.configure(genericOption); err != nil {
 		t.Fatalf("Failed to setup driver config: %v", err)
 	}
+	defer d.store.Close()
 
 	config1 := &networkConfiguration{BridgeName: "net_test_1"}
 	genericOption = make(map[string]interface{})
@@ -449,6 +454,7 @@ func testQueryEndpointInfo(t *testing.T, ulPxyEnabled bool) {
 	if err := d.configure(genericOption); err != nil {
 		t.Fatalf("Failed to setup driver config: %v", err)
 	}
+	defer d.store.Close()
 
 	netconfig := &networkConfiguration{
 		BridgeName: DefaultBridgeName,
@@ -513,6 +519,7 @@ func TestCreateLinkWithOptions(t *testing.T) {
 	if err := d.configure(nil); err != nil {
 		t.Fatalf("Failed to setup driver config: %v", err)
 	}
+	defer d.store.Close()
 
 	netconfig := &networkConfiguration{BridgeName: DefaultBridgeName}
 	netOptions := make(map[string]interface{})
@@ -580,6 +587,7 @@ func TestLinkContainers(t *testing.T) {
 	if err := d.configure(genericOption); err != nil {
 		t.Fatalf("Failed to setup driver config: %v", err)
 	}
+	defer d.store.Close()
 
 	netconfig := &networkConfiguration{
 		BridgeName: DefaultBridgeName,
@@ -772,6 +780,7 @@ func TestSetDefaultGw(t *testing.T) {
 	if err := d.configure(nil); err != nil {
 		t.Fatalf("Failed to setup driver config: %v", err)
 	}
+	defer d.store.Close()
 
 	_, subnetv6, _ := net.ParseCIDR("2001:db8:ea9:9abc:b0c4::/80")
 

@@ -16,6 +16,7 @@ func TestLinkCreate(t *testing.T) {
 	if err := d.configure(nil); err != nil {
 		t.Fatalf("Failed to setup driver config: %v", err)
 	}
+	defer d.store.Close()
 
 	mtu := 1490
 	config := &networkConfiguration{
@@ -111,6 +112,7 @@ func TestLinkCreateTwo(t *testing.T) {
 	if err := d.configure(nil); err != nil {
 		t.Fatalf("Failed to setup driver config: %v", err)
 	}
+	defer d.store.Close()
 
 	config := &networkConfiguration{
 		BridgeName: DefaultBridgeName,
@@ -148,6 +150,7 @@ func TestLinkCreateNoEnableIPv6(t *testing.T) {
 	if err := d.configure(nil); err != nil {
 		t.Fatalf("Failed to setup driver config: %v", err)
 	}
+	defer d.store.Close()
 
 	config := &networkConfiguration{
 		BridgeName: DefaultBridgeName}
@@ -182,6 +185,7 @@ func TestLinkDelete(t *testing.T) {
 	if err := d.configure(nil); err != nil {
 		t.Fatalf("Failed to setup driver config: %v", err)
 	}
+	defer d.store.Close()
 
 	config := &networkConfiguration{
 		BridgeName: DefaultBridgeName,

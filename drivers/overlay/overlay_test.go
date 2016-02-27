@@ -31,6 +31,7 @@ func setupDriver(t *testing.T) *driverTester {
 	if _, ok := err.(types.NoServiceError); !ok {
 		t.Fatalf("Unexpected error type: %v", err)
 	}
+	defer dt.d.store.Close()
 
 	iface, err := net.InterfaceByName("eth0")
 	if err != nil {
@@ -106,6 +107,7 @@ func TestOverlayNilConfig(t *testing.T) {
 	if _, ok := err.(types.NoServiceError); !ok {
 		t.Fatalf("Unexpected error type: %v", err)
 	}
+	defer dt.d.store.Close()
 
 	cleanupDriver(t, dt)
 }

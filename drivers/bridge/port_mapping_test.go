@@ -30,6 +30,7 @@ func TestPortMappingConfig(t *testing.T) {
 	if err := d.configure(genericOption); err != nil {
 		t.Fatalf("Failed to setup driver config: %v", err)
 	}
+	defer d.store.Close()
 
 	binding1 := types.PortBinding{Proto: types.UDP, Port: uint16(400), HostPort: uint16(54000)}
 	binding2 := types.PortBinding{Proto: types.TCP, Port: uint16(500), HostPort: uint16(65000)}
