@@ -46,7 +46,7 @@ func TestWindowsIPAM(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ip, _, err := a.RequestAddress(requestPool.String(), nil, map[string]string{})
+	ip, _, _, _, err := a.RequestAddress(requestPool.String(), nil, map[string]string{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +55,7 @@ func TestWindowsIPAM(t *testing.T) {
 		t.Fatalf("Unexpected data returned. Expected %v . Got: %v ", requestPool, ip)
 	}
 
-	ip, _, err = a.RequestAddress(requestPool.String(), requestAddress, map[string]string{})
+	ip, _, _, _, err = a.RequestAddress(requestPool.String(), requestAddress, map[string]string{})
 	if err != nil {
 		t.Fatal(err)
 	}
