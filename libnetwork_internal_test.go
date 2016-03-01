@@ -6,6 +6,7 @@ import (
 	"net"
 	"testing"
 
+	"github.com/docker/libnetwork/config"
 	"github.com/docker/libnetwork/datastore"
 	"github.com/docker/libnetwork/discoverapi"
 	"github.com/docker/libnetwork/driverapi"
@@ -454,4 +455,16 @@ func (b *badDriver) DiscoverDelete(dType discoverapi.DiscoveryType, data interfa
 }
 func (b *badDriver) Type() string {
 	return badDriverName
+}
+
+func TestUnsupportedDriver(t *testing.T) {
+	bridgeNetType := "bridge"
+	c, err := New(config.OptionUnsupportedDriver("bridge"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Stop()
+	if _, err := c.(*controller).NewNetwork(bridgeNetType, "dummy"); err == nil {
+		t.Fatalf("Expecting the NewNetwork to faild for %s", bridgeNetType)
+	}
 }

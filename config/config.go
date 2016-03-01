@@ -21,12 +21,13 @@ type Config struct {
 
 // DaemonCfg represents libnetwork core configuration
 type DaemonCfg struct {
-	Debug          bool
-	DataDir        string
-	DefaultNetwork string
-	DefaultDriver  string
-	Labels         []string
-	DriverCfg      map[string]interface{}
+	Debug             bool
+	DataDir           string
+	DefaultNetwork    string
+	DefaultDriver     string
+	Labels            []string
+	DriverCfg         map[string]interface{}
+	UnsupportedDriver map[string]interface{}
 }
 
 // ClusterCfg represents cluster configuration
@@ -66,7 +67,8 @@ func ParseConfig(tomlCfgFile string) (*Config, error) {
 func ParseConfigOptions(cfgOptions ...Option) *Config {
 	cfg := &Config{
 		Daemon: DaemonCfg{
-			DriverCfg: make(map[string]interface{}),
+			DriverCfg:         make(map[string]interface{}),
+			UnsupportedDriver: make(map[string]interface{}),
 		},
 		Scopes: make(map[string]*datastore.ScopeCfg),
 	}
@@ -239,5 +241,13 @@ func OptionLocalKVProviderConfig(config *store.Config) Option {
 			c.Scopes[datastore.LocalScope] = &datastore.ScopeCfg{}
 		}
 		c.Scopes[datastore.LocalScope].Client.Config = config
+	}
+}
+
+// OptionUnsupportedDriver function returns an option setter for a unsupported driver
+func OptionUnsupportedDriver(ud string) Option {
+	return func(c *Config) {
+		log.Debugf("Option UnsupportDriver: %s", ud)
+		c.Daemon.UnsupportedDriver[ud] = nil
 	}
 }

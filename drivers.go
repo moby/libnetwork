@@ -19,8 +19,10 @@ type initializer struct {
 
 func initDrivers(c *controller) error {
 	for _, i := range getInitializers() {
-		if err := i.fn(c, makeDriverConfig(c, i.ntype)); err != nil {
-			return err
+		if _, ok := c.cfg.Daemon.UnsupportedDriver[i.ntype]; !ok {
+			if err := i.fn(c, makeDriverConfig(c, i.ntype)); err != nil {
+				return err
+			}
 		}
 	}
 
