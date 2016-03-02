@@ -46,14 +46,16 @@ type InterfaceInfo interface {
 }
 
 type endpointInterface struct {
-	mac       net.HardwareAddr
-	addr      *net.IPNet
-	addrv6    *net.IPNet
-	srcName   string
-	dstPrefix string
-	routes    []*net.IPNet
-	v4PoolID  string
-	v6PoolID  string
+	mac              net.HardwareAddr
+	addr             *net.IPNet
+	addrv6           *net.IPNet
+	dnsServers       []string
+	dnsSearchDomains []string
+	srcName          string
+	dstPrefix        string
+	routes           []*net.IPNet
+	v4PoolID         string
+	v6PoolID         string
 }
 
 func (epi *endpointInterface) MarshalJSON() ([]byte, error) {
@@ -67,6 +69,8 @@ func (epi *endpointInterface) MarshalJSON() ([]byte, error) {
 	if epi.addrv6 != nil {
 		epMap["addrv6"] = epi.addrv6.String()
 	}
+	epMap["dnsServers"] = epi.dnsServers
+	epMap["dnsSearchDomains"] = epi.dnsSearchDomains
 	epMap["srcName"] = epi.srcName
 	epMap["dstPrefix"] = epi.dstPrefix
 	var routes []string
@@ -103,6 +107,16 @@ func (epi *endpointInterface) UnmarshalJSON(b []byte) error {
 		}
 	}
 
+	ds, _ := json.Marshal(epMap["dnsServers"])
+	var dnsServers []string
+	json.Unmarshal(ds, &dnsServers)
+	epi.dnsServers = dnsServers
+
+	dsl, _ := json.Marshal(epMap["dnsSearchDomains"])
+	var dnsSearchDomains []string
+	json.Unmarshal(dsl, &dnsSearchDomains)
+	epi.dnsSearchDomains = dnsSearchDomains
+
 	epi.srcName = epMap["srcName"].(string)
 	epi.dstPrefix = epMap["dstPrefix"].(string)
 
@@ -127,6 +141,15 @@ func (epi *endpointInterface) CopyTo(dstEpi *endpointInterface) error {
 	dstEpi.mac = types.GetMacCopy(epi.mac)
 	dstEpi.addr = types.GetIPNetCopy(epi.addr)
 	dstEpi.addrv6 = types.GetIPNetCopy(epi.addrv6)
+
+	dstEpi.dnsServers = make([]string, len(epi.dnsServers))
+	copy(dstEpi.dnsServers, epi.dnsServers)
+	dstEpi.dnsServers = epi.dnsServers
+
+	dstEpi.dnsSearchDomains = make([]string, len(epi.dnsSearchDomains))
+	copy(dstEpi.dnsSearchDomains, epi.dnsSearchDomains)
+	dstEpi.dnsSearchDomains = epi.dnsSearchDomains
+
 	dstEpi.srcName = epi.srcName
 	dstEpi.dstPrefix = epi.dstPrefix
 	dstEpi.v4PoolID = epi.v4PoolID

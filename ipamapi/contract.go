@@ -73,7 +73,7 @@ type Ipam interface {
 	// ReleasePool releases the address pool identified by the passed id
 	ReleasePool(poolID string) error
 	// Request address from the specified pool ID. Input options or required IP can be passed.
-	RequestAddress(string, net.IP, map[string]string) (*net.IPNet, map[string]string, error)
+	RequestAddress(string, net.IP, map[string]string) (*net.IPNet, []string, []string, map[string]string, error)
 	// Release the address from the specified pool ID
 	ReleaseAddress(string, net.IP) error
 }

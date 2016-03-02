@@ -416,32 +416,32 @@ func (a *Allocator) getPredefinedPool(as string, ipV6 bool) (*net.IPNet, error) 
 }
 
 // RequestAddress returns an address from the specified pool ID
-func (a *Allocator) RequestAddress(poolID string, prefAddress net.IP, opts map[string]string) (*net.IPNet, map[string]string, error) {
+func (a *Allocator) RequestAddress(poolID string, prefAddress net.IP, opts map[string]string) (*net.IPNet, []string, []string, map[string]string, error) {
 	log.Debugf("RequestAddress(%s, %v, %v)", poolID, prefAddress, opts)
 	k := SubnetKey{}
 	if err := k.FromString(poolID); err != nil {
-		return nil, nil, types.BadRequestErrorf("invalid pool id: %s", poolID)
+		return nil, nil, nil, nil, types.BadRequestErrorf("invalid pool id: %s", poolID)
 	}
 
 	if err := a.refresh(k.AddressSpace); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	aSpace, err := a.getAddrSpace(k.AddressSpace)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	aSpace.Lock()
 	p, ok := aSpace.subnets[k]
 	if !ok {
 		aSpace.Unlock()
-		return nil, nil, types.NotFoundErrorf("cannot find address pool for poolID:%s", poolID)
+		return nil, nil, nil, nil, types.NotFoundErrorf("cannot find address pool for poolID:%s", poolID)
 	}
 
 	if prefAddress != nil && !p.Pool.Contains(prefAddress) {
 		aSpace.Unlock()
-		return nil, nil, ipamapi.ErrIPOutOfRange
+		return nil, nil, nil, nil, ipamapi.ErrIPOutOfRange
 	}
 
 	c := p
@@ -453,15 +453,15 @@ func (a *Allocator) RequestAddress(poolID string, prefAddress net.IP, opts map[s
 
 	bm, err := a.retrieveBitmask(k, c.Pool)
 	if err != nil {
-		return nil, nil, types.InternalErrorf("could not find bitmask in datastore for %s on address %v request from pool %s: %v",
+		return nil, nil, nil, nil, types.InternalErrorf("could not find bitmask in datastore for %s on address %v request from pool %s: %v",
 			k.String(), prefAddress, poolID, err)
 	}
 	ip, err := a.getAddress(p.Pool, bm, prefAddress, p.Range)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
-	return &net.IPNet{IP: ip, Mask: p.Pool.Mask}, nil, nil
+	return &net.IPNet{IP: ip, Mask: p.Pool.Mask}, nil, nil, nil, nil
 }
 
 // ReleaseAddress releases the address from the specified pool ID
