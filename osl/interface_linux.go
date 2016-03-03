@@ -83,12 +83,10 @@ func (i *nwIface) Routes() []*net.IPNet {
 	i.Lock()
 	defer i.Unlock()
 
-	routes := make([]*net.IPNet, len(i.routes))
-	for index, route := range i.routes {
-		r := types.GetIPNetCopy(route)
-		routes[index] = r
+	var routes []*net.IPNet
+	for _, route := range i.routes {
+		routes = append(routes, types.GetIPNetCopy(route))
 	}
-
 	return routes
 }
 
@@ -96,12 +94,10 @@ func (i *nwIface) IPAliases() []*net.IPNet {
 	i.Lock()
 	defer i.Unlock()
 
-	aliases := make([]*net.IPNet, len(i.addressAliases))
-	for index, alias := range i.addressAliases {
-		ipa := types.GetIPNetCopy(alias)
-		aliases[index] = ipa
+	var aliases []*net.IPNet
+	for _, alias := range i.addressAliases {
+		aliases = append(aliases, types.GetIPNetCopy(alias))
 	}
-
 	return aliases
 }
 
@@ -320,7 +316,7 @@ func configureInterface(iface netlink.Link, i *nwIface) error {
 		{setInterfaceName, fmt.Sprintf("error renaming interface %q to %q", ifaceName, i.DstName())},
 		{setInterfaceIP, fmt.Sprintf("error setting interface %q IP to %q", ifaceName, i.Address())},
 		{setInterfaceIPv6, fmt.Sprintf("error setting interface %q IPv6 to %q", ifaceName, i.AddressIPv6())},
-		{setInterfaceIPAliases, fmt.Sprintf("error setting interface %q IP Aliases to %q", ifaceName, i.IPAliases())},
+		{setInterfaceAddrAliases, fmt.Sprintf("error setting interface %q IP Aliases to %q", ifaceName, i.IPAliases())},
 		{setInterfaceMaster, fmt.Sprintf("error setting interface %q master to %q", ifaceName, i.DstMaster())},
 	}
 
@@ -350,14 +346,12 @@ func setInterfaceIP(iface netlink.Link, i *nwIface) error {
 	return netlink.AddrAdd(iface, ipAddr)
 }
 
-func setInterfaceIPAliases(iface netlink.Link, i *nwIface) error {
-	if i.IPAliases() == nil {
-		return nil
-	}
-
+func setInterfaceAddrAliases(iface netlink.Link, i *nwIface) error {
 	for _, ip := range i.IPAliases() {
 		ipAddr := &netlink.Addr{IPNet: ip, Label: ""}
-		netlink.AddrAdd(iface, ipAddr)
+		if err := netlink.AddrAdd(iface, ipAddr); err != nil {
+			return err
+		}
 	}
 	return nil
 }

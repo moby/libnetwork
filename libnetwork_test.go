@@ -747,26 +747,23 @@ func TestEndpointWithAlias(t *testing.T) {
 		}
 	}()
 
-	alias1 := &net.IPNet{
-		IP:   net.IP{8, 8, 8, 8},
-		Mask: net.IPMask{255, 255, 255, 255},
-	}
-	aliases := []*net.IPNet{
+	alias1 := net.ParseIP("8.8.8.8")
+	aliases := []net.IP{
 		alias1,
 	}
 
-	epOption := options.Generic{netlabel.IPAliases: aliases}
-
-	ep, err := n.CreateEndpoint("ep1", libnetwork.EndpointOptionGeneric(epOption))
+	ep, err := n.CreateEndpoint("ep1", libnetwork.CreateOptionIpam(net.ParseIP(""), net.ParseIP(""), aliases, nil))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	iface := ep.Info().Iface()
-	ip, expIP, _ := net.ParseCIDR("8.8.8.8/32")
-	expIP.IP = ip
-	if !types.CompareIPNet(expIP, iface.IPAliases()[0]) {
-		t.Fatalf("Expected %v. Got: %v", expIP, iface.IPAliases()[0])
+	ipN := &net.IPNet{
+		IP:   alias1,
+		Mask: net.IPMask{255, 255, 255, 255},
+	}
+	if !types.CompareIPNet(ipN, iface.IPAliases()[0]) {
+		t.Fatalf("Expected %v. Got: %v", ipN, iface.IPAliases()[0])
 	}
 
 	defer func() {

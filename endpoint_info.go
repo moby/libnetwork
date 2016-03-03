@@ -46,9 +46,6 @@ type InterfaceInfo interface {
 
 	// IPAliases return the IP aliases assigned to the interface
 	IPAliases() []*net.IPNet
-
-	// SetIPAliases sets the list of IP aliases
-	SetIPAliases(aliases []*net.IPNet) error
 }
 
 type endpointInterface struct {

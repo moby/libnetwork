@@ -680,12 +680,12 @@ func (n *network) addEndpoint(ep *endpoint) error {
 	if err != nil {
 		return fmt.Errorf("failed to add endpoint: %v", err)
 	}
-
 	err = d.CreateEndpoint(n.id, ep.id, ep.Interface(), ep.generic)
 	if err != nil {
 		return types.InternalErrorf("failed to create endpoint %s on network %s: %v",
 			ep.Name(), n.Name(), err)
 	}
+	log.Infof("After adding endpoint with aliases %v ", ep.iface.ipAliases)
 
 	return nil
 }
@@ -720,14 +720,9 @@ func (n *network) CreateEndpoint(name string, options ...EndpointOption) (Endpoi
 			ep.iface.mac = mac
 		}
 	}
-	// This may change depending how Aliases are transmitted by daemon
-	if opt, ok := ep.generic[netlabel.IPAliases]; ok {
-		if aliases, ok := opt.([]*net.IPNet); ok {
-			for _, alias := range aliases {
-				// Aliases are not allocated
-				ep.iface.ipAliases = append(ep.iface.ipAliases, alias)
-			}
-		}
+	for _, al := range ep.ipAliases {
+		ipn := &net.IPNet{IP: al, Mask: net.IPMask{255, 255, 255, 255}}
+		ep.iface.ipAliases = append(ep.iface.ipAliases, ipn)
 	}
 
 	ipam, err := n.getController().getIPAM(n.ipamType)
