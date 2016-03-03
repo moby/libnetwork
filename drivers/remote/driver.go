@@ -113,10 +113,8 @@ func (d *driver) CreateEndpoint(nid, eid string, ifInfo driverapi.InterfaceInfo,
 	if ifInfo.MacAddress() != nil {
 		reqIface.MacAddress = ifInfo.MacAddress().String()
 	}
-	if len(ifInfo.IPAliases()) > 0 {
-		for _, ips := range ifInfo.IPAliases() {
-			reqIface.IPAliases = append(reqIface.IPAliases, ips.String())
-		}
+	for _, ips := range ifInfo.IPAliases() {
+		reqIface.IPAliases = append(reqIface.IPAliases, ips.String())
 	}
 
 	create := &api.CreateEndpointRequest{
@@ -332,14 +330,12 @@ func parseInterface(r api.CreateEndpointResponse) (*api.Interface, error) {
 				return nil, err
 			}
 		}
-		if len(inIf.IPAliases) > 0 {
-			for _, alias := range inIf.IPAliases {
-				if i, err := types.ParseCIDR(alias); err == nil {
-					outIf.IPAliases = append(outIf.IPAliases, i)
-				} else {
-					// returning error if any alias is wrong
-					return nil, err
-				}
+		for _, alias := range inIf.IPAliases {
+			if i, err := types.ParseCIDR(alias); err == nil {
+				outIf.IPAliases = append(outIf.IPAliases, i)
+			} else {
+				// returning error if any alias is wrong
+				return nil, err
 			}
 		}
 	}

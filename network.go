@@ -685,8 +685,6 @@ func (n *network) addEndpoint(ep *endpoint) error {
 		return types.InternalErrorf("failed to create endpoint %s on network %s: %v",
 			ep.Name(), n.Name(), err)
 	}
-	log.Infof("After adding endpoint with aliases %v ", ep.iface.ipAliases)
-
 	return nil
 }
 
