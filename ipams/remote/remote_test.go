@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/docker/docker/pkg/plugins"
@@ -199,10 +200,11 @@ func TestRemoteDriver(t *testing.T) {
 		ip = fmt.Sprintf("%s/16", ip)
 		dnsList := []string{"172.20.0.1", "172.20.0.2"}
 		dnsSearchList := []string{"domain1", "domain2"}
+		ipamData := map[string]string{"DNSServers": strings.Join(dnsList, " "),
+			"DNSSearchDomains": strings.Join(dnsSearchList, " ")}
 		return map[string]interface{}{
-			"Address":          ip,
-			"DNSServers":       dnsList,
-			"DNSSearchDomains": dnsSearchList,
+			"Address": ip,
+			"Data":    ipamData,
 		}
 	})
 
@@ -271,13 +273,16 @@ func TestRemoteDriver(t *testing.T) {
 	}
 
 	// Request any address
-	addr, dnsList, dnsSearchDomains, _, err := d.RequestAddress(poolID2, nil, nil)
+	addr, ipamData, err := d.RequestAddress(poolID2, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if addr == nil || addr.String() != "172.20.0.34/16" {
 		t.Fatalf("Unexpected address: %s", addr)
 	}
+
+	dnsList := strings.Split(ipamData["DNSServers"], " ")
+	dnsSearchDomains := strings.Split(ipamData["DNSSearchDomains"], " ")
 
 	expectedDNSList := []string{"172.20.0.1", "172.20.0.2"}
 	if dnsList == nil || len(dnsList) != len(expectedDNSList) {
@@ -300,7 +305,7 @@ func TestRemoteDriver(t *testing.T) {
 	}
 
 	// Request specific address
-	addr2, _, _, _, err := d.RequestAddress(poolID2, net.ParseIP("172.20.1.45"), nil)
+	addr2, _, err := d.RequestAddress(poolID2, net.ParseIP("172.20.1.45"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

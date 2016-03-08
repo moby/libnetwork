@@ -95,7 +95,7 @@ func (a *allocator) ReleasePool(poolID string) error {
 }
 
 // RequestAddress requests an address from the address pool
-func (a *allocator) RequestAddress(poolID string, address net.IP, options map[string]string) (*net.IPNet, []string, []string, map[string]string, error) {
+func (a *allocator) RequestAddress(poolID string, address net.IP, options map[string]string) (*net.IPNet, map[string]string, error) {
 	var (
 		prefAddress string
 		retAddress  *net.IPNet
@@ -107,12 +107,12 @@ func (a *allocator) RequestAddress(poolID string, address net.IP, options map[st
 	req := &api.RequestAddressRequest{PoolID: poolID, Address: prefAddress, Options: options}
 	res := &api.RequestAddressResponse{}
 	if err := a.call("RequestAddress", req, res); err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, err
 	}
 	if res.Address != "" {
 		retAddress, err = types.ParseCIDR(res.Address)
 	}
-	return retAddress, res.DNSServers, res.DNSSearchDomains, res.Data, err
+	return retAddress, res.Data, err
 }
 
 // ReleaseAddress releases the address from the specified address pool

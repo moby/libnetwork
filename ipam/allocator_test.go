@@ -176,7 +176,7 @@ func TestSubnetsMarshal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, _, _, _, err = a.RequestAddress(pid0, nil, nil)
+	_, _, err = a.RequestAddress(pid0, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +192,7 @@ func TestSubnetsMarshal(t *testing.T) {
 	}
 
 	expIP := &net.IPNet{IP: net.IP{192, 168, 0, 2}, Mask: net.IPMask{255, 255, 0, 0}}
-	ip, _, _, _, err := a.RequestAddress(pid0, nil, nil)
+	ip, _, err := a.RequestAddress(pid0, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,7 +201,7 @@ func TestSubnetsMarshal(t *testing.T) {
 	}
 
 	expIP = &net.IPNet{IP: net.IP{192, 169, 0, 1}, Mask: net.IPMask{255, 255, 0, 0}}
-	ip, _, _, _, err = a.RequestAddress(pid1, nil, nil)
+	ip, _, err = a.RequestAddress(pid1, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -556,12 +556,12 @@ func TestGetSameAddress(t *testing.T) {
 	}
 
 	ip := net.ParseIP("192.168.100.250")
-	_, _, _, _, err = a.RequestAddress(pid, ip, nil)
+	_, _, err = a.RequestAddress(pid, ip, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, _, _, _, err = a.RequestAddress(pid, ip, nil)
+	_, _, err = a.RequestAddress(pid, ip, nil)
 	if err == nil {
 		t.Fatal(err)
 	}
@@ -578,7 +578,7 @@ func TestGetAddressSubPoolEqualPool(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, _, _, _, err = a.RequestAddress(pid, nil, nil)
+	_, _, err = a.RequestAddress(pid, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -606,7 +606,7 @@ func TestRequestReleaseAddressFromSubPool(t *testing.T) {
 	expected := &net.IPNet{IP: net.IP{172, 28, 30, 255}, Mask: net.IPMask{255, 255, 0, 0}}
 	for err == nil {
 		var c *net.IPNet
-		if c, _, _, _, err = a.RequestAddress(poolID, nil, nil); err == nil {
+		if c, _, err = a.RequestAddress(poolID, nil, nil); err == nil {
 			ip = c
 		}
 	}
@@ -620,7 +620,7 @@ func TestRequestReleaseAddressFromSubPool(t *testing.T) {
 	if err = a.ReleaseAddress(poolID, rp.IP); err != nil {
 		t.Fatal(err)
 	}
-	if ip, _, _, _, err = a.RequestAddress(poolID, nil, nil); err != nil {
+	if ip, _, err = a.RequestAddress(poolID, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if !types.CompareIPNet(rp, ip) {
@@ -638,7 +638,7 @@ func TestRequestReleaseAddressFromSubPool(t *testing.T) {
 	expected = &net.IPNet{IP: net.IP{10, 0, 0, 255}, Mask: net.IPMask{255, 255, 0, 0}}
 	for err == nil {
 		var c *net.IPNet
-		if c, _, _, _, err = a.RequestAddress(poolID, nil, nil); err == nil {
+		if c, _, err = a.RequestAddress(poolID, nil, nil); err == nil {
 			ip = c
 		}
 	}
@@ -652,7 +652,7 @@ func TestRequestReleaseAddressFromSubPool(t *testing.T) {
 	if err = a.ReleaseAddress(poolID, rp.IP); err != nil {
 		t.Fatal(err)
 	}
-	if ip, _, _, _, err = a.RequestAddress(poolID, nil, nil); err != nil {
+	if ip, _, err = a.RequestAddress(poolID, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if !types.CompareIPNet(rp, ip) {
@@ -666,7 +666,7 @@ func TestRequestReleaseAddressFromSubPool(t *testing.T) {
 	if poolID, _, _, err = a.RequestPool("rosso", "10.2.0.0/16", "10.2.2.0/24", nil, false); err != nil {
 		t.Fatal(err)
 	}
-	tre, _, _, _, err := a.RequestAddress(poolID, treExp.IP, nil)
+	tre, _, err := a.RequestAddress(poolID, treExp.IP, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -674,7 +674,7 @@ func TestRequestReleaseAddressFromSubPool(t *testing.T) {
 		t.Fatalf("Unexpected address: %v", tre)
 	}
 
-	uno, _, _, _, err := a.RequestAddress(poolID, nil, nil)
+	uno, _, err := a.RequestAddress(poolID, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -682,7 +682,7 @@ func TestRequestReleaseAddressFromSubPool(t *testing.T) {
 		t.Fatalf("Unexpected address: %v", uno)
 	}
 
-	due, _, _, _, err := a.RequestAddress(poolID, nil, nil)
+	due, _, err := a.RequestAddress(poolID, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -693,7 +693,7 @@ func TestRequestReleaseAddressFromSubPool(t *testing.T) {
 	if err = a.ReleaseAddress(poolID, uno.IP); err != nil {
 		t.Fatal(err)
 	}
-	uno, _, _, _, err = a.RequestAddress(poolID, nil, nil)
+	uno, _, err = a.RequestAddress(poolID, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -704,7 +704,7 @@ func TestRequestReleaseAddressFromSubPool(t *testing.T) {
 	if err = a.ReleaseAddress(poolID, tre.IP); err != nil {
 		t.Fatal(err)
 	}
-	tre, _, _, _, err = a.RequestAddress(poolID, nil, nil)
+	tre, _, err = a.RequestAddress(poolID, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -765,19 +765,19 @@ func TestRequestSyntaxCheck(t *testing.T) {
 		t.Fatalf("Unexpected failure: %v", err)
 	}
 
-	_, _, _, _, err = a.RequestAddress("", nil, nil)
+	_, _, err = a.RequestAddress("", nil, nil)
 	if err == nil {
 		t.Fatalf("Failed to detect wrong request: no pool id specified")
 	}
 
 	ip := net.ParseIP("172.17.0.23")
-	_, _, _, _, err = a.RequestAddress(pid, ip, nil)
+	_, _, err = a.RequestAddress(pid, ip, nil)
 	if err == nil {
 		t.Fatalf("Failed to detect wrong request: requested IP from different subnet")
 	}
 
 	ip = net.ParseIP("192.168.0.50")
-	_, _, _, _, err = a.RequestAddress(pid, ip, nil)
+	_, _, err = a.RequestAddress(pid, ip, nil)
 	if err != nil {
 		t.Fatalf("Unexpected failure: %v", err)
 	}
@@ -848,7 +848,7 @@ func TestRelease(t *testing.T) {
 
 	// Allocate all addresses
 	for err != ipamapi.ErrNoAvailableIPs {
-		_, _, _, _, err = a.RequestAddress(pid, nil, nil)
+		_, _, err = a.RequestAddress(pid, nil, nil)
 	}
 
 	toRelease := []struct {
@@ -887,7 +887,7 @@ func TestRelease(t *testing.T) {
 			t.Fatalf("Failed to update free address count after release. Expected %d, Found: %d", i+1, bm.Unselected())
 		}
 
-		nw, _, _, _, err := a.RequestAddress(pid, nil, nil)
+		nw, _, err := a.RequestAddress(pid, nil, nil)
 		if err != nil {
 			t.Fatalf("Failed to obtain the address: %s", err.Error())
 		}
@@ -954,7 +954,7 @@ func assertNRequests(t *testing.T, subnet string, numReq int, lastExpectedIP str
 	i := 0
 	start := time.Now()
 	for ; i < numReq; i++ {
-		nw, _, _, _, err = a.RequestAddress(pid, nil, nil)
+		nw, _, err = a.RequestAddress(pid, nil, nil)
 	}
 	if printTime {
 		fmt.Printf("\nTaken %v, to allocate %d addresses on %s\n", time.Since(start), numReq, subnet)
@@ -968,7 +968,7 @@ func assertNRequests(t *testing.T, subnet string, numReq int, lastExpectedIP str
 func benchmarkRequest(b *testing.B, a *Allocator, subnet string) {
 	pid, _, _, err := a.RequestPool(localAddressSpace, subnet, "", nil, false)
 	for err != ipamapi.ErrNoAvailableIPs {
-		_, _, _, _, err = a.RequestAddress(pid, nil, nil)
+		_, _, err = a.RequestAddress(pid, nil, nil)
 	}
 }
 
@@ -1019,7 +1019,7 @@ func testAllocateRandomDeallocate(t *testing.T, pool, subPool string, num int) {
 	indices := make(map[int]*net.IPNet, num)
 	allocated := make(map[string]bool, num)
 	for i := 0; i < num; i++ {
-		ip, _, _, _, err := a.RequestAddress(pid, nil, nil)
+		ip, _, err := a.RequestAddress(pid, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1052,7 +1052,7 @@ func testAllocateRandomDeallocate(t *testing.T, pool, subPool string, num int) {
 
 	// Request a quarter of addresses
 	for i := 0; i < num/2; i++ {
-		ip, _, _, _, err := a.RequestAddress(pid, nil, nil)
+		ip, _, err := a.RequestAddress(pid, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1082,7 +1082,7 @@ func TestRetrieveFromStore(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i := 0; i < num; i++ {
-		if _, _, _, _, err := a.RequestAddress(pid, nil, nil); err != nil {
+		if _, _, err := a.RequestAddress(pid, nil, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1104,7 +1104,7 @@ func TestRetrieveFromStore(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i := 0; i < num/2; i++ {
-		if _, _, _, _, err := a1.RequestAddress(pid, nil, nil); err != nil {
+		if _, _, err := a1.RequestAddress(pid, nil, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1121,7 +1121,7 @@ func TestRetrieveFromStore(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i := 0; i < num/2; i++ {
-		if _, _, _, _, err := a2.RequestAddress(pid, nil, nil); err != nil {
+		if _, _, err := a2.RequestAddress(pid, nil, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1138,7 +1138,7 @@ func TestRetrieveFromStore(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i := 0; i < num/2; i++ {
-		if _, _, _, _, err := a3.RequestAddress(pid, nil, nil); err != nil {
+		if _, _, err := a3.RequestAddress(pid, nil, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
