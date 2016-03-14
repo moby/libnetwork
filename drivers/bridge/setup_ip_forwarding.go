@@ -10,7 +10,11 @@ const (
 	ipv4ForwardConfPerm = 0644
 )
 
-func setupIPForwarding() error {
+func (d *driver) setupIPForwarding() error {
+	if !d.config.EnableIPForwarding {
+		return nil
+	}
+
 	// Get current IPv4 forward setup
 	ipv4ForwardData, err := ioutil.ReadFile(ipv4ForwardConf)
 	if err != nil {

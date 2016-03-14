@@ -112,14 +112,19 @@ type bridgeNetwork struct {
 	sync.Mutex
 }
 
+type iptablesChains struct {
+	nat       *iptables.ChainInfo
+	filter    *iptables.ChainInfo
+	exposed   *iptables.ChainInfo
+	isolation *iptables.ChainInfo
+}
+
 type driver struct {
-	config         *configuration
-	network        *bridgeNetwork
-	natChain       *iptables.ChainInfo
-	filterChain    *iptables.ChainInfo
-	isolationChain *iptables.ChainInfo
-	networks       map[string]*bridgeNetwork
-	store          datastore.DataStore
+	config   *configuration
+	network  *bridgeNetwork
+	chains   iptablesChains
+	networks map[string]*bridgeNetwork
+	store    datastore.DataStore
 	sync.Mutex
 }
 
@@ -252,15 +257,15 @@ func (n *bridgeNetwork) registerIptCleanFunc(clean iptableCleanFunc) {
 	n.iptCleanFuncs = append(n.iptCleanFuncs, clean)
 }
 
-func (n *bridgeNetwork) getDriverChains() (*iptables.ChainInfo, *iptables.ChainInfo, *iptables.ChainInfo, error) {
+func (n *bridgeNetwork) getDriverChains() (*iptablesChains, error) {
 	n.Lock()
 	defer n.Unlock()
 
 	if n.driver == nil {
-		return nil, nil, nil, types.BadRequestErrorf("no driver found")
+		return nil, types.BadRequestErrorf("no driver found")
 	}
 
-	return n.driver.natChain, n.driver.filterChain, n.driver.isolationChain, nil
+	return &n.driver.chains, nil
 }
 
 func (n *bridgeNetwork) getNetworkBridgeName() string {
@@ -354,11 +359,8 @@ func (c *networkConfiguration) conflictsWithNetworks(id string, others []*bridge
 
 func (d *driver) configure(option map[string]interface{}) error {
 	var (
-		config         *configuration
-		err            error
-		natChain       *iptables.ChainInfo
-		filterChain    *iptables.ChainInfo
-		isolationChain *iptables.ChainInfo
+		config *configuration
+		err    error
 	)
 
 	genericData, ok := option[netlabel.GenericData]
@@ -379,29 +381,22 @@ func (d *driver) configure(option map[string]interface{}) error {
 		return &ErrInvalidDriverConfig{}
 	}
 
-	if config.EnableIPForwarding {
-		err = setupIPForwarding()
-		if err != nil {
-			return err
-		}
-	}
-
-	if config.EnableIPTables {
-		removeIPChains()
-		natChain, filterChain, isolationChain, err = setupIPChains(config)
-		if err != nil {
-			return err
-		}
-		// Make sure on firewall reload, first thing being re-played is chains creation
-		iptables.OnReloaded(func() { logrus.Debugf("Recreating iptables chains on firewall reload"); setupIPChains(config) })
-	}
-
 	d.Lock()
-	d.natChain = natChain
-	d.filterChain = filterChain
-	d.isolationChain = isolationChain
 	d.config = config
 	d.Unlock()
+
+	err = d.setupIPForwarding()
+	if err != nil {
+		return err
+	}
+
+	err = d.setupIPChains()
+	if err != nil {
+		return err
+	}
+
+	// Make sure on firewall reload, first thing being re-played is chains creation
+	iptables.OnReloaded(func() { logrus.Debugf("Recreating iptables chains on firewall reload"); d.setupIPChains() })
 
 	err = d.initStore(option)
 	if err != nil {
