@@ -779,6 +779,13 @@ func (n *network) CreateEndpoint(name string, options ...EndpointOption) (Endpoi
 		ep.ipamOptions[netlabel.MacAddress] = ep.iface.mac.String()
 	}
 
+	if ipam.capability.RequiresEndpointID {
+		if ep.ipamOptions == nil {
+			ep.ipamOptions = make(map[string]string)
+		}
+		ep.ipamOptions[netlabel.EndpointID] = ep.id
+	}
+
 	if err = ep.assignAddress(ipam.driver, true, !n.postIPv6); err != nil {
 		return nil, err
 	}
@@ -1062,6 +1069,18 @@ func (n *network) ipamAllocateVersion(ipVer int, ipam ipamapi.Ipam) error {
 	}
 
 	*infoList = make([]*IpamInfo, len(*cfgList))
+
+	id, err := n.getController().getIPAM(n.ipamType)
+	if err != nil {
+		return err
+	}
+
+	if id.capability.RequiresNetworkID {
+		if n.ipamOptions == nil {
+			n.ipamOptions = make(map[string]string)
+		}
+		n.ipamOptions[netlabel.NetworkID] = n.ID()
+	}
 
 	log.Debugf("Allocating IPv%d pools for network %s (%s)", ipVer, n.Name(), n.ID())
 
