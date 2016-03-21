@@ -166,6 +166,15 @@ func DefaultScopes(dataDir string) map[string]*ScopeCfg {
 	return defaultScopes
 }
 
+// PersistConnection returns true if the client
+// is configured to persist the connection.
+func (cfg *ScopeCfg) PersistConnection() bool {
+	if cfg.Client.Config == nil {
+		return false
+	}
+	return cfg.Client.Config.PersistConnection
+}
+
 // IsValid checks if the scope config has valid configuration.
 func (cfg *ScopeCfg) IsValid() bool {
 	if cfg == nil ||
