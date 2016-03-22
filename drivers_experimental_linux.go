@@ -7,9 +7,9 @@ import (
 	"github.com/docker/libnetwork/drivers/macvlan"
 )
 
-func additionalDrivers() []initializer {
-	return []initializer{
-		{macvlan.Init, "macvlan"},
-		{ipvlan.Init, "ipvlan"},
+func additionalDrivers() map[string]initializer {
+	return map[string]initializer{
+		"macvlan": macvlan.Init,
+		"ipvlan":  ipvlan.Init,
 	}
 }

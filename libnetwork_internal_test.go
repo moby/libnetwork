@@ -15,6 +15,23 @@ import (
 	"github.com/docker/libnetwork/types"
 )
 
+func TestDriverLazyInit(t *testing.T) {
+	bridgeNetType := "bridge"
+	c, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Stop()
+	err = c.(*controller).RegisterDriver(bridgeNetType, nil, driverapi.Capability{})
+	if err != nil {
+		t.Fatalf("Test failed with an error %v", err)
+	}
+	err = c.(*controller).RegisterDriver("test-dummy", nil, driverapi.Capability{})
+	if err != nil {
+		t.Fatalf("Test failed with an error %v", err)
+	}
+}
+
 func TestDriverRegistration(t *testing.T) {
 	bridgeNetType := "bridge"
 	c, err := New()
@@ -22,6 +39,11 @@ func TestDriverRegistration(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer c.Stop()
+	nw, err := c.NewNetwork("bridge", "goodnet1")
+	if err != nil {
+		t.Fatalf("Error creating bridge network %v", err)
+	}
+	defer nw.Delete()
 	err = c.(*controller).RegisterDriver(bridgeNetType, nil, driverapi.Capability{})
 	if err == nil {
 		t.Fatalf("Expecting the RegisterDriver to fail for %s", bridgeNetType)
