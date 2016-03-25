@@ -11,6 +11,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/docker/libnetwork/iptables"
 	"github.com/docker/libnetwork/netutils"
+	dnsutil "github.com/docker/libnetwork/resolvconf/dns"
 	"github.com/miekg/dns"
 )
 
@@ -335,30 +336,37 @@ func (r *resolver) ServeDNS(w dns.ResponseWriter, query *dns.Msg) {
 				extConn, err = net.DialTimeout(proto, addr, extIOTimeout)
 			}
 
-			// For udp clients connection is persisted to reuse for further queries.
-			// Accessing extDNS.extConn be a race here between go rouines. Hence the
-			// connection setup is done in a Once block and fetch the extConn again
-			extConn = extDNS.extConn
-			if extConn == nil || proto == "tcp" {
-				if proto == "udp" {
+			// If the external DNS server is a loopback address it should be routed
+			// in the host namespace.
+			if dnsutil.IsLocalhost(extDNS.ipStr) {
+				extConnect()
+			} else {
+				switch proto {
+				// For udp clients connection is persisted to reuse for further queries.
+				// Accessing extDNS.extConn can be a race here between go rouines. Hence
+				// the connection setup is done in a Once block and fetch the extConn again
+				case "udp":
+					extConn = extDNS.extConn
+					if extConn != nil {
+						break
+					}
 					extDNS.extOnce.Do(func() {
 						r.sb.execFunc(extConnect)
 						extDNS.extConn = extConn
 					})
 					extConn = extDNS.extConn
-				} else {
+				case "tcp":
 					r.sb.execFunc(extConnect)
-				}
-				if err != nil {
-					log.Debugf("Connect failed, %s", err)
-					continue
+				default:
+					err = fmt.Errorf("invalid client proto: %s", proto)
 				}
 			}
-			// If two go routines are executing in parralel one will
+			// If two go routines are executing in parallel one will
 			// block on the Once.Do and in case of error connecting
 			// to the external server it will end up with a nil err
 			// but extConn also being nil.
-			if extConn == nil {
+			if err != nil || extConn == nil {
+				log.Debugf("Connect failed, %s", err)
 				continue
 			}
 

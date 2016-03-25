@@ -14,9 +14,10 @@ import (
 	"github.com/docker/libnetwork/resolvconf/dns"
 )
 
+// Note: the default IPv4 & IPv6 resolvers are set to Google's Public DNS
 var (
-	// Note: the default IPv4 & IPv6 resolvers are set to Google's Public DNS
-	defaultIPv4Dns = []string{"nameserver 8.8.8.8", "nameserver 8.8.4.4"}
+	// DefaultIPv4Dns is the list of default external v4 nameservers
+	DefaultIPv4Dns = []string{"8.8.8.8", "8.8.4.4"}
 	defaultIPv6Dns = []string{"nameserver 2001:4860:4860::8888", "nameserver 2001:4860:4860::8844"}
 	ipv4NumBlock   = `(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)`
 	ipv4Address    = `(` + ipv4NumBlock + `\.){3}` + ipv4NumBlock
@@ -123,8 +124,11 @@ func FilterResolvDNS(resolvConf []byte, ipv6Enabled bool) (*File, error) {
 	// if the resulting resolvConf has no more nameservers defined, add appropriate
 	// default DNS servers for IPv4 and (optionally) IPv6
 	if len(GetNameservers(cleanedResolvConf, netutils.IP)) == 0 {
-		logrus.Infof("No non-localhost DNS nameservers are left in resolv.conf. Using default external servers : %v", defaultIPv4Dns)
-		dns := defaultIPv4Dns
+		dns := []string{}
+		for _, ip := range DefaultIPv4Dns {
+			dns = append(dns, "nameserver "+ip)
+		}
+		logrus.Infof("No non-localhost DNS nameservers are left in resolv.conf. Using default external servers : %v", dns)
 		if ipv6Enabled {
 			logrus.Infof("IPv6 enabled; Adding default IPv6 external servers : %v", defaultIPv6Dns)
 			dns = append(dns, defaultIPv6Dns...)

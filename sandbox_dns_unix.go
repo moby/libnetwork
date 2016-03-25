@@ -172,6 +172,8 @@ func (sb *sandbox) setupDNS() error {
 		)
 		if len(sb.config.dnsList) > 0 {
 			dnsList = sb.config.dnsList
+			// save the external nameserver list; used by embedded DNS server when enabled.
+			sb.extDNS = dnsList
 		}
 		if len(sb.config.dnsSearchList) > 0 {
 			dnsSearchList = sb.config.dnsSearchList
@@ -184,6 +186,13 @@ func (sb *sandbox) setupDNS() error {
 			return err
 		}
 	} else {
+		// If embedded DNS server is enabled later for this contianer ipv4 loopback nameservers if
+		// present should be used. retain it before filtering out resolv.conf contents.
+		sb.extDNS = resolvconf.GetNameservers(currRC.Content, netutils.IPv4)
+		if len(sb.extDNS) == 0 {
+			sb.extDNS = resolvconf.DefaultIPv4Dns
+		}
+
 		// Replace any localhost/127.* (at this point we have no info about ipv6, pass it as true)
 		if newRC, err = resolvconf.FilterResolvDNS(currRC.Content, true); err != nil {
 			return err
@@ -272,10 +281,6 @@ func (sb *sandbox) rebuildDNS() error {
 	if err != nil {
 		return err
 	}
-
-	// localhost entries have already been filtered out from the list
-	// retain only the v4 servers in sb for forwarding the DNS queries
-	sb.extDNS = resolvconf.GetNameservers(currRC.Content, netutils.IPv4)
 
 	var (
 		dnsList        = []string{sb.resolver.NameServer()}
