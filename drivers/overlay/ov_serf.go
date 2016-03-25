@@ -82,8 +82,15 @@ func (d *driver) serfJoin(neighIP string) error {
 
 func (d *driver) notifyEvent(event ovNotify) {
 	n := d.network(event.nid)
+	if n == nil {
+		logrus.Errorf("Failed to find network, event: %v", event)
+		return
+	}
 	ep := n.endpoint(event.eid)
-
+	if ep == nil {
+		logrus.Errorf("Failed to find endpoint, event: %v", event)
+		return
+	}
 	ePayload := fmt.Sprintf("%s %s %s %s", event.action, ep.addr.IP.String(),
 		net.IP(ep.addr.Mask).String(), ep.mac.String())
 	eName := fmt.Sprintf("jl %s %s %s", d.serfInstance.LocalMember().Addr.String(),
