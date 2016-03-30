@@ -31,9 +31,6 @@ type Resolver interface {
 	// SetExtServers configures the external nameservers the resolver
 	// should use to forward queries
 	SetExtServers([]string)
-	// FlushExtServers clears the cached UDP connections to external
-	// nameservers
-	FlushExtServers()
 	// ResolverOptions returns resolv.conf options that should be set
 	ResolverOptions() []string
 }
@@ -45,30 +42,24 @@ const (
 	ptrIPv6domain   = ".ip6.arpa."
 	respTTL         = 600
 	maxExtDNS       = 3 //max number of external servers to try
-	extIOTimeout    = 3 * time.Second
+	extIOTimeout    = 4 * time.Second
 	defaultRespSize = 512
 	maxConcurrent   = 50
 	logInterval     = 2 * time.Second
 )
 
-type extDNSEntry struct {
-	ipStr   string
-	extConn net.Conn
-	extOnce sync.Once
-}
-
 // resolver implements the Resolver interface
 type resolver struct {
-	sb         *sandbox
-	extDNSList [maxExtDNS]extDNSEntry
-	server     *dns.Server
-	conn       *net.UDPConn
-	tcpServer  *dns.Server
-	tcpListen  *net.TCPListener
-	err        error
-	count      int32
-	tStamp     time.Time
-	queryLock  sync.Mutex
+	sb        *sandbox
+	extDNS    [maxExtDNS]string
+	server    *dns.Server
+	conn      *net.UDPConn
+	tcpServer *dns.Server
+	tcpListen *net.TCPListener
+	err       error
+	count     int32
+	tStamp    time.Time
+	queryLock sync.Mutex
 }
 
 func init() {
@@ -148,16 +139,7 @@ func (r *resolver) Start() error {
 	return nil
 }
 
-func (r *resolver) FlushExtServers() {
-	for i := 0; i < maxExtDNS; i++ {
-		r.extDNSList[i].extConn = nil
-		r.extDNSList[i].extOnce = sync.Once{}
-	}
-}
-
 func (r *resolver) Stop() {
-	r.FlushExtServers()
-
 	if r.server != nil {
 		r.server.Shutdown()
 	}
@@ -178,7 +160,7 @@ func (r *resolver) SetExtServers(dns []string) {
 		l = maxExtDNS
 	}
 	for i := 0; i < l; i++ {
-		r.extDNSList[i].ipStr = dns[i]
+		r.extDNS[i] = dns[i]
 	}
 }
 
@@ -332,42 +314,18 @@ func (r *resolver) ServeDNS(w dns.ResponseWriter, query *dns.Msg) {
 		}
 	} else {
 		for i := 0; i < maxExtDNS; i++ {
-			extDNS := &r.extDNSList[i]
-			if extDNS.ipStr == "" {
+			if r.extDNS[i] == "" {
 				break
 			}
 			log.Debugf("Query %s[%d] from %s, forwarding to %s:%s", name, query.Question[0].Qtype,
-				w.LocalAddr().String(), proto, extDNS.ipStr)
+				w.LocalAddr().String(), proto, r.extDNS[i])
 
-			extConnect := func() {
-				addr := fmt.Sprintf("%s:%d", extDNS.ipStr, 53)
+			r.sb.execFunc(func() {
+				addr := fmt.Sprintf("%s:%d", r.extDNS[i], 53)
 				extConn, err = net.DialTimeout(proto, addr, extIOTimeout)
-			}
-
-			// For udp clients connection is persisted to reuse for further queries.
-			// Accessing extDNS.extConn be a race here between go rouines. Hence the
-			// connection setup is done in a Once block and fetch the extConn again
-			extConn = extDNS.extConn
-			if extConn == nil || proto == "tcp" {
-				if proto == "udp" {
-					extDNS.extOnce.Do(func() {
-						r.sb.execFunc(extConnect)
-						extDNS.extConn = extConn
-					})
-					extConn = extDNS.extConn
-				} else {
-					r.sb.execFunc(extConnect)
-				}
-				if err != nil {
-					log.Debugf("Connect failed, %s", err)
-					continue
-				}
-			}
-			// If two go routines are executing in parralel one will
-			// block on the Once.Do and in case of error connecting
-			// to the external server it will end up with a nil err
-			// but extConn also being nil.
-			if extConn == nil {
+			})
+			if err != nil {
+				log.Debugf("Connect failed, %s", err)
 				continue
 			}
 
@@ -385,9 +343,7 @@ func (r *resolver) ServeDNS(w dns.ResponseWriter, query *dns.Msg) {
 			}
 
 			defer func() {
-				if proto == "tcp" {
-					co.Close()
-				}
+				co.Close()
 			}()
 			err = co.WriteMsg(query)
 			if err != nil {
