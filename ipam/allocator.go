@@ -11,6 +11,7 @@ import (
 	"github.com/docker/libnetwork/discoverapi"
 	"github.com/docker/libnetwork/ipamapi"
 	"github.com/docker/libnetwork/ipamutils"
+	"github.com/docker/libnetwork/netlabel"
 	"github.com/docker/libnetwork/types"
 )
 
@@ -37,8 +38,25 @@ type Allocator struct {
 }
 
 // NewAllocator returns an instance of libnetwork ipam
-func NewAllocator(lcDs, glDs datastore.DataStore) (*Allocator, error) {
+func NewAllocator(config map[string]interface{}) (*Allocator, error) {
+	var (
+		lcDs, glDs datastore.DataStore
+		err        error
+	)
+
 	a := &Allocator{}
+
+	// Initialize datastore clients
+	if data, ok := config[netlabel.LocalKVClient]; ok {
+		if lcDs, err = datastore.NewDataStoreFromConfig(data); err != nil {
+			return nil, types.InternalErrorf("failed to create IPAM allocator because of %v", err)
+		}
+	}
+	if data, ok := config[netlabel.GlobalKVClient]; ok {
+		if glDs, err = datastore.NewDataStoreFromConfig(data); err != nil {
+			return nil, types.InternalErrorf("failed to create IPAM allocator because of %v", err)
+		}
+	}
 
 	// Load predefined subnet pools
 	a.predefined = map[string][]*net.IPNet{
@@ -168,12 +186,7 @@ func (a *Allocator) DiscoverNew(dType discoverapi.DiscoveryType, data interface{
 		return nil
 	}
 
-	dsc, ok := data.(discoverapi.DatastoreConfigData)
-	if !ok {
-		return types.InternalErrorf("incorrect data in datastore update notification: %v", data)
-	}
-
-	ds, err := datastore.NewDataStoreFromConfig(dsc)
+	ds, err := datastore.NewDataStoreFromConfig(data)
 	if err != nil {
 		return err
 	}

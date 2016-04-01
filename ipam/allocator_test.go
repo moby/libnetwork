@@ -13,9 +13,10 @@ import (
 
 	"github.com/docker/libkv/store"
 	"github.com/docker/libnetwork/bitseq"
-	"github.com/docker/libnetwork/datastore"
+	"github.com/docker/libnetwork/discoverapi"
 	"github.com/docker/libnetwork/ipamapi"
 	"github.com/docker/libnetwork/ipamutils"
+	"github.com/docker/libnetwork/netlabel"
 	_ "github.com/docker/libnetwork/testutils"
 	"github.com/docker/libnetwork/types"
 )
@@ -24,8 +25,7 @@ const (
 	defaultPrefix = "/tmp/libnetwork/test/ipam"
 )
 
-// OptionBoltdbWithRandomDBFile function returns a random dir for local store backend
-func randomLocalStore() (datastore.DataStore, error) {
+func randomLocalStoreConfig() (map[string]interface{}, error) {
 	tmp, err := ioutil.TempFile("", "libnetwork-")
 	if err != nil {
 		return nil, fmt.Errorf("Error creating temp file: %v", err)
@@ -33,8 +33,10 @@ func randomLocalStore() (datastore.DataStore, error) {
 	if err := tmp.Close(); err != nil {
 		return nil, fmt.Errorf("Error closing temp file: %v", err)
 	}
-	return datastore.NewDataStore(datastore.LocalScope, &datastore.ScopeCfg{
-		Client: datastore.ScopeClientCfg{
+
+	return map[string]interface{}{
+		netlabel.LocalKVClient: discoverapi.DatastoreConfigData{
+			Scope:    "local",
 			Provider: "boltdb",
 			Address:  defaultPrefix + tmp.Name(),
 			Config: &store.Config{
@@ -42,15 +44,15 @@ func randomLocalStore() (datastore.DataStore, error) {
 				ConnectionTimeout: 3 * time.Second,
 			},
 		},
-	})
+	}, nil
 }
 
 func getAllocator() (*Allocator, error) {
-	ds, err := randomLocalStore()
+	dsCfg, err := randomLocalStoreConfig()
 	if err != nil {
 		return nil, err
 	}
-	a, err := NewAllocator(ds, nil)
+	a, err := NewAllocator(dsCfg)
 	if err != nil {
 		return nil, err
 	}
@@ -1000,12 +1002,12 @@ func TestAllocateRandomDeallocate(t *testing.T) {
 }
 
 func testAllocateRandomDeallocate(t *testing.T, pool, subPool string, num int) {
-	ds, err := randomLocalStore()
+	dsCfg, err := randomLocalStoreConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	a, err := NewAllocator(ds, nil)
+	a, err := NewAllocator(dsCfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1069,11 +1071,11 @@ func testAllocateRandomDeallocate(t *testing.T, pool, subPool string, num int) {
 
 func TestRetrieveFromStore(t *testing.T) {
 	num := 200
-	ds, err := randomLocalStore()
+	dsCfg, err := randomLocalStoreConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
-	a, err := NewAllocator(ds, nil)
+	a, err := NewAllocator(dsCfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1088,7 +1090,7 @@ func TestRetrieveFromStore(t *testing.T) {
 	}
 
 	// Restore
-	a1, err := NewAllocator(ds, nil)
+	a1, err := NewAllocator(dsCfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1110,7 +1112,7 @@ func TestRetrieveFromStore(t *testing.T) {
 	}
 
 	// Restore
-	a2, err := NewAllocator(ds, nil)
+	a2, err := NewAllocator(dsCfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1127,7 +1129,7 @@ func TestRetrieveFromStore(t *testing.T) {
 	}
 
 	// Restore
-	a3, err := NewAllocator(ds, nil)
+	a3, err := NewAllocator(dsCfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1144,7 +1146,7 @@ func TestRetrieveFromStore(t *testing.T) {
 	}
 
 	// Restore
-	a4, err := NewAllocator(ds, nil)
+	a4, err := NewAllocator(dsCfg)
 	if err != nil {
 		t.Fatal(err)
 	}

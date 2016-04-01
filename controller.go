@@ -180,8 +180,7 @@ func New(cfgOptions ...config.Option) (NetworkController, error) {
 		return nil, err
 	}
 
-	if err := initIpams(c, c.getStore(datastore.LocalScope),
-		c.getStore(datastore.GlobalScope)); err != nil {
+	if err := initIpams(c); err != nil {
 		return nil, err
 	}
 
