@@ -174,7 +174,7 @@ func (test *testEndpoint) SetGatewayIPv6(ipv6 net.IP) error {
 	return nil
 }
 
-func (test *testEndpoint) SetNames(src string, dst string) error {
+func (test *testEndpoint) SetNames(src string, dstName string, dst string) error {
 	if test.src != src {
 		test.t.Fatalf(`Wrong SrcName; expected "%s", got "%s"`, test.src, src)
 	}

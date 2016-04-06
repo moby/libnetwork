@@ -65,3 +65,9 @@ func (n *networkNamespace) Routes(routes []*net.IPNet) IfaceOption {
 		i.routes = routes
 	}
 }
+
+func (n *networkNamespace) DstName(name string) IfaceOption {
+	return func(i *nwIface) {
+		i.dstName = name
+	}
+}

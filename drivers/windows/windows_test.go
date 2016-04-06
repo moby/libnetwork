@@ -128,7 +128,7 @@ func (test *testEndpoint) SetGatewayIPv6(ipv6 net.IP) error {
 	return nil
 }
 
-func (test *testEndpoint) SetNames(src string, dst string) error {
+func (test *testEndpoint) SetNames(src string, dstName string, dst string) error {
 	return nil
 }
 

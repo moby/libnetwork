@@ -80,7 +80,7 @@ type InterfaceInfo interface {
 // to interfaces.
 type InterfaceNameInfo interface {
 	// SetNames method assigns the srcName and dstPrefix for the interface.
-	SetNames(srcName, dstPrefix string) error
+	SetNames(srcName, dstName, dstPrefix string) error
 }
 
 // JoinInfo represents a set of resources that the driver has the ability to provide during

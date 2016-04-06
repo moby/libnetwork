@@ -204,7 +204,7 @@ func (d *driver) Join(nid, eid string, sboxKey string, jinfo driverapi.JoinInfo,
 
 	ifaceName := res.InterfaceName
 	if iface := jinfo.InterfaceName(); iface != nil && ifaceName != nil {
-		if err := iface.SetNames(ifaceName.SrcName, ifaceName.DstPrefix); err != nil {
+		if err := iface.SetNames(ifaceName.SrcName, ifaceName.DstName, ifaceName.DstPrefix); err != nil {
 			return errorWithRollback(fmt.Sprintf("failed to set interface name: %s", err), d.Leave(nid, eid))
 		}
 	}

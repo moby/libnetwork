@@ -92,6 +92,9 @@ type IfaceOptionSetter interface {
 
 	// Address returns an option setter to set interface routes.
 	Routes([]*net.IPNet) IfaceOption
+
+	// DstName returns an option setter to set interface dstName
+	DstName(string) IfaceOption
 }
 
 // Info represents all possible information that
