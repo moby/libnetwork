@@ -45,6 +45,7 @@ func (c *controller) closeStores() {
 	}
 }
 
+// getStore returns the datastore for the given scope.
 func (c *controller) getStore(scope string) datastore.DataStore {
 	c.Lock()
 	defer c.Unlock()
