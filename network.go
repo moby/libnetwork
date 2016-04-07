@@ -903,6 +903,11 @@ func (n *network) updateSvcRecord(ep *endpoint, localEps []*endpoint, isAdd bool
 			ipv6 = iface.AddressIPv6().IP
 		}
 
+		sb := ep.Sandbox()
+		shortIDAlias := ""
+		if sb != nil && len(sb.ContainerID()) > 12 {
+			shortIDAlias = sb.ContainerID()[:12]
+		}
 		if isAdd {
 			// If anonymous endpoint has an alias use the first alias
 			// for ip->name mapping. Not having the reverse mapping
@@ -917,6 +922,9 @@ func (n *network) updateSvcRecord(ep *endpoint, localEps []*endpoint, isAdd bool
 			for _, alias := range myAliases {
 				n.addSvcRecords(alias, iface.Address().IP, ipv6, false)
 			}
+			if shortIDAlias != "" {
+				n.addSvcRecords(shortIDAlias, iface.Address().IP, ipv6, false)
+			}
 		} else {
 			if ep.isAnonymous() {
 				if len(myAliases) > 0 {
@@ -927,6 +935,9 @@ func (n *network) updateSvcRecord(ep *endpoint, localEps []*endpoint, isAdd bool
 			}
 			for _, alias := range myAliases {
 				n.deleteSvcRecords(alias, iface.Address().IP, ipv6, false)
+			}
+			if shortIDAlias != "" {
+				n.deleteSvcRecords(shortIDAlias, iface.Address().IP, ipv6, false)
 			}
 		}
 	}
