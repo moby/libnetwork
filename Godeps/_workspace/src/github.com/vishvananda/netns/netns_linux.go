@@ -7,14 +7,25 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
 )
 
+// SYS_SETNS syscall allows changing the namespace of the current process.
+var SYS_SETNS = map[string]uintptr{
+	"386":     346,
+	"amd64":   308,
+	"arm64":   268,
+	"arm":     375,
+	"ppc64":   350,
+	"ppc64le": 350,
+	"s390x":   339,
+}[runtime.GOARCH]
+
+// Deprecated: use syscall pkg instead (go >= 1.5 needed).
 const (
-	// These constants belong in the syscall library but have not been
-	// added yet.
 	CLONE_NEWUTS  = 0x04000000 /* New utsname group? */
 	CLONE_NEWIPC  = 0x08000000 /* New ipcs */
 	CLONE_NEWUSER = 0x10000000 /* New user namespace */
@@ -167,8 +178,10 @@ func getPidForContainer(id string) (int, error) {
 		filepath.Join(cgroupRoot, cgroupThis, id, "tasks"),
 		// With more recent lxc versions use, cgroup will be in lxc/
 		filepath.Join(cgroupRoot, cgroupThis, "lxc", id, "tasks"),
-		// With more recent dockee, cgroup will be in docker/
+		// With more recent docker, cgroup will be in docker/
 		filepath.Join(cgroupRoot, cgroupThis, "docker", id, "tasks"),
+		// Even more recent docker versions under systemd use docker-<id>.scope/
+		filepath.Join(cgroupRoot, "system.slice", "docker-"+id+".scope", "tasks"),
 	}
 
 	var filename string

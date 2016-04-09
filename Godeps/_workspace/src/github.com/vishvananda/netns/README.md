@@ -20,9 +20,10 @@ Testing (requires root):
 package main
 
 import (
+    "fmt"
     "net"
     "runtime"
-    "github.com/vishvananada/netns"
+    "github.com/vishvananda/netns"
 )
 
 func main() {
