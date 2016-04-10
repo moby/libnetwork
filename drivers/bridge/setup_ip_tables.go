@@ -122,19 +122,18 @@ func (n *bridgeNetwork) setupIPTables(config *networkConfiguration, i *bridgeInt
 }
 
 type iptRule struct {
-	table   iptables.Table
-	chain   string
-	preArgs []string
-	args    []string
+	table iptables.Table
+	chain string
+	args  []string
 }
 
 func setupIPTablesInternal(bridgeIface string, addr net.Addr, icc, ipmasq, hairpin, enable bool) error {
 
 	var (
 		address   = addr.String()
-		natRule   = iptRule{table: iptables.Nat, chain: "POSTROUTING", preArgs: []string{"-t", "nat"}, args: []string{"-s", address, "!", "-o", bridgeIface, "-j", "MASQUERADE"}}
-		hpNatRule = iptRule{table: iptables.Nat, chain: "POSTROUTING", preArgs: []string{"-t", "nat"}, args: []string{"-m", "addrtype", "--src-type", "LOCAL", "-o", bridgeIface, "-j", "MASQUERADE"}}
-		skipDNAT  = iptRule{table: iptables.Nat, chain: DockerChain, preArgs: []string{"-t", "nat"}, args: []string{"-i", bridgeIface, "-j", "RETURN"}}
+		natRule   = iptRule{table: iptables.Nat, chain: "POSTROUTING", args: []string{"-s", address, "!", "-o", bridgeIface, "-j", "MASQUERADE"}}
+		hpNatRule = iptRule{table: iptables.Nat, chain: "POSTROUTING", args: []string{"-m", "addrtype", "--src-type", "LOCAL", "-o", bridgeIface, "-j", "MASQUERADE"}}
+		skipDNAT  = iptRule{table: iptables.Nat, chain: DockerChain, args: []string{"-i", bridgeIface, "-j", "RETURN"}}
 		outRule   = iptRule{table: iptables.Filter, chain: "FORWARD", args: []string{"-i", bridgeIface, "!", "-o", bridgeIface, "-j", "ACCEPT"}}
 		inRule    = iptRule{table: iptables.Filter, chain: "FORWARD", args: []string{"-o", bridgeIface, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT"}}
 	)
@@ -179,27 +178,26 @@ func setupIPTablesInternal(bridgeIface string, addr net.Addr, icc, ipmasq, hairp
 
 func programChainRule(rule iptRule, ruleDescr string, insert bool) error {
 	var (
-		prefix    []string
 		operation string
+		action    iptables.Action
 		condition bool
 		doesExist = iptables.Exists(rule.table, rule.chain, rule.args...)
 	)
 
+	args := append([]string{rule.chain}, rule.args...)
+
 	if insert {
 		condition = !doesExist
-		prefix = []string{"-I", rule.chain}
 		operation = "enable"
+		action = iptables.Insert
 	} else {
 		condition = doesExist
-		prefix = []string{"-D", rule.chain}
 		operation = "disable"
-	}
-	if rule.preArgs != nil {
-		prefix = append(rule.preArgs, prefix...)
+		action = iptables.Delete
 	}
 
 	if condition {
-		if err := iptables.RawCombinedOutput(append(prefix, rule.args...)...); err != nil {
+		if _, err := iptables.DispatchRule(rule.table, action, args...); err != nil {
 			return fmt.Errorf("Unable to %s %s rule: %s", operation, ruleDescr, err.Error())
 		}
 	}
@@ -218,18 +216,18 @@ func setIcc(bridgeIface string, iccEnable, insert bool) error {
 
 	if insert {
 		if !iccEnable {
-			iptables.Raw(append([]string{"-D", chain}, acceptArgs...)...)
+			iptables.DispatchRule(table, iptables.Delete, append([]string{chain}, acceptArgs...)...)
 
 			if !iptables.Exists(table, chain, dropArgs...) {
-				if err := iptables.RawCombinedOutput(append([]string{"-A", chain}, dropArgs...)...); err != nil {
+				if _, err := iptables.DispatchRule(table, iptables.Append, append([]string{chain}, dropArgs...)...); err != nil {
 					return fmt.Errorf("Unable to prevent intercontainer communication: %s", err.Error())
 				}
 			}
 		} else {
-			iptables.Raw(append([]string{"-D", chain}, dropArgs...)...)
+			iptables.DispatchRule(table, iptables.Delete, append([]string{chain}, dropArgs...)...)
 
 			if !iptables.Exists(table, chain, acceptArgs...) {
-				if err := iptables.RawCombinedOutput(append([]string{"-I", chain}, acceptArgs...)...); err != nil {
+				if _, err := iptables.DispatchRule(table, iptables.Insert, append([]string{chain}, acceptArgs...)...); err != nil {
 					return fmt.Errorf("Unable to allow intercontainer communication: %s", err.Error())
 				}
 			}
@@ -238,11 +236,11 @@ func setIcc(bridgeIface string, iccEnable, insert bool) error {
 		// Remove any ICC rule.
 		if !iccEnable {
 			if iptables.Exists(table, chain, dropArgs...) {
-				iptables.Raw(append([]string{"-D", chain}, dropArgs...)...)
+				iptables.DispatchRule(table, iptables.Delete, append([]string{chain}, dropArgs...)...)
 			}
 		} else {
 			if iptables.Exists(table, chain, acceptArgs...) {
-				iptables.Raw(append([]string{"-D", chain}, acceptArgs...)...)
+				iptables.DispatchRule(table, iptables.Delete, append([]string{chain}, acceptArgs...)...)
 			}
 		}
 	}
@@ -263,7 +261,7 @@ func setINC(iface1, iface2 string, enable bool) error {
 			if iptables.Exists(table, chain, args[i]...) {
 				continue
 			}
-			if err := iptables.RawCombinedOutput(append([]string{"-I", chain}, args[i]...)...); err != nil {
+			if _, err := iptables.DispatchRule(table, iptables.Insert, append([]string{chain}, args[i]...)...); err != nil {
 				return fmt.Errorf("unable to add inter-network communication rule: %v", err)
 			}
 		}
@@ -272,7 +270,7 @@ func setINC(iface1, iface2 string, enable bool) error {
 			if !iptables.Exists(table, chain, args[i]...) {
 				continue
 			}
-			if err := iptables.RawCombinedOutput(append([]string{"-D", chain}, args[i]...)...); err != nil {
+			if _, err := iptables.DispatchRule(table, iptables.Delete, append([]string{chain}, args[i]...)...); err != nil {
 				return fmt.Errorf("unable to remove inter-network communication rule: %v", err)
 			}
 		}
@@ -291,8 +289,7 @@ func addReturnRule(chain string) error {
 		return nil
 	}
 
-	err := iptables.RawCombinedOutput(append([]string{"-I", chain}, args...)...)
-	if err != nil {
+	if _, err := iptables.DispatchRule(iptables.Filter, iptables.Insert, append([]string{chain}, args...)...); err != nil {
 		return fmt.Errorf("unable to add return rule in %s chain: %s", chain, err.Error())
 	}
 
@@ -307,14 +304,12 @@ func ensureJumpRule(fromChain, toChain string) error {
 	)
 
 	if iptables.Exists(table, fromChain, args...) {
-		err := iptables.RawCombinedOutput(append([]string{"-D", fromChain}, args...)...)
-		if err != nil {
+		if _, err := iptables.DispatchRule(table, iptables.Delete, append([]string{fromChain}, args...)...); err != nil {
 			return fmt.Errorf("unable to remove jump to %s rule in %s chain: %s", toChain, fromChain, err.Error())
 		}
 	}
 
-	err := iptables.RawCombinedOutput(append([]string{"-I", fromChain}, args...)...)
-	if err != nil {
+	if _, err := iptables.DispatchRule(table, iptables.Insert, append([]string{fromChain}, args...)...); err != nil {
 		return fmt.Errorf("unable to insert jump to %s rule in %s chain: %s", toChain, fromChain, err.Error())
 	}
 

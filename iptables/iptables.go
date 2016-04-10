@@ -32,6 +32,8 @@ const (
 	Filter Table = "filter"
 	// Mangle table is used for mangling the packet.
 	Mangle Table = "mangle"
+	// Comment used to mark docker rules.
+	Comment string = "docker libnetwork"
 )
 
 var (
@@ -44,6 +46,8 @@ var (
 	ErrIptablesNotFound = errors.New("Iptables not found")
 	probeOnce           sync.Once
 	firewalldOnce       sync.Once
+	// commentArgs annotate every command
+	commentArgs = []string{"-m", "comment", "--comment", Comment}
 )
 
 // ChainInfo defines the iptables chain.
@@ -166,15 +170,13 @@ func ProgramChain(c *ChainInfo, bridgeName string, hairpinMode, enable bool) err
 			"-o", bridgeName,
 			"-j", c.Name}
 		if !Exists(Filter, "FORWARD", link...) && enable {
-			insert := append([]string{string(Insert), "FORWARD"}, link...)
-			if output, err := Raw(insert...); err != nil {
+			if output, err := DispatchRule(Filter, Insert, append([]string{"FORWARD"}, link...)...); err != nil {
 				return err
 			} else if len(output) != 0 {
 				return fmt.Errorf("Could not create linking rule to %s/%s: %s", c.Table, c.Name, output)
 			}
 		} else if Exists(Filter, "FORWARD", link...) && !enable {
-			del := append([]string{string(Delete), "FORWARD"}, link...)
-			if output, err := Raw(del...); err != nil {
+			if output, err := DispatchRule(Filter, Delete, append([]string{"FORWARD"}, link...)...); err != nil {
 				return err
 			} else if len(output) != 0 {
 				return fmt.Errorf("Could not delete linking rule from %s/%s: %s", c.Table, c.Name, output)
@@ -206,7 +208,8 @@ func (c *ChainInfo) Forward(action Action, ip net.IP, port int, proto, destAddr 
 		// value" by both iptables and ip6tables.
 		daddr = "0/0"
 	}
-	args := []string{"-t", string(Nat), string(action), c.Name,
+	args := []string{
+		c.Name,
 		"-p", proto,
 		"-d", daddr,
 		"--dport", strconv.Itoa(port),
@@ -215,13 +218,13 @@ func (c *ChainInfo) Forward(action Action, ip net.IP, port int, proto, destAddr 
 	if !c.HairpinMode {
 		args = append(args, "!", "-i", bridgeName)
 	}
-	if output, err := Raw(args...); err != nil {
+	if output, err := DispatchRule(Nat, action, args...); err != nil {
 		return err
 	} else if len(output) != 0 {
 		return ChainError{Chain: "FORWARD", Output: output}
 	}
 
-	if output, err := Raw("-t", string(Filter), string(action), c.Name,
+	if output, err := DispatchRule(Filter, action, c.Name,
 		"!", "-i", bridgeName,
 		"-o", bridgeName,
 		"-p", proto,
@@ -233,7 +236,7 @@ func (c *ChainInfo) Forward(action Action, ip net.IP, port int, proto, destAddr 
 		return ChainError{Chain: "FORWARD", Output: output}
 	}
 
-	if output, err := Raw("-t", string(Nat), string(action), "POSTROUTING",
+	if output, err := DispatchRule(Nat, action, "POSTROUTING",
 		"-p", proto,
 		"-s", destAddr,
 		"-d", destAddr,
@@ -250,7 +253,7 @@ func (c *ChainInfo) Forward(action Action, ip net.IP, port int, proto, destAddr 
 // Link adds reciprocal ACCEPT rule for two supplied IP addresses.
 // Traffic is allowed from ip1 to ip2 and vice-versa
 func (c *ChainInfo) Link(action Action, ip1, ip2 net.IP, port int, proto string, bridgeName string) error {
-	if output, err := Raw("-t", string(Filter), string(action), c.Name,
+	if output, err := DispatchRule(Filter, action, c.Name,
 		"-i", bridgeName, "-o", bridgeName,
 		"-p", proto,
 		"-s", ip1.String(),
@@ -261,7 +264,7 @@ func (c *ChainInfo) Link(action Action, ip1, ip2 net.IP, port int, proto string,
 	} else if len(output) != 0 {
 		return fmt.Errorf("Error iptables forward: %s", output)
 	}
-	if output, err := Raw("-t", string(Filter), string(action), c.Name,
+	if output, err := DispatchRule(Filter, action, c.Name,
 		"-i", bridgeName, "-o", bridgeName,
 		"-p", proto,
 		"-s", ip2.String(),
@@ -277,11 +280,11 @@ func (c *ChainInfo) Link(action Action, ip1, ip2 net.IP, port int, proto string,
 
 // Prerouting adds linking rule to nat/PREROUTING chain.
 func (c *ChainInfo) Prerouting(action Action, args ...string) error {
-	a := []string{"-t", string(Nat), string(action), "PREROUTING"}
+	a := []string{"PREROUTING"}
 	if len(args) > 0 {
 		a = append(a, args...)
 	}
-	if output, err := Raw(a...); err != nil {
+	if output, err := DispatchRule(c.Table, action, a...); err != nil {
 		return err
 	} else if len(output) != 0 {
 		return ChainError{Chain: "PREROUTING", Output: output}
@@ -291,11 +294,11 @@ func (c *ChainInfo) Prerouting(action Action, args ...string) error {
 
 // Output adds linking rule to an OUTPUT chain.
 func (c *ChainInfo) Output(action Action, args ...string) error {
-	a := []string{"-t", string(c.Table), string(action), "OUTPUT"}
+	a := []string{"OUTPUT"}
 	if len(args) > 0 {
 		a = append(a, args...)
 	}
-	if output, err := Raw(a...); err != nil {
+	if output, err := DispatchRule(c.Table, action, a...); err != nil {
 		return err
 	} else if len(output) != 0 {
 		return ChainError{Chain: "OUTPUT", Output: output}
@@ -319,6 +322,30 @@ func (c *ChainInfo) Remove() error {
 	return nil
 }
 
+// DispatchRule intalls or removes rule depending on action
+func DispatchRule(table Table, action Action, rule ...string) ([]byte, error) {
+	switch action {
+	case Append, Insert:
+		return addRule(table, action, rule...)
+	case Delete:
+		return removeRule(table, rule...)
+	default:
+		return nil, fmt.Errorf("DispatchRule called with unknown action: %v (%v)", action, rule)
+	}
+}
+
+func addRule(table Table, action Action, rule ...string) ([]byte, error) {
+	return Raw(append([]string{"-t", string(table), string(action)}, append(rule, commentArgs...)...)...)
+}
+
+func removeRule(table Table, rule ...string) ([]byte, error) {
+	if output, err := Raw(append([]string{"-t", string(table), string(Delete)}, append(rule, commentArgs...)...)...); err == nil {
+		return output, err
+	}
+
+	return Raw(append([]string{"-t", string(table), string(Delete)}, rule...)...)
+}
+
 // Exists checks if a rule exists
 func Exists(table Table, chain string, rule ...string) bool {
 	if string(table) == "" {
@@ -330,12 +357,19 @@ func Exists(table Table, chain string, rule ...string) bool {
 	if supportsCOpt {
 		// if exit status is 0 then return true, the rule exists
 		_, err := Raw(append([]string{"-t", string(table), "-C", chain}, rule...)...)
+		if err != nil {
+			_, err = Raw(append([]string{"-t", string(table), "-C", chain}, append(rule, commentArgs...)...)...)
+		}
 		return err == nil
 	}
 
 	// parse "iptables -S" for the rule (it checks rules in a specific chain
 	// in a specific table and it is very unreliable)
-	return existsRaw(table, chain, rule...)
+	if existsRaw(table, chain, rule...) {
+		return true
+	}
+
+	return existsRaw(table, chain, append(rule, commentArgs...)...)
 }
 
 func existsRaw(table Table, chain string, rule ...string) bool {
