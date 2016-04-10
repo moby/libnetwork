@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.7.0-rc.6 (2016-04-10)
+- Flush cached resolver socket on default gateway change
+
 ## 0.7.0-rc.5 (2016-04-08)
 - Persist ipam driver options
 - Fixes https://github.com/docker/libnetwork/issues/1087
