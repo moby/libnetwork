@@ -8,15 +8,21 @@ import (
 	"github.com/docker/libnetwork/drivers/remote"
 )
 
-func getInitializers() []initializer {
-	in := []initializer{
-		{bridge.Init, "bridge"},
-		{host.Init, "host"},
-		{null.Init, "null"},
-		{remote.Init, "remote"},
-		{overlay.Init, "overlay"},
+func (c *controller) getInitializers() error {
+	in := map[string]initializer{
+		"bridge":  bridge.Init,
+		"host":    host.Init,
+		"null":    null.Init,
+		"overlay": overlay.Init,
 	}
-
-	in = append(in, additionalDrivers()...)
-	return in
+	for k, v := range additionalDrivers() {
+		in[k] = v
+	}
+	c.Lock()
+	c.initializers = in
+	c.Unlock()
+	if err := remote.Init(c, makeDriverConfig(c, "remote")); err != nil {
+		return err
+	}
+	return nil
 }

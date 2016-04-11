@@ -13,20 +13,7 @@ import (
 	remoteIpam "github.com/docker/libnetwork/ipams/remote"
 )
 
-type initializer struct {
-	fn    func(driverapi.DriverCallback, map[string]interface{}) error
-	ntype string
-}
-
-func initDrivers(c *controller) error {
-	for _, i := range getInitializers() {
-		if err := i.fn(c, makeDriverConfig(c, i.ntype)); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
+type initializer func(driverapi.DriverCallback, map[string]interface{}) error
 
 func makeDriverConfig(c *controller, ntype string) map[string]interface{} {
 	if c.cfg == nil {

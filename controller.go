@@ -137,6 +137,7 @@ type sandboxTable map[string]*sandbox
 
 type controller struct {
 	id             string
+	initializers   map[string]initializer
 	drivers        driverTable
 	ipamDrivers    ipamTable
 	sandboxes      sandboxTable
@@ -176,7 +177,7 @@ func New(cfgOptions ...config.Option) (NetworkController, error) {
 		}
 	}
 
-	if err := initDrivers(c); err != nil {
+	if err := c.getInitializers(); err != nil {
 		return nil, err
 	}
 
@@ -746,14 +747,19 @@ func SandboxKeyWalker(out *Sandbox, key string) SandboxWalker {
 }
 
 func (c *controller) loadDriver(networkType string) (*driverData, error) {
-	// Plugins pkg performs lazy loading of plugins that acts as remote drivers.
-	// As per the design, this Get call will result in remote driver discovery if there is a corresponding plugin available.
-	_, err := plugins.Get(networkType, driverapi.NetworkPluginEndpointType)
-	if err != nil {
-		if err == plugins.ErrNotFound {
-			return nil, types.NotFoundErrorf(err.Error())
+	if i, ok := c.initializers[networkType]; ok {
+		if err := i(c, makeDriverConfig(c, networkType)); err != nil {
+			return nil, err
 		}
-		return nil, err
+	} else {
+		// Plugins pkg performs lazy loading of plugins that acts as remote drivers.
+		// As per the design, this Get call will result in remote driver discovery if there is a corresponding plugin available.
+		if _, err := plugins.Get(networkType, driverapi.NetworkPluginEndpointType); err != nil {
+			if err == plugins.ErrNotFound {
+				return nil, types.NotFoundErrorf(err.Error())
+			}
+			return nil, err
+		}
 	}
 	c.Lock()
 	defer c.Unlock()

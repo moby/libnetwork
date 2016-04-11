@@ -2,6 +2,6 @@
 
 package libnetwork
 
-func additionalDrivers() []initializer {
-	return nil
+func additionalDrivers() map[string]initializer {
+	return make(map[string]initializer)
 }
