@@ -102,4 +102,4 @@ circle-ci-check: ${build_image}.created
 circle-ci-build: ${build_image}.created
 	@${cidocker} make build-local
 
-circle-ci: circle-ci-check circle-ci-build integration-tests
+circle-ci: circle-ci-check circle-ci-cross circle-ci-build integration-tests
