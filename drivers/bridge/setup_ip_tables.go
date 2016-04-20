@@ -137,6 +137,7 @@ func setupIPTablesInternal(bridgeIface string, addr net.Addr, icc, ipmasq, hairp
 		skipDNAT  = iptRule{table: iptables.Nat, chain: DockerChain, preArgs: []string{"-t", "nat"}, args: []string{"-i", bridgeIface, "-j", "RETURN"}}
 		outRule   = iptRule{table: iptables.Filter, chain: "FORWARD", args: []string{"-i", bridgeIface, "!", "-o", bridgeIface, "-j", "ACCEPT"}}
 		inRule    = iptRule{table: iptables.Filter, chain: "FORWARD", args: []string{"-o", bridgeIface, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT"}}
+		dropInv   = iptRule{table: iptables.Filter, chain: "INPUT", args: []string{"-d", address, "-m", "conntrack", "--ctstate", "INVALID", "-j", "DROP"}}
 	)
 
 	// Set NAT.
@@ -171,6 +172,10 @@ func setupIPTablesInternal(bridgeIface string, addr net.Addr, icc, ipmasq, hairp
 
 	// Set Accept on incoming packets for existing connections.
 	if err := programChainRule(inRule, "ACCEPT INCOMING", enable); err != nil {
+		return err
+	}
+
+	if err := programChainRule(dropInv, "DROP INVALID", enable); err != nil {
 		return err
 	}
 
