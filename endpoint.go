@@ -534,7 +534,7 @@ func (ep *endpoint) rename(name string) error {
 
 	oldName := ep.name
 	ep.name = name
-        ep.anonymous = false
+       ep.anonymous = false
         
 	n.updateSvcRecord(ep, n.getController().getLocalEps(netWatch), true)
 	defer func() {
