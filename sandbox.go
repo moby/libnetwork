@@ -826,7 +826,7 @@ func OptionHostsPath(path string) SandboxOption {
 }
 
 // OptionOriginHostsPath function returns an option setter for origin hosts file path
-// tbeo  passed to NewSandbox method.
+// to be passed to NewSandbox method.
 func OptionOriginHostsPath(path string) SandboxOption {
 	return func(sb *sandbox) {
 		sb.config.originHostsPath = path
