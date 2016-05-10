@@ -181,14 +181,14 @@ func TestScanStatistics(t *testing.T) {
 	if err := scanInterfaceStats(data, "wlan0", i); err != nil {
 		t.Fatal(err)
 	}
-	if i.TxBytes != 1681390 || i.TxPackets != 7220 || i.RxBytes != 7787685 || i.RxPackets != 11141 {
+	if i.RxBytes != 1681390 || i.RxPackets != 7220 || i.TxBytes != 7787685 || i.TxPackets != 11141 {
 		t.Fatalf("Error scanning the statistics")
 	}
 
 	if err := scanInterfaceStats(data, "lxcbr0", i); err != nil {
 		t.Fatal(err)
 	}
-	if i.TxBytes != 9006 || i.TxPackets != 61 || i.RxBytes != 0 || i.RxPackets != 0 {
+	if i.RxBytes != 9006 || i.RxPackets != 61 || i.TxBytes != 0 || i.TxPackets != 0 {
 		t.Fatalf("Error scanning the statistics")
 	}
 }
