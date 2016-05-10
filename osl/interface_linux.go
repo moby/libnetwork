@@ -2,8 +2,8 @@ package osl
 
 import (
 	"fmt"
+	"io/ioutil"
 	"net"
-	"os/exec"
 	"regexp"
 	"sync"
 	"syscall"
@@ -168,32 +168,16 @@ func (i *nwIface) Remove() error {
 
 // Returns the sandbox's side veth interface statistics
 func (i *nwIface) Statistics() (*types.InterfaceStatistics, error) {
-	i.Lock()
-	n := i.ns
-	i.Unlock()
-
-	n.Lock()
-	path := n.path
-	n.Unlock()
-
 	s := &types.InterfaceStatistics{}
 
-	err := nsInvoke(path, func(nsFD int) error { return nil }, func(callerFD int) error {
-		// For some reason ioutil.ReadFile(netStatsFile) reads the file in
-		// the default netns when this code is invoked from docker.
-		// Executing "cat <netStatsFile>" works as expected.
-		data, err := exec.Command("cat", netStatsFile).Output()
-		if err != nil {
-			return fmt.Errorf("failure opening %s: %v", netStatsFile, err)
-		}
-		return scanInterfaceStats(string(data), i.DstName(), s)
-	})
-
+	data, err := ioutil.ReadFile(netStatsFile)
 	if err != nil {
-		err = fmt.Errorf("failed to retrieve the statistics for %s in netns %s: %v", i.DstName(), path, err)
+		return nil, fmt.Errorf("failure opening %s: %v", netStatsFile, err)
 	}
-
-	return s, err
+	if err := scanInterfaceStats(string(data), i.SrcName(), s); err != nil {
+		return nil, fmt.Errorf("failure scanning for %s stats: %v", i.SrcName(), err)
+	}
+	return s, nil
 }
 
 func (n *networkNamespace) findDst(srcName string, isBridge bool) string {
@@ -385,6 +369,7 @@ const (
 	base         = "[ ]*%s:([ ]+[0-9]+){16}"
 )
 
+// scanInterfaceStats reads from the host side so we need to swap rx/tx
 func scanInterfaceStats(data, ifName string, i *types.InterfaceStatistics) error {
 	var (
 		bktStr string
@@ -396,8 +381,8 @@ func scanInterfaceStats(data, ifName string, i *types.InterfaceStatistics) error
 	line := re.FindString(data)
 
 	_, err := fmt.Sscanf(line, "%s %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d",
-		&bktStr, &i.RxBytes, &i.RxPackets, &i.RxErrors, &i.RxDropped, &bkt, &bkt, &bkt,
-		&bkt, &i.TxBytes, &i.TxPackets, &i.TxErrors, &i.TxDropped, &bkt, &bkt, &bkt, &bkt)
+		&bktStr, &i.TxBytes, &i.TxPackets, &i.TxErrors, &i.TxDropped, &bkt, &bkt, &bkt,
+		&bkt, &i.RxBytes, &i.RxPackets, &i.RxErrors, &i.RxDropped, &bkt, &bkt, &bkt, &bkt)
 
 	return err
 }
