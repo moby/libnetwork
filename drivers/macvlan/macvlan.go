@@ -1,12 +1,14 @@
 package macvlan
 
 import (
+	"fmt"
 	"net"
 	"sync"
 
 	"github.com/docker/libnetwork/datastore"
 	"github.com/docker/libnetwork/discoverapi"
 	"github.com/docker/libnetwork/driverapi"
+	"github.com/docker/libnetwork/netlabel"
 	"github.com/docker/libnetwork/osl"
 	"github.com/docker/libnetwork/types"
 )
@@ -15,13 +17,18 @@ const (
 	vethLen             = 7
 	containerVethPrefix = "eth"
 	vethPrefix          = "veth"
-	macvlanType         = "macvlan"  // driver type name
-	modePrivate         = "private"  // macvlan mode private
-	modeVepa            = "vepa"     // macvlan mode vepa
-	modeBridge          = "bridge"   // macvlan mode bridge
-	modePassthru        = "passthru" // macvlan mode passthrough
-	parentOpt           = "parent"   // parent interface -o parent
-	modeOpt             = "_mode"    // macvlan mode ux opt suffix
+	macvlanType         = "macvlan"                           // driver type name
+	modePrivate         = "private"                           // macvlan mode private
+	modeVepa            = "vepa"                              // macvlan mode vepa
+	modeBridge          = "bridge"                            // macvlan mode bridge
+	modePassthru        = "passthru"                          // macvlan mode passthrough
+	parentOpt           = "parent"                            // parent interface -o parent
+	modeOpt             = "_mode"                             // macvlan mode ux opt suffix
+	parentFile          = "parent-file"                       // parent file
+	globalScope         = "global"                            // local scope label data
+	localScope          = "local"                             // local scope label data
+	driverPrefix        = "com.docker.network.driver.macvlan" // driver prefix used for labels
+	driverScopeLabel    = driverPrefix + ".scope"
 )
 
 var driverModeOpt = macvlanType + modeOpt // mode --option macvlan_mode
@@ -32,6 +39,7 @@ type networkTable map[string]*network
 
 type driver struct {
 	networks networkTable
+	scope    string
 	sync.Once
 	sync.Mutex
 	store datastore.DataStore
@@ -51,18 +59,47 @@ type network struct {
 	endpoints endpointTable
 	driver    *driver
 	config    *configuration
+	once      *sync.Once
 	sync.Mutex
+	dbExists bool
+	dbIndex  uint64
 }
 
-// Init initializes and registers the libnetwork macvlan driver
+// Init registers a new instance of the macvlan driver
 func Init(dc driverapi.DriverCallback, config map[string]interface{}) error {
-	c := driverapi.Capability{
-		DataScope: datastore.LocalScope,
-	}
 	d := &driver{
 		networks: networkTable{},
 	}
-	d.initStore(config)
+	// register the driver as a locally scoped if a local scope label is passed
+	if labelData, ok := config[driverScopeLabel]; ok {
+		if labelData == localScope {
+			// register the driver as locally scoped if no scope label is passed
+			c := driverapi.Capability{
+				DataScope: datastore.LocalScope,
+			}
+			d.scope = localScope
+			// initialize the local boltdb persistent datastore
+			d.initStore(config)
+
+			return dc.RegisterDriver(macvlanType, d, c)
+		}
+	}
+	// default to a globally scoped driver
+	c := driverapi.Capability{
+		DataScope: datastore.GlobalScope,
+	}
+	if data, ok := config[netlabel.GlobalKVClient]; ok {
+		var err error
+		dsc, ok := data.(discoverapi.DatastoreConfigData)
+		if !ok {
+			return types.InternalErrorf("incorrect data in datastore configuration: %v", data)
+		}
+		d.store, err = datastore.NewDataStoreFromConfig(dsc)
+		if err != nil {
+			return types.InternalErrorf("failed to initialize data store: %v", err)
+		}
+	}
+	d.scope = globalScope
 
 	return dc.RegisterDriver(macvlanType, d, c)
 }
@@ -93,6 +130,27 @@ func (d *driver) RevokeExternalConnectivity(nid, eid string) error {
 
 // DiscoverNew is a notification for a new discovery event
 func (d *driver) DiscoverNew(dType discoverapi.DiscoveryType, data interface{}) error {
+	switch dType {
+	case discoverapi.NodeDiscovery:
+		nodeData, ok := data.(discoverapi.NodeDiscoveryData)
+		if !ok || nodeData.Address == "" {
+			return fmt.Errorf("invalid discovery data")
+		}
+	case discoverapi.DatastoreConfig:
+		var err error
+		if d.store != nil {
+			return types.ForbiddenErrorf("cannot accept datastore configuration: macvlan driver has a datastore configured already")
+		}
+		dsc, ok := data.(discoverapi.DatastoreConfigData)
+		if !ok {
+			return types.InternalErrorf("incorrect data in datastore configuration: %v", data)
+		}
+		d.store, err = datastore.NewDataStoreFromConfig(dsc)
+		if err != nil {
+			return types.InternalErrorf("failed to initialize data store: %v", err)
+		}
+	default:
+	}
 	return nil
 }
 
