@@ -30,6 +30,11 @@ type configuration struct {
 	CreatedSlaveLink bool
 	Ipv4Subnets      []*ipv4Subnet
 	Ipv6Subnets      []*ipv6Subnet
+	BgpNeighbor      string
+	VrfID            string
+	ASnum            string
+	RemoteASnum      string
+	SubnetAdvertise  string
 }
 
 type ipv4Subnet struct {

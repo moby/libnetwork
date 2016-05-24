@@ -60,6 +60,14 @@ func (d *driver) Join(nid, eid string, sboxKey string, jinfo driverapi.JoinInfo,
 		if err := jinfo.AddStaticRoute(defaultRoute.Destination, defaultRoute.RouteType, defaultRoute.NextHop); err != nil {
 			return fmt.Errorf("failed to set an ipvlan l3 mode ipv4 default gateway: %v", err)
 		}
+		if n.config.SubnetAdvertise == "" {
+			//Advertise container route as /32 route
+			advIP := &net.IPNet{IP: ep.addr.IP, Mask: net.IPv4Mask(255, 255, 255, 255)}
+			err = routemanager.AdvertiseNewRoute(advIP.String(), n.config.VrfID)
+			if err != nil {
+				return err
+			}
+		}
 		logrus.Debugf("Ipvlan Endpoint Joined with IPv4_Addr: %s, Ipvlan_Mode: %s, Parent: %s",
 			ep.addr.IP.String(), n.config.IpvlanMode, n.config.Parent)
 		// If the endpoint has a v6 address, set a v6 default route
@@ -133,6 +141,11 @@ func (d *driver) Leave(nid, eid string) error {
 	endpoint, err := network.getEndpoint(eid)
 	if err != nil {
 		return err
+	}
+	if network.config.IpvlanMode == modeL3 && network.config.SubnetAdvertise == "" {
+		//Withdraw container route as /32 route
+		witdIP := &net.IPNet{IP: endpoint.addr.IP, Mask: net.IPv4Mask(255, 255, 255, 255)}
+		err = routemanager.WithdrawRoute(witdIP.String(), network.config.VrfID)
 	}
 	if endpoint == nil {
 		return fmt.Errorf("could not find endpoint with id %s", eid)

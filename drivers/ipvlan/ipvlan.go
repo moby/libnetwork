@@ -15,11 +15,16 @@ const (
 	vethLen             = 7
 	containerVethPrefix = "eth"
 	vethPrefix          = "veth"
-	ipvlanType          = "ipvlan" // driver type name
-	modeL2              = "l2"     // ipvlan mode l2 is the default
-	modeL3              = "l3"     // ipvlan L3 mode
-	parentOpt           = "parent" // parent interface -o parent
-	modeOpt             = "_mode"  // ipvlan mode ux opt suffix
+	ipvlanType          = "ipvlan"           // driver type name
+	modeL2              = "l2"               // ipvlan mode l2 is the default
+	modeL3              = "l3"               // ipvlan L3 mode
+	parentOpt           = "parent"           // parent interface -o parent
+	modeOpt             = "_mode"            // ipvlan mode ux opt suffix
+	bgpNeighborOpt      = "bgp-neighbor"     // BGP neighbor address
+	vrfOpt              = "vrf"              // BGP vrf ID
+	asOpt               = "asnum"            // BGP AS number default 65000
+	remoteAsOpt         = "rasnum"           // BGP remote AS number dafault 65000
+	subnetAdvertise     = "subnet-advertise" // Advertise IP Subnet with BGP
 )
 
 var driverModeOpt = ipvlanType + modeOpt // mode -o ipvlan_mode
