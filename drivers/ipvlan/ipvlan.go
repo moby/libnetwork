@@ -21,7 +21,7 @@ const (
 	parentOpt           = "parent"           // parent interface -o parent
 	modeOpt             = "_mode"            // ipvlan mode ux opt suffix
 	bgpNeighborOpt      = "bgp-neighbor"     // BGP neighbor address
-	vrfOpt              = "vrf"              // BGP vrf ID
+	vpnOpt              = "vpn"              // BGP vpn ID
 	asOpt               = "asnum"            // BGP AS number default 65000
 	remoteAsOpt         = "rasnum"           // BGP remote AS number dafault 65000
 	subnetAdvertise     = "subnet-advertise" // Advertise IP Subnet with BGP

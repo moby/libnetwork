@@ -117,7 +117,7 @@ func (d *driver) createNetwork(config *configuration) error {
 		if routemanager == nil {
 			InitRouteMonitering(config.ASnum, config.RemoteASnum)
 		}
-		err := routemanager.CreateVrfNetwork(config.Parent, config.VrfID)
+		err := routemanager.CreateVrfNetwork(config.Parent, config.VpnID)
 		if err != nil {
 			return err
 		}
@@ -127,13 +127,13 @@ func (d *driver) createNetwork(config *configuration) error {
 		if config.SubnetAdvertise != "" {
 			if config.Ipv4Subnets != nil {
 				for _, subnet := range config.Ipv4Subnets {
-					err := routemanager.AdvertiseNewRoute(subnet.SubnetIP, config.VrfID)
+					err := routemanager.AdvertiseNewRoute(subnet.SubnetIP, config.VpnID)
 					if err != nil {
 						return err
 					}
 				}
 				for _, subnet := range config.Ipv6Subnets {
-					err := routemanager.AdvertiseNewRoute(subnet.SubnetIP, config.VrfID)
+					err := routemanager.AdvertiseNewRoute(subnet.SubnetIP, config.VpnID)
 					if err != nil {
 						return err
 					}
@@ -179,13 +179,13 @@ func (d *driver) DeleteNetwork(nid string) error {
 		//Advertise container network subnet
 		if n.config.Ipv4Subnets != nil {
 			for _, subnet := range n.config.Ipv4Subnets {
-				err := routemanager.WithdrawRoute(subnet.SubnetIP, n.config.VrfID)
+				err := routemanager.WithdrawRoute(subnet.SubnetIP, n.config.VpnID)
 				if err != nil {
 					return err
 				}
 			}
 			for _, subnet := range n.config.Ipv6Subnets {
-				err := routemanager.WithdrawRoute(subnet.SubnetIP, n.config.VrfID)
+				err := routemanager.WithdrawRoute(subnet.SubnetIP, n.config.VpnID)
 				if err != nil {
 					return err
 				}
@@ -259,14 +259,14 @@ func (config *configuration) fromOptions(labels map[string]string) error {
 		case bgpNeighborOpt:
 			// parse driver option '-o bgp-neighbor'
 			config.BgpNeighbor = value
-		case vrfOpt:
-			// parse driver option '-o vrf'
+		case vpnOpt:
+			// parse driver option '-o vpn'
 			_, err := strconv.Atoi(value)
 			if err != nil {
-				logrus.Errorf("vrf ID must be numeral")
+				logrus.Errorf("vpn ID must be numeral")
 				return err
 			}
-			config.VrfID = value
+			config.VpnID = value
 		case asOpt:
 			// parse driver options '-o asnum'
 			config.ASnum = value

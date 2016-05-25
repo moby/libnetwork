@@ -31,7 +31,7 @@ type configuration struct {
 	Ipv4Subnets      []*ipv4Subnet
 	Ipv6Subnets      []*ipv6Subnet
 	BgpNeighbor      string
-	VrfID            string
+	VpnID            string
 	ASnum            string
 	RemoteASnum      string
 	SubnetAdvertise  string

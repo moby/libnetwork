@@ -63,7 +63,7 @@ func (d *driver) Join(nid, eid string, sboxKey string, jinfo driverapi.JoinInfo,
 		if n.config.SubnetAdvertise == "" {
 			//Advertise container route as /32 route
 			advIP := &net.IPNet{IP: ep.addr.IP, Mask: net.IPv4Mask(255, 255, 255, 255)}
-			err = routemanager.AdvertiseNewRoute(advIP.String(), n.config.VrfID)
+			err = routemanager.AdvertiseNewRoute(advIP.String(), n.config.VpnID)
 			if err != nil {
 				return err
 			}
@@ -145,7 +145,7 @@ func (d *driver) Leave(nid, eid string) error {
 	if network.config.IpvlanMode == modeL3 && network.config.SubnetAdvertise == "" {
 		//Withdraw container route as /32 route
 		witdIP := &net.IPNet{IP: endpoint.addr.IP, Mask: net.IPv4Mask(255, 255, 255, 255)}
-		err = routemanager.WithdrawRoute(witdIP.String(), network.config.VrfID)
+		err = routemanager.WithdrawRoute(witdIP.String(), network.config.VpnID)
 	}
 	if endpoint == nil {
 		return fmt.Errorf("could not find endpoint with id %s", eid)

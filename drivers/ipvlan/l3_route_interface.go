@@ -8,9 +8,9 @@ type host struct {
 }
 
 type routingInterface interface {
-	CreateVrfNetwork(ParentIface string, vrfID string) error
-	AdvertiseNewRoute(localPrefix string, vrfID string) error
-	WithdrawRoute(localPrefix string, vrfID string) error
+	CreateVrfNetwork(ParentIface string, vpnID string) error
+	AdvertiseNewRoute(localPrefix string, vpnID string) error
+	WithdrawRoute(localPrefix string, vpnID string) error
 	DiscoverNew(isself bool, Address string) error
 	DiscoverDelete(isself bool, Address string) error
 }

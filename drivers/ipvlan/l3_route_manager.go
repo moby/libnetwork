@@ -18,7 +18,7 @@ const (
 
 type rib struct {
 	path  *bgpapi.Path
-	vrfID string
+	vpnID string
 }
 
 // BgpRouteManager advertize and withdraw routes by BGP
@@ -56,8 +56,8 @@ func NewBgpRouteManager(as string, ras string) *BgpRouteManager {
 	return b
 }
 
-//CreateVrfNetwork create vrf in BGP server and start monitoring vrf rib if vrfID="", network use global rib
-func (b *BgpRouteManager) CreateVrfNetwork(parentIface string, vrfID string) error {
+//CreateVrfNetwork create vrf in BGP server and start monitoring vrf rib if vpnID="", network use global rib
+func (b *BgpRouteManager) CreateVrfNetwork(parentIface string, vpnID string) error {
 	log.Debugf("BGP Global config : %v", b.bgpGlobalcfg)
 	if b.bgpGlobalcfg == nil {
 		log.Debugf("BGP Global config is emply set config")
@@ -78,27 +78,27 @@ func (b *BgpRouteManager) CreateVrfNetwork(parentIface string, vrfID string) err
 			break
 		}
 	}
-	if vrfID == "" {
+	if vpnID == "" {
 		log.Debugf("vrf ID is empty. network paths are in global rib")
 		return nil
 	}
-	b.parentIfaces[vrfID] = parentIface
+	b.parentIfaces[vpnID] = parentIface
 	err := cleanExistingRoutes(parentIface)
 	if err != nil {
 		log.Debugf("Error cleaning old routes: %s", err)
 		return err
 	}
-	rdrtstr := strconv.Itoa(b.asnum) + ":" + vrfID
+	rdrtstr := strconv.Itoa(b.asnum) + ":" + vpnID
 	rd, err := bgp.ParseRouteDistinguisher(rdrtstr)
 	if err != nil {
-		log.Errorf("Fail to parse RD from vrfID %s : %s", vrfID, err)
+		log.Errorf("Fail to parse RD from vpnID %s : %s", vpnID, err)
 		return err
 	}
 	rdSerialized, _ := rd.Serialize()
 
 	rt, err := bgp.ParseRouteTarget(rdrtstr)
 	if err != nil {
-		log.Errorf("Fail to parse RT from vrfID %s : %s", vrfID, err)
+		log.Errorf("Fail to parse RT from vpnID %s : %s", vpnID, err)
 		return err
 	}
 	rtSerialized, _ := rt.Serialize()
@@ -106,7 +106,7 @@ func (b *BgpRouteManager) CreateVrfNetwork(parentIface string, vrfID string) err
 	rts = append(rts, rtSerialized)
 
 	arg := &bgpapi.Vrf{
-		Name:     bgpVrfprefix + vrfID,
+		Name:     bgpVrfprefix + vpnID,
 		Rd:       rdSerialized,
 		ImportRt: rts,
 		ExportRt: rts,
@@ -116,8 +116,8 @@ func (b *BgpRouteManager) CreateVrfNetwork(parentIface string, vrfID string) err
 		return err
 	}
 	go func() {
-		err := b.monitorBestPath(vrfID)
-		log.Errorf("faital monitoring VrfID %s rib : %v", vrfID, err)
+		err := b.monitorBestPath(vpnID)
+		log.Errorf("faital monitoring VpnID %s rib : %v", vpnID, err)
 	}()
 	return nil
 }
@@ -143,7 +143,7 @@ func (b *BgpRouteManager) handleRibUpdate(p *rib) error {
 	bgpCache := &ribCache{
 		BgpTable: make(map[string]*ribLocal),
 	}
-	monitorUpdate, err := bgpCache.handleBgpRibMonitor(p.path, p.vrfID)
+	monitorUpdate, err := bgpCache.handleBgpRibMonitor(p.path, p.vpnID)
 	if err != nil {
 		log.Errorf("error processing bgp update [ %s ]", err)
 		return err
@@ -155,7 +155,7 @@ func (b *BgpRouteManager) handleRibUpdate(p *rib) error {
 			monitorUpdate.IsWithdraw = true
 			log.Debugf("BGP update has withdrawn the routes:  %v ", monitorUpdate)
 			if route, ok := b.learnedRoutes[monitorUpdate.BgpPrefix.String()]; ok {
-				err = delNetlinkRoute(route.BgpPrefix, route.NextHop, b.parentIfaces[p.vrfID])
+				err = delNetlinkRoute(route.BgpPrefix, route.NextHop, b.parentIfaces[p.vpnID])
 				// If the bgp update contained a withdraw, remove the local netlink route for the remote endpoint
 				if err != nil {
 					log.Errorf("Error removing learned bgp route [ %s ]", err)
@@ -171,7 +171,7 @@ func (b *BgpRouteManager) handleRibUpdate(p *rib) error {
 			b.learnedRoutes[monitorUpdate.BgpPrefix.String()] = monitorUpdate
 			log.Debugf("Learned routes: %v ", monitorUpdate)
 
-			err = addNetlinkRoute(monitorUpdate.BgpPrefix, monitorUpdate.NextHop, b.parentIfaces[p.vrfID])
+			err = addNetlinkRoute(monitorUpdate.BgpPrefix, monitorUpdate.NextHop, b.parentIfaces[p.vpnID])
 			if err != nil {
 				log.Debugf("Error Adding route results [ %s ]", err)
 				return err
@@ -186,11 +186,11 @@ func (b *BgpRouteManager) handleRibUpdate(p *rib) error {
 	return nil
 }
 
-func (b *BgpRouteManager) monitorBestPath(VrfID string) error {
+func (b *BgpRouteManager) monitorBestPath(VpnID string) error {
 	var routeFamily uint32
-	if VrfID == "" {
+	if VpnID == "" {
 		routeFamily = uint32(bgp.RF_IPv4_UC)
-		VrfID = "global"
+		VpnID = "global"
 	} else {
 		routeFamily = uint32(bgp.RF_IPv4_VPN)
 	}
@@ -202,7 +202,7 @@ func (b *BgpRouteManager) monitorBestPath(VrfID string) error {
 		for _, d := range currib.Destinations {
 			for _, p := range d.Paths {
 				if p.Best {
-					b.handleRibUpdate(&rib{path: p, vrfID: VrfID})
+					b.handleRibUpdate(&rib{path: p, vpnID: VpnID})
 					break
 				}
 			}
@@ -223,7 +223,7 @@ func (b *BgpRouteManager) monitorBestPath(VrfID string) error {
 			EndCh <- struct{}{}
 			return err
 		}
-		err := b.handleRibUpdate(&rib{path: r.Data.(*bgpapi.Destination).Paths[0], vrfID: VrfID})
+		err := b.handleRibUpdate(&rib{path: r.Data.(*bgpapi.Destination).Paths[0], vpnID: VpnID})
 		if err != nil {
 			log.Errorf(err.Error())
 			continue
@@ -233,7 +233,7 @@ func (b *BgpRouteManager) monitorBestPath(VrfID string) error {
 }
 
 // AdvertiseNewRoute advetise the local namespace IP prefixes to the bgp neighbors
-func (b *BgpRouteManager) AdvertiseNewRoute(localPrefix string, VrfID string) error {
+func (b *BgpRouteManager) AdvertiseNewRoute(localPrefix string, VpnID string) error {
 	_, localPrefixCIDR, _ := net.ParseCIDR(localPrefix)
 	log.Debugf("Adding this hosts container network [ %s ] into the BGP domain", localPrefix)
 	path := &bgpapi.Path{
@@ -241,7 +241,7 @@ func (b *BgpRouteManager) AdvertiseNewRoute(localPrefix string, VrfID string) er
 		IsWithdraw: false,
 	}
 	var target bgpapi.Resource
-	if VrfID == "" {
+	if VpnID == "" {
 		target = bgpapi.Resource_GLOBAL
 	} else {
 		target = bgpapi.Resource_VRF
@@ -254,7 +254,7 @@ func (b *BgpRouteManager) AdvertiseNewRoute(localPrefix string, VrfID string) er
 	path.Pattrs = append(path.Pattrs, origin)
 	arg := &bgpapi.AddPathRequest{
 		Resource: target,
-		VrfId:    bgpVrfprefix + VrfID,
+		VrfId:    bgpVrfprefix + VpnID,
 		Path:     path,
 	}
 	_, err := b.bgpServer.AddPath(arg)
@@ -265,7 +265,7 @@ func (b *BgpRouteManager) AdvertiseNewRoute(localPrefix string, VrfID string) er
 }
 
 //WithdrawRoute withdraw the local namespace IP prefixes to the bgp neighbors
-func (b *BgpRouteManager) WithdrawRoute(localPrefix string, VrfID string) error {
+func (b *BgpRouteManager) WithdrawRoute(localPrefix string, VpnID string) error {
 	_, localPrefixCIDR, _ := net.ParseCIDR(localPrefix)
 	log.Debugf("Withdraw this hosts container network [ %s ] from the BGP domain", localPrefix)
 	path := &bgpapi.Path{
@@ -273,7 +273,7 @@ func (b *BgpRouteManager) WithdrawRoute(localPrefix string, VrfID string) error 
 		IsWithdraw: true,
 	}
 	var target bgpapi.Resource
-	if VrfID == "" {
+	if VpnID == "" {
 		target = bgpapi.Resource_GLOBAL
 	} else {
 		target = bgpapi.Resource_VRF
@@ -286,7 +286,7 @@ func (b *BgpRouteManager) WithdrawRoute(localPrefix string, VrfID string) error 
 	path.Pattrs = append(path.Pattrs, origin)
 	arg := &bgpapi.DeletePathRequest{
 		Resource: target,
-		VrfId:    bgpVrfprefix + VrfID,
+		VrfId:    bgpVrfprefix + VpnID,
 		Path:     path,
 	}
 	err := b.bgpServer.DeletePath(arg)
@@ -359,12 +359,12 @@ func (b *BgpRouteManager) DiscoverDelete(isself bool, Address string) error {
 
 	return nil
 }
-func (cache *ribCache) handleBgpRibMonitor(routeMonitor *bgpapi.Path, VrfID string) (*ribLocal, error) {
+func (cache *ribCache) handleBgpRibMonitor(routeMonitor *bgpapi.Path, VpnID string) (*ribLocal, error) {
 	ribLocal := &ribLocal{}
 	var nlri bgp.AddrPrefixInterface
 
 	if len(routeMonitor.Nlri) > 0 {
-		if VrfID == "global" {
+		if VpnID == "global" {
 			nlri = &bgp.IPAddrPrefix{}
 			err := nlri.DecodeFromBytes(routeMonitor.Nlri)
 			if err != nil {
@@ -386,7 +386,7 @@ func (cache *ribCache) handleBgpRibMonitor(routeMonitor *bgpapi.Path, VrfID stri
 				return nil, err
 			}
 			nlriSplit := strings.Split(nlri.String(), ":")
-			if VrfID != nlriSplit[1] {
+			if VpnID != nlriSplit[1] {
 				return nil, nil
 			}
 			bgpPrefix, err := parseIPNet(nlriSplit[len(nlriSplit)-1])
