@@ -1245,6 +1245,9 @@ func (d *driver) RevokeExternalConnectivity(nid, eid string) error {
 		logrus.Warn(err)
 	}
 
+	endpoint.extConnConfig = nil
+	endpoint.portMapping = nil
+
 	return nil
 }
 
