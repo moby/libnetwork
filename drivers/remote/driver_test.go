@@ -132,6 +132,14 @@ func (test *testEndpoint) SetIPAddress(address *net.IPNet) error {
 	return setAddress(&test.address, address)
 }
 
+func (test *testEndpoint) testEndpoint() string {
+	return ""
+}
+
+func (test *testEndpoint) SrcName() string {
+	return ""
+}
+
 func setAddress(ifaceAddr *string, address *net.IPNet) error {
 	if *ifaceAddr != "" {
 		return types.ForbiddenErrorf("endpoint interface IP present (%s). Cannot be modified with (%s).", *ifaceAddr, address)
@@ -525,6 +533,10 @@ func (r *rollbackEndpoint) Address() *net.IPNet {
 
 func (r *rollbackEndpoint) AddressIPv6() *net.IPNet {
 	return nil
+}
+
+func (r *rollbackEndpoint) SrcName() string {
+	return ""
 }
 
 func (r *rollbackEndpoint) SetMacAddress(mac net.HardwareAddr) error {

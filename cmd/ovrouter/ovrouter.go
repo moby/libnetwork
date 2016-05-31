@@ -79,6 +79,10 @@ func (ep *endpoint) SetNames(srcName, dstPrefix string) error {
 	return nil
 }
 
+func (ep *endpoint) SrcName() string {
+	return ep.name
+}
+
 func (ep *endpoint) SetGateway(net.IP) error {
 	return nil
 }
