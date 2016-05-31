@@ -23,7 +23,8 @@ func getTestEnv(t *testing.T, empty bool) (NetworkController, Network, Network) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := New(append(cfgOptions, config.OptionDriverConfig(netType, genericOption))...)
+	old := make(map[string]interface{})
+	c, _, err := New(old, append(cfgOptions, config.OptionDriverConfig(netType, genericOption))...)
 	if err != nil {
 		t.Fatal(err)
 	}

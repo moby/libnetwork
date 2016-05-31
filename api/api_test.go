@@ -87,7 +87,8 @@ func createTestNetwork(t *testing.T, network string) (libnetwork.NetworkControll
 	// Cleanup local datastore file
 	os.Remove(datastore.DefaultScopes("")[datastore.LocalScope].Client.Address)
 
-	c, err := libnetwork.New()
+	old := make(map[string]interface{})
+	c, _, err := libnetwork.New(old)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +193,8 @@ func TestCreateDeleteNetwork(t *testing.T) {
 	// Cleanup local datastore file
 	os.Remove(datastore.DefaultScopes("")[datastore.LocalScope].Client.Address)
 
-	c, err := libnetwork.New()
+	old := make(map[string]interface{})
+	c, _, err := libnetwork.New(old)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -267,7 +269,8 @@ func TestGetNetworksAndEndpoints(t *testing.T) {
 	// Cleanup local datastore file
 	os.Remove(datastore.DefaultScopes("")[datastore.LocalScope].Client.Address)
 
-	c, err := libnetwork.New()
+	old := make(map[string]interface{})
+	c, _, err := libnetwork.New(old)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -526,7 +529,8 @@ func TestProcGetServices(t *testing.T) {
 	// Cleanup local datastore file
 	os.Remove(datastore.DefaultScopes("")[datastore.LocalScope].Client.Address)
 
-	c, err := libnetwork.New()
+	old := make(map[string]interface{})
+	c, _, err := libnetwork.New(old)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -999,7 +1003,8 @@ func TestDetectGetNetworksInvalidQueryComposition(t *testing.T) {
 	// Cleanup local datastore file
 	os.Remove(datastore.DefaultScopes("")[datastore.LocalScope].Client.Address)
 
-	c, err := libnetwork.New()
+	old := make(map[string]interface{})
+	c, _, err := libnetwork.New(old)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1114,7 +1119,8 @@ func TestCreateDeleteEndpoints(t *testing.T) {
 	// Cleanup local datastore file
 	os.Remove(datastore.DefaultScopes("")[datastore.LocalScope].Client.Address)
 
-	c, err := libnetwork.New()
+	old := make(map[string]interface{})
+	c, _, err := libnetwork.New(old)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1240,7 +1246,8 @@ func TestJoinLeave(t *testing.T) {
 	// Cleanup local datastore file
 	os.Remove(datastore.DefaultScopes("")[datastore.LocalScope].Client.Address)
 
-	c, err := libnetwork.New()
+	old := make(map[string]interface{})
+	c, _, err := libnetwork.New(old)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1691,7 +1698,8 @@ func TestHttpHandlerUninit(t *testing.T) {
 	// Cleanup local datastore file
 	os.Remove(datastore.DefaultScopes("")[datastore.LocalScope].Client.Address)
 
-	c, err := libnetwork.New()
+	old := make(map[string]interface{})
+	c, _, err := libnetwork.New(old)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1761,7 +1769,8 @@ func TestHttpHandlerBadBody(t *testing.T) {
 	// Cleanup local datastore file
 	os.Remove(datastore.DefaultScopes("")[datastore.LocalScope].Client.Address)
 
-	c, err := libnetwork.New()
+	old := make(map[string]interface{})
+	c, _, err := libnetwork.New(old)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1797,7 +1806,8 @@ func TestEndToEnd(t *testing.T) {
 	// Cleanup local datastore file
 	os.Remove(datastore.DefaultScopes("")[datastore.LocalScope].Client.Address)
 
-	c, err := libnetwork.New()
+	old := make(map[string]interface{})
+	c, _, err := libnetwork.New(old)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2249,7 +2259,8 @@ func TestEndToEndErrorMessage(t *testing.T) {
 	// Cleanup local datastore file
 	os.Remove(datastore.DefaultScopes("")[datastore.LocalScope].Client.Address)
 
-	c, err := libnetwork.New()
+	old := make(map[string]interface{})
+	c, _, err := libnetwork.New(old)
 	if err != nil {
 		t.Fatal(err)
 	}

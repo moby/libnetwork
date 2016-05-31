@@ -76,7 +76,8 @@ func createController() error {
 	if err != nil {
 		return err
 	}
-	controller, err = libnetwork.New(append(cfgOptions, config.OptionDriverConfig(bridgeNetType, genericOption))...)
+	old := make(map[string]interface{})
+	controller, _, err = libnetwork.New(old, append(cfgOptions, config.OptionDriverConfig(bridgeNetType, genericOption))...)
 	if err != nil {
 		return err
 	}
@@ -2044,7 +2045,8 @@ func TestInvalidRemoteDriver(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ctrlr, err := libnetwork.New()
+	old := make(map[string]interface{})
+	ctrlr, _, err := libnetwork.New(old)
 	if err != nil {
 		t.Fatal(err)
 	}

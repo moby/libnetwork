@@ -243,7 +243,8 @@ func (d *dnetConnection) dnetDaemon(cfgFile string) error {
 
 	cOptions = append(cOptions, config.OptionDriverConfig("bridge", bridgeOption))
 
-	controller, err := libnetwork.New(cOptions...)
+	old := make(map[string]interface{})
+	controller, _, err := libnetwork.New(old, cOptions...)
 	if err != nil {
 		fmt.Println("Error starting dnetDaemon :", err)
 		return err

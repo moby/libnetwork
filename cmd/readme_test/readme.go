@@ -23,7 +23,8 @@ func main() {
 	driverOptions := options.Generic{}
 	genericOption := make(map[string]interface{})
 	genericOption[netlabel.GenericData] = driverOptions
-	controller, err := libnetwork.New(config.OptionDriverConfig(networkType, genericOption))
+	old := make(map[string]interface{})
+	controller, _, err := libnetwork.New(old, config.OptionDriverConfig(networkType, genericOption))
 	if err != nil {
 		log.Fatalf("libnetwork.New: %s", err)
 	}
