@@ -130,9 +130,7 @@ func (n *networkNamespace) AddNeighbor(dstIP net.IP, dstMac net.HardwareAddr, op
 		if err := netlink.NeighSet(nlnh); err != nil {
 			return fmt.Errorf("could not add neighbor entry: %v", err)
 		}
-
 		n.neighbors = append(n.neighbors, nh)
-
 		return nil
 	})
 }

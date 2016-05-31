@@ -593,3 +593,7 @@ func (d *driver) DiscoverNew(dType discoverapi.DiscoveryType, data interface{}) 
 func (d *driver) DiscoverDelete(dType discoverapi.DiscoveryType, data interface{}) error {
 	return nil
 }
+
+func (d *driver) Restore(nid, eid string, sboxKey string, ifInfo driverapi.InterfaceInfo, options map[string]interface{}) error {
+	return nil
+}

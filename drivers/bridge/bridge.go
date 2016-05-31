@@ -376,7 +376,8 @@ func (d *driver) configure(option map[string]interface{}) error {
 				logrus.Warnf("Running modprobe bridge br_netfilter failed with message: %s, error: %v", out, err)
 			}
 		}
-		removeIPChains()
+		// TODO: need a better way to handle this
+		// removeIPChains()
 		natChain, filterChain, isolationChain, err = setupIPChains(config)
 		if err != nil {
 			return err
@@ -1211,11 +1212,10 @@ func (d *driver) ProgramExternalConnectivity(nid, eid string, options map[string
 	}
 
 	// Program any required port mapping and store them in the endpoint
-	endpoint.portMapping, err = network.allocatePorts(endpoint, network.config.DefaultBindingIP, d.config.EnableUserlandProxy)
+	endpoint.portMapping, err = network.allocatePorts(endpoint, network.config.DefaultBindingIP, d.config.EnableUserlandProxy, false)
 	if err != nil {
 		return err
 	}
-
 	if !network.config.EnableICC {
 		return d.link(network, endpoint, true)
 	}
@@ -1337,6 +1337,82 @@ func (d *driver) DiscoverNew(dType discoverapi.DiscoveryType, data interface{}) 
 
 // DiscoverDelete is a notification for a discovery delete event, such as a node leaving a cluster
 func (d *driver) DiscoverDelete(dType discoverapi.DiscoveryType, data interface{}) error {
+	return nil
+}
+
+func (d *driver) Restore(nid, eid string, sboxKey string, ifInfo driverapi.InterfaceInfo, options map[string]interface{}) error {
+	// restore endpoint
+	if ifInfo == nil {
+		return errors.New("invalid interface info passed")
+	}
+
+	// Get the network handler and make sure it exists
+	d.Lock()
+	n, ok := d.networks[nid]
+	d.Unlock()
+
+	if !ok {
+		return types.NotFoundErrorf("network %s does not exist", nid)
+	}
+	if n == nil {
+		return driverapi.ErrNoNetwork(nid)
+	}
+
+	// Sanity check
+	n.Lock()
+	if n.id != nid {
+		n.Unlock()
+		return InvalidNetworkIDError(nid)
+	}
+	n.Unlock()
+
+	// Check if endpoint id is good and retrieve correspondent endpoint
+	ep, err := n.getEndpoint(eid)
+	if err != nil {
+		return err
+	}
+
+	// Endpoint with that id exists either on desired or other sandbox
+	if ep != nil {
+		return driverapi.ErrEndpointExists(eid)
+	}
+
+	// Try to convert the options to endpoint configuration
+	epConfig, err := parseEndpointOptions(options)
+	if err != nil {
+		return err
+	}
+	endpoint := &bridgeEndpoint{id: eid, config: epConfig}
+	endpoint.macAddress = ifInfo.MacAddress()
+	endpoint.addr = ifInfo.Address()
+	endpoint.addrv6 = ifInfo.AddressIPv6()
+	endpoint.srcName = ifInfo.SrcName()
+
+	endpoint.containerConfig, err = parseContainerOptions(options)
+	if err != nil {
+		return err
+	}
+	endpoint.extConnConfig, err = parseConnectivityOptions(options)
+	if err != nil {
+		return err
+	}
+
+	if len(endpoint.extConnConfig.PortBindings) > 0 {
+		endpoint.portMapping, err = n.allocatePorts(endpoint, n.config.DefaultBindingIP, d.config.EnableUserlandProxy, true)
+		if err != nil {
+			return err
+		}
+
+		// This is to make sure that all the iptalbes rules are still exist
+		// If the rule not exist, re-create it
+		if !n.config.EnableICC {
+			return d.link(n, endpoint, true)
+		}
+
+	}
+	n.Lock()
+	n.endpoints[eid] = endpoint
+	n.Unlock()
 	return nil
 }
 

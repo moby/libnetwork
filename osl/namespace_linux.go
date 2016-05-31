@@ -2,10 +2,13 @@ package osl
 
 import (
 	"fmt"
+	"io/ioutil"
 	"net"
 	"os"
 	"os/exec"
 	"runtime"
+	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -132,6 +135,39 @@ func GC() {
 // container id.
 func GenerateKey(containerID string) string {
 	maxLen := 12
+	// Read sandbox key from host for overlay
+	if strings.HasPrefix(containerID, "-") {
+		var (
+			index    int
+			indexStr string
+			tmpkey   string
+		)
+		dir, err := ioutil.ReadDir(prefix)
+		if err != nil {
+			return ""
+		}
+
+		for _, v := range dir {
+			id := v.Name()
+			if strings.HasSuffix(id, containerID[:maxLen-1]) {
+				indexStr = strings.TrimSuffix(id, containerID[:maxLen-1])
+				tmpindex, err := strconv.Atoi(indexStr)
+				if err != nil {
+					return ""
+				}
+				if tmpindex > index {
+					index = tmpindex
+					tmpkey = id
+				}
+
+			}
+		}
+		containerID = tmpkey
+		if containerID == "" {
+			return ""
+		}
+	}
+
 	if len(containerID) < maxLen {
 		maxLen = len(containerID)
 	}
@@ -148,6 +184,15 @@ func NewSandbox(key string, osCreate bool) (Sandbox, error) {
 	}
 
 	return &networkNamespace{path: key, isDefault: !osCreate}, nil
+}
+
+// NewNullSandbox restore a sandbox
+func NewNullSandbox(key string) Sandbox {
+	var isDefault bool
+	if key == "default" {
+		isDefault = true
+	}
+	return &networkNamespace{path: key, isDefault: isDefault}
 }
 
 func (n *networkNamespace) InterfaceOptions() IfaceOptionSetter {
@@ -319,5 +364,113 @@ func (n *networkNamespace) Destroy() error {
 
 	// Stash it into the garbage collection list
 	addToGarbagePaths(n.path)
+	return nil
+}
+
+// Restore restore the network namespace
+// TODO: read this information from the netnamespace maybe a better choice ?
+func (n *networkNamespace) Restore(ifsopt map[string][]IfaceOption, routes []*types.StaticRoute, gw net.IP, gw6 net.IP) error {
+	// restore interfaces
+	for name, opts := range ifsopt {
+		if !strings.Contains(name, "+") {
+			return fmt.Errorf("wrong iface name in restore osl sandbox interface")
+		}
+		seps := strings.Split(name, "+")
+		srcName := seps[0]
+		dstPrefix := seps[1]
+		i := &nwIface{srcName: srcName, dstName: dstPrefix, ns: n}
+		i.processInterfaceOptions(opts...)
+		if i.master != "" {
+			i.dstMaster = n.findDst(i.master, true)
+			if i.dstMaster == "" {
+				return fmt.Errorf("could not find an appropriate master %q for %q",
+					i.master, i.srcName)
+			}
+		}
+
+		if n.isDefault {
+			i.dstName = i.srcName
+		} else {
+			// due to the docker network connect/disconnect, so the dstName should
+			// restore from the namespace
+			err := nsInvoke(n.path, func(nsFD int) error { return nil }, func(callerFD int) error {
+				ifaces, err := net.Interfaces()
+				if err != nil {
+					return err
+				}
+				for _, iface := range ifaces {
+					addrs, err := iface.Addrs()
+					if err != nil {
+						return err
+					}
+					if strings.HasPrefix(iface.Name, "vxlan") {
+						if i.dstName == "vxlan" {
+							i.dstName = iface.Name
+							break
+						}
+					}
+
+					// find the interface name by ip
+					if i.address != nil {
+						for _, addr := range addrs {
+							if addr.String() == i.address.String() {
+								i.dstName = iface.Name
+								break
+							}
+							continue
+						}
+						if i.dstName == iface.Name {
+							break
+						}
+					}
+					// This is to find the interface name of the pair in overlay sandbox
+					if strings.HasPrefix(iface.Name, "veth") {
+						if i.master != "" && i.dstName == "veth" {
+							i.dstName = iface.Name
+						}
+					}
+				}
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+			var index int
+			indexStr := strings.TrimPrefix(i.dstName, dstPrefix)
+			if indexStr != "" {
+				index, err = strconv.Atoi(indexStr)
+				if err != nil {
+					return err
+				}
+			}
+			index++
+			n.Lock()
+			if index > n.nextIfIndex {
+				n.nextIfIndex = index
+			}
+			n.iFaces = append(n.iFaces, i)
+			n.Unlock()
+		}
+	}
+
+	// restore routes
+	for _, r := range routes {
+		n.Lock()
+		n.staticRoutes = append(n.staticRoutes, r)
+		n.Unlock()
+	}
+
+	// restore gateway
+	if len(gw) > 0 {
+		n.Lock()
+		n.gw = gw
+		n.Unlock()
+	}
+
+	if len(gw6) > 0 {
+		n.Lock()
+		n.gwv6 = gw6
+		n.Unlock()
+	}
 	return nil
 }

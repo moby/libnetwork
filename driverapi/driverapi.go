@@ -57,6 +57,9 @@ type Driver interface {
 	// Leave method is invoked when a Sandbox detaches from an endpoint.
 	Leave(nid, eid string) error
 
+	// Restore reconstruct driver struct
+	Restore(nid, eid string, sboxKey string, ifInfo InterfaceInfo, options map[string]interface{}) error
+
 	// ProgramExternalConnectivity invokes the driver method which does the necessary
 	// programming to allow the external connectivity dictated by the passed options
 	ProgramExternalConnectivity(nid, eid string, options map[string]interface{}) error
@@ -103,6 +106,9 @@ type InterfaceInfo interface {
 
 	// AddressIPv6 returns the IPv6 address.
 	AddressIPv6() *net.IPNet
+
+	// SrcName return the srcName
+	SrcName() string
 }
 
 // InterfaceNameInfo provides a go interface for the drivers to assign names

@@ -176,6 +176,74 @@ func (n *network) incEndpointCount() {
 	n.joinCnt++
 }
 
+func (n *network) restoreSandbox(s *subnet) error {
+	n.once.Do(func() {
+		// save the error status of initSandbox in n.initErr so that
+		// all the racing go routines are able to know the status.
+		n.initErr = n.restore(s)
+	})
+
+	return n.initErr
+}
+
+func (n *network) restore(s *subnet) error {
+	hostModeOnce.Do(func() {
+		if os.Getenv("_OVERLAY_HOST_MODE") != "" {
+			hostMode = true
+		}
+	})
+	key := osl.GenerateKey("-" + n.id)
+	if key == "" {
+		return fmt.Errorf("failed to find old sandbox key  %s", osl.GenerateKey(fmt.Sprintf("%d-", n.initEpoch)+n.id))
+	}
+	sbox := osl.NewNullSandbox(key)
+
+	n.setSandbox(sbox)
+	var reErr error
+	s.once.Do(func() {
+		brName := n.generateBridgeName(s)
+		vxlanName := n.generateVxlanName(s)
+		// restore osl sandbox
+		Ifaces := make(map[string][]osl.IfaceOption)
+		brIfaceOption := make([]osl.IfaceOption, 2)
+		brIfaceOption = append(brIfaceOption, sbox.InterfaceOptions().Address(s.gwIP))
+		brIfaceOption = append(brIfaceOption, sbox.InterfaceOptions().Bridge(true))
+		Ifaces[fmt.Sprintf("%s+%s", brName, "br")] = brIfaceOption
+
+		vxlanIfaceOption := make([]osl.IfaceOption, 1)
+		vxlanIfaceOption = append(vxlanIfaceOption, sbox.InterfaceOptions().Master(brName))
+		Ifaces[fmt.Sprintf("%s+%s", vxlanName, "vxlan")] = vxlanIfaceOption
+
+		err := sbox.Restore(Ifaces, nil, nil, nil)
+		if err != nil {
+			reErr = err
+			return
+		}
+		n.Lock()
+		s.vxlanName = vxlanName
+		s.brName = brName
+		n.Unlock()
+
+	})
+
+	if reErr != nil {
+		return reErr
+	}
+	var (
+		nlSock *nl.NetlinkSocket
+		err    error
+	)
+	sbox.InvokeFunc(func() {
+		nlSock, err = nl.Subscribe(syscall.NETLINK_ROUTE, syscall.RTNLGRP_NEIGH)
+		if err != nil {
+			err = fmt.Errorf("failed to subscribe to neighbor group netlink messages")
+		}
+	})
+
+	go n.watchMiss(nlSock)
+	return nil
+}
+
 func (n *network) joinSandbox() error {
 	// If there is a race between two go routines here only one will win
 	// the other will wait.
