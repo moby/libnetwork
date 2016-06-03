@@ -373,7 +373,7 @@ func (d *driver) configure(option map[string]interface{}) error {
 	if config.EnableIPTables {
 		if _, err := os.Stat("/proc/sys/net/bridge"); err != nil {
 			if out, err := exec.Command("modprobe", "-va", "bridge", "br_netfilter").CombinedOutput(); err != nil {
-				logrus.Warnf("Running modprobe bridge br_netfilter failed with message: %s, error: %v", out, err)
+				logrus.Debugf("Running modprobe bridge br_netfilter failed with message: %s, error: %v", out, err)
 			}
 		}
 		removeIPChains()
