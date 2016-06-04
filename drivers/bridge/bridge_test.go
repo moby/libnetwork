@@ -400,9 +400,9 @@ func setAddress(ifaceAddr **net.IPNet, address *net.IPNet) error {
 	return nil
 }
 
-func (i *testInterface) SetNames(srcName string, dstName string) error {
+func (i *testInterface) SetNames(srcName string, dstName string, dstPrefix string) error {
 	i.srcName = srcName
-	i.dstName = dstName
+	i.dstName = dstPrefix
 	return nil
 }
 

@@ -212,7 +212,7 @@ func (n *networkNamespace) findDst(srcName string, isBridge bool) string {
 }
 
 func (n *networkNamespace) AddInterface(srcName, dstPrefix string, options ...IfaceOption) error {
-	i := &nwIface{srcName: srcName, dstName: dstPrefix, ns: n}
+	i := &nwIface{srcName: srcName, ns: n}
 	i.processInterfaceOptions(options...)
 
 	if i.master != "" {
@@ -226,8 +226,8 @@ func (n *networkNamespace) AddInterface(srcName, dstPrefix string, options ...If
 	n.Lock()
 	if n.isDefault {
 		i.dstName = i.srcName
-	} else {
-		i.dstName = fmt.Sprintf("%s%d", i.dstName, n.nextIfIndex)
+	} else if i.dstName == "" {
+		i.dstName = fmt.Sprintf("%s%d", dstPrefix, n.nextIfIndex)
 		n.nextIfIndex++
 	}
 

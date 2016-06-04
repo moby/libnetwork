@@ -50,6 +50,7 @@ type endpointInterface struct {
 	addr      *net.IPNet
 	addrv6    *net.IPNet
 	srcName   string
+	dstName   string
 	dstPrefix string
 	routes    []*net.IPNet
 	v4PoolID  string
@@ -266,9 +267,10 @@ func (epi *endpointInterface) AddressIPv6() *net.IPNet {
 	return types.GetIPNetCopy(epi.addrv6)
 }
 
-func (epi *endpointInterface) SetNames(srcName string, dstPrefix string) error {
+func (epi *endpointInterface) SetNames(srcName string, dstName string, dstPrefix string) error {
 	epi.srcName = srcName
 	epi.dstPrefix = dstPrefix
+	epi.dstName = dstName
 	return nil
 }
 

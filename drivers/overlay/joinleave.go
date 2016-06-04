@@ -97,7 +97,7 @@ func (d *driver) Join(nid, eid string, sboxKey string, jinfo driverapi.JoinInfo,
 	}
 
 	if iNames := jinfo.InterfaceName(); iNames != nil {
-		err = iNames.SetNames(containerIfName, "eth")
+		err = iNames.SetNames(containerIfName, "", "eth")
 		if err != nil {
 			return err
 		}

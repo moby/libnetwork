@@ -1143,7 +1143,7 @@ func (d *driver) Join(nid, eid string, sboxKey string, jinfo driverapi.JoinInfo,
 	}
 
 	iNames := jinfo.InterfaceName()
-	err = iNames.SetNames(endpoint.srcName, containerVethPrefix)
+	err = iNames.SetNames(endpoint.srcName, "", containerVethPrefix)
 	if err != nil {
 		return err
 	}

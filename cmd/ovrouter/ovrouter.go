@@ -74,7 +74,7 @@ func (ep *endpoint) InterfaceName() driverapi.InterfaceNameInfo {
 	return ep
 }
 
-func (ep *endpoint) SetNames(srcName, dstPrefix string) error {
+func (ep *endpoint) SetNames(srcName, dstName, dstPrefix string) error {
 	ep.name = srcName
 	return nil
 }
