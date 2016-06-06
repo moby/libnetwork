@@ -148,7 +148,7 @@ type initializer struct {
 }
 
 // New creates a new instance of network controller.
-func New(cfgOptions ...config.Option) (NetworkController, error) {
+func New(oldRunningContainers map[string]interface{}, cfgOptions ...config.Option) (NetworkController, map[string]interface{}, error) {
 	c := &controller{
 		id:              stringid.GenerateRandomID(),
 		cfg:             config.ParseConfigOptions(cfgOptions...),
@@ -158,20 +158,20 @@ func New(cfgOptions ...config.Option) (NetworkController, error) {
 	}
 
 	if err := c.agentInit(c.cfg.Daemon.Bind); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if err := c.agentJoin(c.cfg.Daemon.Neighbors); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if err := c.initStores(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	drvRegistry, err := drvregistry.New(c.getStore(datastore.LocalScope), c.getStore(datastore.GlobalScope), c.RegisterDriver, nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	for _, i := range getInitializers() {
@@ -184,7 +184,7 @@ func New(cfgOptions ...config.Option) (NetworkController, error) {
 		}
 
 		if err := drvRegistry.AddDriver(i.ntype, i.fn, dcfg); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 	c.drvRegistry = drvRegistry
@@ -197,17 +197,81 @@ func New(cfgOptions ...config.Option) (NetworkController, error) {
 		}
 	}
 
-	c.sandboxCleanup()
+	c.sandboxCleanup(oldRunningContainers)
+	if err := c.restoreSandbox(oldRunningContainers); err != nil {
+		log.Errorf("failed to restore sandbox")
+	}
+
 	c.cleanupLocalEndpoints()
 	c.networkCleanup()
 
 	c.reservePools()
 
 	if err := c.startExternalKeyListener(); err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+	restored := make(map[string]interface{})
+	for _, sb := range c.sandboxes {
+		restored[sb.ContainerID()] = true
 	}
 
-	return c, nil
+	return c, restored, nil
+}
+
+func (c *controller) restoreSandbox(sbids map[string]interface{}) error {
+	for id, sb := range c.sandboxes {
+		log.Infof("restore sandbox %s of container %s", sb.ID(), sb.ContainerID())
+		option, ok := sbids[sb.ContainerID()].([]SandboxOption)
+		if !ok {
+			log.Errorf("failed to restore sandbox: no restore options passed from daemon")
+			delete(c.sandboxes, id)
+			continue
+		}
+		err := sb.restoreSandbox(option)
+		if err != nil {
+			log.Errorf("failed to restore sandbox %s", sb.ID())
+			delete(c.sandboxes, id)
+			continue
+		}
+		// restore endpoints in this sandbox
+		// Fixme: if one of the endpoints failed to restore, should we delete this sandbox?
+		for _, ep := range sb.endpoints {
+			log.Infof("restore endpoint %s", ep.ID())
+			c.watchSvcRecord(ep)
+			net, err := ep.getNetworkFromStore()
+			if err != nil {
+				log.Errorf("Restore sandbox: failed to get endpoint network from store: %v", err)
+				ep.Delete(true)
+				continue
+			}
+			d, err := net.driver(true)
+			if err != nil {
+				log.Errorf("Resore sandbox: failed to get driver of endpoint %s: %v", ep.ID(), err)
+				ep.Delete(true)
+				continue
+			}
+			options := make(map[string]interface{})
+			for key, value := range options {
+				options[key] = value
+			}
+			for key, value := range sb.Labels() {
+				options[key] = value
+			}
+
+			err = d.Restore(net.ID(), ep.id, sb.Key(), ep.Interface(), options)
+			if err != nil {
+				log.Errorf("Restore sandbox: failed to restore endpoint %s to driver of network %s: %v", ep.Name(), net.Name(), err)
+				ep.Delete(true)
+				continue
+			}
+		}
+		if sb.config.useDefaultSandBox {
+			c.sboxOnce.Do(func() {
+				c.defOsSbox = sb.osSbox
+			})
+		}
+	}
+	return nil
 }
 
 func (c *controller) makeDriverConfig(ntype string) map[string]interface{} {

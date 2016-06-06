@@ -367,6 +367,10 @@ func (i *testInterface) Address() *net.IPNet {
 	return i.addr
 }
 
+func (i *testInterface) SrcName() string {
+	return i.srcName
+}
+
 func (i *testInterface) AddressIPv6() *net.IPNet {
 	return i.addrv6
 }

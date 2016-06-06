@@ -13,6 +13,7 @@ import (
 	"github.com/docker/libnetwork/driverapi"
 	"github.com/docker/libnetwork/idm"
 	"github.com/docker/libnetwork/netlabel"
+	"github.com/docker/libnetwork/osl"
 	"github.com/docker/libnetwork/types"
 	"github.com/hashicorp/serf/serf"
 )
@@ -236,5 +237,49 @@ func (d *driver) DiscoverNew(dType discoverapi.DiscoveryType, data interface{}) 
 
 // DiscoverDelete is a notification for a discovery delete event, such as a node leaving a cluster
 func (d *driver) DiscoverDelete(dType discoverapi.DiscoveryType, data interface{}) error {
+	return nil
+}
+
+func (d *driver) Restore(nid, eid string, sboxKey string, ifInfo driverapi.InterfaceInfo, options map[string]interface{}) error {
+	n := d.network(nid)
+	if n == nil {
+		return fmt.Errorf("network id %q not found", nid)
+	}
+
+	ep := &endpoint{
+		id:     eid,
+		addr:   ifInfo.Address(),
+		mac:    ifInfo.MacAddress(),
+		ifName: ifInfo.SrcName(),
+	}
+
+	n.addEndpoint(ep)
+
+	s := n.getSubnetforIP(ep.addr)
+	if s == nil {
+		return fmt.Errorf("could not find subnet for endpoint %s", eid)
+	}
+
+	if err := n.obtainVxlanID(s); err != nil {
+		return fmt.Errorf("couldn't get vxlan id for %q: %v", s.subnetIP.String(), err)
+	}
+
+	if err := n.restoreSandbox(s); err != nil {
+		return fmt.Errorf("failed to restore overlay sandbox: %v", err)
+	}
+
+	Ifaces := make(map[string][]osl.IfaceOption)
+	vethIfaceOption := make([]osl.IfaceOption, 1)
+	vethIfaceOption = append(vethIfaceOption, n.sbox.InterfaceOptions().Master(s.brName))
+	Ifaces[fmt.Sprintf("%s+%s", "veth", "veth")] = vethIfaceOption
+
+	err := n.sbox.Restore(Ifaces, nil, nil, nil)
+	if err != nil {
+		return fmt.Errorf("failed to restore overlay sandbox: %v", err)
+	}
+
+	n.incEndpointCount()
+	d.peerDbAdd(nid, eid, ep.addr.IP, ep.addr.Mask, ep.mac,
+		net.ParseIP(d.bindAddress), true)
 	return nil
 }

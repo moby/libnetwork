@@ -28,7 +28,9 @@ func testNewController(t *testing.T, provider, url string) (NetworkController, e
 	}
 	cfgOptions = append(cfgOptions, config.OptionKVProvider(provider))
 	cfgOptions = append(cfgOptions, config.OptionKVProviderURL(url))
-	return New(cfgOptions...)
+	old := make(map[string]interface{})
+	controller, _, err := New(old, cfgOptions...)
+	return controller, err
 }
 
 func TestBoltdbBackend(t *testing.T) {
@@ -51,7 +53,8 @@ func testLocalBackend(t *testing.T, provider, url string, storeConfig *store.Con
 	genericOption[netlabel.GenericData] = driverOptions
 	cfgOptions = append(cfgOptions, config.OptionDriverConfig("host", genericOption))
 
-	ctrl, err := New(cfgOptions...)
+	old := make(map[string]interface{})
+	ctrl, _, err := New(old, cfgOptions...)
 	if err != nil {
 		t.Fatalf("Error new controller: %v", err)
 	}
@@ -73,7 +76,7 @@ func testLocalBackend(t *testing.T, provider, url string, storeConfig *store.Con
 	store.Close()
 
 	// test restore of local store
-	ctrl, err = New(cfgOptions...)
+	ctrl, _, err = New(old, cfgOptions...)
 	if err != nil {
 		t.Fatalf("Error creating controller: %v", err)
 	}
@@ -87,7 +90,8 @@ func TestNoPersist(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error creating random boltdb file : %v", err)
 	}
-	ctrl, err := New(cfgOptions...)
+	old := make(map[string]interface{})
+	ctrl, _, err := New(old, cfgOptions...)
 	if err != nil {
 		t.Fatalf("Error new controller: %v", err)
 	}
@@ -131,13 +135,14 @@ func TestMultipleControllersWithSameStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error getting random boltdb configs %v", err)
 	}
-	ctrl1, err := New(cfgOptions...)
+	old := make(map[string]interface{})
+	ctrl1, _, err := New(old, cfgOptions...)
 	if err != nil {
 		t.Fatalf("Error new controller: %v", err)
 	}
 	defer ctrl1.Stop()
 	// Use the same boltdb file without closing the previous controller
-	_, err = New(cfgOptions...)
+	_, _, err = New(old, cfgOptions...)
 	if err != nil {
 		t.Fatalf("Local store must support concurrent controllers")
 	}

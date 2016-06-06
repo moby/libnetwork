@@ -210,6 +210,10 @@ func (d *driver) EndpointOperInfo(nid, eid string) (map[string]interface{}, erro
 	return nil, types.NotImplementedErrorf("not implemented")
 }
 
+func (d *driver) Restore(nid, eid string, sboxKey string, ifInfo driverapi.InterfaceInfo, options map[string]interface{}) error {
+	return types.NotImplementedErrorf("not implemented")
+}
+
 // Join method is invoked when a Sandbox is attached to an endpoint.
 func (d *driver) Join(nid, eid string, sboxKey string, jinfo driverapi.JoinInfo, options map[string]interface{}) error {
 	return types.NotImplementedErrorf("not implemented")

@@ -283,7 +283,8 @@ func compareAddresses(a, b map[string]*net.IPNet) bool {
 }
 
 func TestAuxAddresses(t *testing.T) {
-	c, err := New()
+	old := make(map[string]interface{})
+	c, _, err := New(old)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -319,7 +320,8 @@ func TestAuxAddresses(t *testing.T) {
 }
 
 func TestSRVServiceQuery(t *testing.T) {
-	c, err := New()
+	old := make(map[string]interface{})
+	c, _, err := New(old)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -424,7 +426,8 @@ func TestIpamReleaseOnNetDriverFailures(t *testing.T) {
 	}
 
 	cfgOptions, err := OptionBoltdbWithRandomDBFile()
-	c, err := New(cfgOptions...)
+	old := make(map[string]interface{})
+	c, _, err := New(old, cfgOptions...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -513,6 +516,10 @@ func (b *badDriver) EndpointOperInfo(nid, eid string) (map[string]interface{}, e
 }
 func (b *badDriver) Join(nid, eid string, sboxKey string, jinfo driverapi.JoinInfo, options map[string]interface{}) error {
 	return fmt.Errorf("I will not allow any join")
+}
+
+func (b *badDriver) Restore(nid, eid string, sboxKey string, ifInfo driverapi.InterfaceInfo, options map[string]interface{}) error {
+	return nil
 }
 func (b *badDriver) Leave(nid, eid string) error {
 	return nil

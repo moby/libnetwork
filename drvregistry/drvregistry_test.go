@@ -53,6 +53,10 @@ func (m *mockDriver) Leave(nid, eid string) error {
 	return nil
 }
 
+func (m *mockDriver) Restore(nid, eid string, sboxKey string, ifInfo driverapi.InterfaceInfo, options map[string]interface{}) error {
+	return nil
+}
+
 func (m *mockDriver) DiscoverNew(dType discoverapi.DiscoveryType, data interface{}) error {
 	return nil
 }
