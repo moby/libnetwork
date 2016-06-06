@@ -19,6 +19,11 @@ func NewSandbox(key string, osCreate bool) (Sandbox, error) {
 	return nil, nil
 }
 
+// NewNullSandbox restore sandbox
+func NewNullSandbox(key string) Sandbox {
+	return nil
+}
+
 func GetSandboxForExternalKey(path string, key string) (Sandbox, error) {
 	return nil, nil
 }

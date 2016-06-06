@@ -1,6 +1,7 @@
 package macvlan
 
 import (
+	"fmt"
 	"net"
 	"sync"
 
@@ -102,4 +103,20 @@ func (d *driver) DiscoverDelete(dType discoverapi.DiscoveryType, data interface{
 }
 
 func (d *driver) EventNotify(etype driverapi.EventType, nid, tableName, key string, value []byte) {
+}
+
+func (d *driver) Restore(nid, eid string, sboxKey string, ifInfo driverapi.InterfaceInfo, options map[string]interface{}) error {
+	n, err := d.getNetwork(nid)
+	if err != nil {
+		return fmt.Errorf("network id %q not found", nid)
+	}
+	ep := &endpoint{
+		id:      eid,
+		addr:    ifInfo.Address(),
+		addrv6:  ifInfo.AddressIPv6(),
+		mac:     ifInfo.MacAddress(),
+		srcName: ifInfo.SrcName(),
+	}
+	n.addEndpoint(ep)
+	return nil
 }

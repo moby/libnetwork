@@ -20,12 +20,13 @@ type epState struct {
 }
 
 type sbState struct {
-	ID       string
-	Cid      string
-	c        *controller
-	dbIndex  uint64
-	dbExists bool
-	Eps      []epState
+	ID         string
+	Cid        string
+	c          *controller
+	dbIndex    uint64
+	dbExists   bool
+	Eps        []epState
+	EpPriority map[string]int
 }
 
 func (sbs *sbState) Key() []string {
@@ -106,6 +107,7 @@ func (sbs *sbState) CopyTo(o datastore.KVObject) error {
 	dstSbs.Cid = sbs.Cid
 	dstSbs.dbIndex = sbs.dbIndex
 	dstSbs.dbExists = sbs.dbExists
+	dstSbs.EpPriority = sbs.EpPriority
 
 	for _, eps := range sbs.Eps {
 		dstSbs.Eps = append(dstSbs.Eps, eps)
@@ -120,9 +122,10 @@ func (sbs *sbState) DataScope() string {
 
 func (sb *sandbox) storeUpdate() error {
 	sbs := &sbState{
-		c:   sb.controller,
-		ID:  sb.id,
-		Cid: sb.containerID,
+		c:          sb.controller,
+		ID:         sb.id,
+		Cid:        sb.containerID,
+		EpPriority: sb.epPriority,
 	}
 
 retry:
@@ -166,7 +169,7 @@ func (sb *sandbox) storeDelete() error {
 	return sb.controller.deleteFromStore(sbs)
 }
 
-func (c *controller) sandboxCleanup() {
+func (c *controller) sandboxCleanup(sbids map[string]interface{}) {
 	store := c.getStore(datastore.LocalScope)
 	if store == nil {
 		logrus.Errorf("Could not find local scope store while trying to cleanup sandboxes")
@@ -198,7 +201,7 @@ func (c *controller) sandboxCleanup() {
 			dbExists:    true,
 		}
 
-		sb.osSbox, err = osl.NewSandbox(sb.Key(), true)
+		sb.osSbox = osl.NewNullSandbox(sb.Key())
 		if err != nil {
 			logrus.Errorf("failed to create new osl sandbox while trying to build sandbox for cleanup: %v", err)
 			continue
@@ -225,10 +228,11 @@ func (c *controller) sandboxCleanup() {
 
 			heap.Push(&sb.endpoints, ep)
 		}
-
-		logrus.Infof("Removing stale sandbox %s (%s)", sb.id, sb.containerID)
-		if err := sb.delete(true); err != nil {
-			logrus.Errorf("failed to delete sandbox %s while trying to cleanup: %v", sb.id, err)
+		if _, ok := sbids[sb.containerID]; !ok {
+			logrus.Infof("Removing stale sandbox %s (%s)", sb.id, sb.containerID)
+			if err := sb.delete(true); err != nil {
+				logrus.Errorf("failed to delete sandbox %s while trying to cleanup: %v", sb.id, err)
+			}
 		}
 	}
 }
