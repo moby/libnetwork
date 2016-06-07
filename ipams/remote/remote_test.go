@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/docker/docker/pkg/plugins"
@@ -197,8 +198,13 @@ func TestRemoteDriver(t *testing.T) {
 			ip = "172.20.0.34"
 		}
 		ip = fmt.Sprintf("%s/16", ip)
+		dnsList := []string{"172.20.0.1", "172.20.0.2"}
+		dnsSearchList := []string{"domain1", "domain2"}
+		ipamData := map[string]string{"DNSServers": strings.Join(dnsList, " "),
+			"DNSSearchDomains": strings.Join(dnsSearchList, " ")}
 		return map[string]interface{}{
 			"Address": ip,
+			"Data":    ipamData,
 		}
 	})
 
@@ -267,12 +273,35 @@ func TestRemoteDriver(t *testing.T) {
 	}
 
 	// Request any address
-	addr, _, err := d.RequestAddress(poolID2, nil, nil)
+	addr, ipamData, err := d.RequestAddress(poolID2, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if addr == nil || addr.String() != "172.20.0.34/16" {
 		t.Fatalf("Unexpected address: %s", addr)
+	}
+
+	dnsList := strings.Split(ipamData["DNSServers"], " ")
+	dnsSearchDomains := strings.Split(ipamData["DNSSearchDomains"], " ")
+
+	expectedDNSList := []string{"172.20.0.1", "172.20.0.2"}
+	if dnsList == nil || len(dnsList) != len(expectedDNSList) {
+		t.Fatalf("Unexpected DNS list: %+v", dnsList)
+	}
+	for i, exp := range expectedDNSList {
+		if dnsList[i] != exp {
+			t.Fatalf("Expected DNS IP: %s, got %s", exp, dnsList[i])
+		}
+	}
+
+	expectedDNSSearchDomains := []string{"domain1", "domain2"}
+	if dnsSearchDomains == nil || len(dnsSearchDomains) != len(expectedDNSSearchDomains) {
+		t.Fatalf("Unexpected DNS Search Domains: %+v", dnsSearchDomains)
+	}
+	for i, exp := range expectedDNSSearchDomains {
+		if dnsSearchDomains[i] != exp {
+			t.Fatalf("Expected DNS Search domain: %s, got %s", exp, dnsSearchDomains[i])
+		}
 	}
 
 	// Request specific address

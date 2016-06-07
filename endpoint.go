@@ -424,6 +424,14 @@ func (ep *endpoint) sbJoin(sb *sandbox, options ...EndpointOption) error {
 		}
 	}()
 
+	if len(ep.iface.dnsServers) > 0 || len(ep.iface.dnsSearchDomains) > 0 {
+		sb.config.dnsList = appendUnique(sb.config.dnsList, ep.iface.dnsServers)
+		sb.config.dnsSearchList = appendUnique(sb.config.dnsSearchList, ep.iface.dnsSearchDomains)
+		if err = sb.setupResolutionFiles(); err != nil {
+			log.Errorf("Error in setting up resolution files: err %+v", err)
+		}
+	}
+
 	nid := n.ID()
 
 	ep.processOptions(options...)
@@ -530,6 +538,18 @@ func (ep *endpoint) sbJoin(sb *sandbox, options ...EndpointOption) error {
 	}
 
 	return nil
+}
+
+func appendUnique(list1, list2 []string) []string {
+	encountered := map[string]bool{}
+	var result []string
+	for _, el := range append(list1, list2...) {
+		if !encountered[el] {
+			encountered[el] = true
+			result = append(result, el)
+		}
+	}
+	return result
 }
 
 func (ep *endpoint) rename(name string) error {
@@ -974,13 +994,17 @@ func (ep *endpoint) assignAddress(ipam ipamapi.Ipam, assignIPv4, assignIPv6 bool
 
 func (ep *endpoint) assignAddressVersion(ipVer int, ipam ipamapi.Ipam) error {
 	var (
-		poolID  *string
-		address **net.IPNet
-		prefAdd net.IP
-		progAdd net.IP
+		poolID           *string
+		address          **net.IPNet
+		dnsServers       *[]string
+		dnsSearchDomains *[]string
+		prefAdd          net.IP
+		progAdd          net.IP
 	)
 
 	n := ep.getNetwork()
+	dnsServers = &ep.iface.dnsServers
+	dnsSearchDomains = &ep.iface.dnsSearchDomains
 	switch ipVer {
 	case 4:
 		poolID = &ep.iface.v4PoolID
@@ -1013,10 +1037,16 @@ func (ep *endpoint) assignAddressVersion(ipVer int, ipam ipamapi.Ipam) error {
 		if progAdd != nil && !d.Pool.Contains(progAdd) {
 			continue
 		}
-		addr, _, err := ipam.RequestAddress(d.PoolID, progAdd, ep.ipamOptions)
+		addr, ipamData, err := ipam.RequestAddress(d.PoolID, progAdd, ep.ipamOptions)
 		if err == nil {
 			ep.Lock()
 			*address = addr
+			if len(ipamData["DNSServers"]) > 0 {
+				*dnsServers = strings.Split(ipamData["DNSServers"], " ")
+			}
+			if len(ipamData["DNSSearchDomains"]) > 0 {
+				*dnsSearchDomains = strings.Split(ipamData["DNSSearchDomains"], " ")
+			}
 			*poolID = d.PoolID
 			ep.Unlock()
 			return nil
