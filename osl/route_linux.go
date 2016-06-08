@@ -100,7 +100,7 @@ func programGateway(path string, gw net.IP, isAdd bool) error {
 	})
 }
 
-// Program a route in to the namespace routing table.
+// Program a route into the namespace routing table.
 func programRoute(path string, dest *net.IPNet, nh net.IP) error {
 	return nsInvoke(path, func(nsFD int) error { return nil }, func(callerFD int) error {
 		gwRoutes, err := netlink.RouteGet(nh)

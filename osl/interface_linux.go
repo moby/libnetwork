@@ -123,7 +123,7 @@ func (i *nwIface) Remove() error {
 	n.Unlock()
 
 	return nsInvoke(path, func(nsFD int) error { return nil }, func(callerFD int) error {
-		// Find the network inteerface identified by the DstName attribute.
+		// Find the network interface identified by the DstName attribute.
 		iface, err := netlink.LinkByName(i.DstName())
 		if err != nil {
 			return err
