@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -34,6 +35,11 @@ type networkConfiguration struct {
 	Name               string
 	HnsID              string
 	RDID               string
+	VLAN               uint
+	VSID               uint
+	DNSServerList      string
+	DNSSuffix          string
+	SourceMac          string
 	NetworkAdapterName string
 }
 
@@ -129,6 +135,22 @@ func (d *driver) parseNetworkOptions(id string, genericOptions map[string]string
 			config.RDID = value
 		case Interface:
 			config.NetworkAdapterName = value
+		case DNSSuffix:
+			config.DNSSuffix = value
+		case DNSServers:
+			config.DNSServerList = value
+		case VLAN:
+			vlan, err := strconv.ParseUint(value, 10, 32)
+			if err != nil {
+				return nil, err
+			}
+			config.VLAN = uint(vlan)
+		case VSID:
+			vsid, err := strconv.ParseUint(value, 10, 32)
+			if err != nil {
+				return nil, err
+			}
+			config.VSID = uint(vsid)
 		}
 	}
 
@@ -207,7 +229,34 @@ func (d *driver) CreateNetwork(id string, option map[string]interface{}, nInfo d
 			Name:               config.Name,
 			Type:               d.name,
 			Subnets:            subnets,
+			DNSServerList:      config.DNSServerList,
+			DNSSuffix:          config.DNSSuffix,
+			SourceMac:          config.SourceMac,
 			NetworkAdapterName: config.NetworkAdapterName,
+		}
+
+		if config.VLAN != 0 {
+			vlanPolicy, err := json.Marshal(hcsshim.VlanPolicy{
+				Type: "VLAN",
+				VLAN: config.VLAN,
+			})
+
+			if err != nil {
+				return err
+			}
+			network.Policies = append(network.Policies, vlanPolicy)
+		}
+
+		if config.VSID != 0 {
+			vsidPolicy, err := json.Marshal(hcsshim.VsidPolicy{
+				Type: "VSID",
+				VSID: config.VSID,
+			})
+
+			if err != nil {
+				return err
+			}
+			network.Policies = append(network.Policies, vsidPolicy)
 		}
 
 		if network.Name == "" {
