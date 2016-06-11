@@ -53,6 +53,10 @@ func (d *driver) CreateEndpoint(nid, eid string, ifInfo driverapi.InterfaceInfo,
 	}
 	n.addEndpoint(ep)
 
+	if err := d.storeUpdate(ep); err != nil {
+		logrus.Warnf("Failed to save ipvlan endpoint %s to store: %v", ep.id[0:7], err)
+	}
+
 	return nil
 }
 
@@ -72,6 +76,10 @@ func (d *driver) DeleteEndpoint(nid, eid string) error {
 	}
 	if link, err := ns.NlHandle().LinkByName(ep.srcName); err == nil {
 		ns.NlHandle().LinkDel(link)
+	}
+
+	if err := d.storeDelete(ep); err != nil {
+		logrus.Warnf("Failed to remove ipvlan endpoint %s from store: %v", ep.id[0:7], err)
 	}
 
 	return nil
