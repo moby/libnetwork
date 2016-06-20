@@ -3,6 +3,8 @@ package ns
 import (
 	"fmt"
 	"os"
+	"os/exec"
+	"strings"
 	"sync"
 	"syscall"
 
@@ -20,6 +22,7 @@ var (
 // Init initializes a new network namespace
 func Init() {
 	var err error
+	loadModules()
 	initNs, err = netns.Get()
 	if err != nil {
 		log.Errorf("could not get initial namespace: %v", err)
@@ -61,4 +64,13 @@ func getLink() (string, error) {
 func NlHandle() *netlink.Handle {
 	initOnce.Do(Init)
 	return initNl
+}
+
+func loadModules() {
+	if out, err := exec.Command("modprobe", "-va", "xfrm_user").CombinedOutput(); err != nil {
+		log.Warnf("Running modprobe xfrm_user failed with message: `%s`, error: %v", strings.TrimSpace(string(out)), err)
+	}
+	if out, err := exec.Command("modprobe", "-va", "xfrm_algo").CombinedOutput(); err != nil {
+		log.Warnf("Running modprobe xfrm_algo failed with message: `%s`, error: %v", strings.TrimSpace(string(out)), err)
+	}
 }
