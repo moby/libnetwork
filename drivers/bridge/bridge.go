@@ -58,6 +58,7 @@ type networkConfiguration struct {
 	BridgeName         string
 	EnableIPv6         bool
 	EnableIPMasquerade bool
+	NDPProxyInterface  string
 	EnableICC          bool
 	Mtu                int
 	DefaultBindingIP   net.IP
@@ -215,6 +216,8 @@ func (c *networkConfiguration) fromLabels(labels map[string]string) error {
 			if c.EnableIPMasquerade, err = strconv.ParseBool(value); err != nil {
 				return parseErr(label, value, err.Error())
 			}
+		case NDPProxyInterface:
+			c.NDPProxyInterface = value
 		case EnableICC:
 			if c.EnableICC, err = strconv.ParseBool(value); err != nil {
 				return parseErr(label, value, err.Error())
@@ -680,6 +683,7 @@ func (d *driver) createNetwork(config *networkConfiguration) error {
 	bridgeSetup.queueStep(setupBridgeIPv4)
 
 	enableIPv6Forwarding := d.config.EnableIPForwarding && config.AddressIPv6 != nil
+	enableNDPProxying := config.NDPProxyInterface != "" && config.AddressIPv6 != nil
 
 	// Conditionally queue setup steps depending on configuration values.
 	for _, step := range []struct {
@@ -698,6 +702,9 @@ func (d *driver) createNetwork(config *networkConfiguration) error {
 
 		// Enable IPv6 Forwarding
 		{enableIPv6Forwarding, setupIPv6Forwarding},
+
+		// Enable NDP Proxying
+		{enableNDPProxying, setupNDPProxying},
 
 		// Setup Loopback Adresses Routing
 		{!d.config.EnableUserlandProxy, setupLoopbackAdressesRouting},
@@ -1019,6 +1026,27 @@ func (d *driver) CreateEndpoint(nid, eid string, ifInfo driverapi.InterfaceInfo,
 		}
 	}
 
+	// Add a neighbor proxy if using NDP proxying
+	if config.NDPProxyInterface != "" && config.EnableIPv6 {
+		link, err := d.nlh.LinkByName(config.NDPProxyInterface)
+		if err != nil {
+			return err
+		}
+		neighbor := netlink.Neigh{
+			LinkIndex:    link.Attrs().Index,
+			Family:       netlink.FAMILY_V6,
+			State:        netlink.NUD_PERMANENT,
+			Type:         netlink.NDA_UNSPEC,
+			Flags:        netlink.NTF_PROXY,
+			IP:           endpoint.addrv6.IP,
+			HardwareAddr: endpoint.macAddress,
+		}
+		if err := d.nlh.NeighAdd(&neighbor); err != nil {
+			logrus.Warnf("could not add the neighbor proxy: %v", err)
+			return err
+		}
+	}
+
 	if err = d.storeUpdate(endpoint); err != nil {
 		return fmt.Errorf("failed to save bridge endpoint %s to store: %v", endpoint.id[0:7], err)
 	}
@@ -1076,6 +1104,24 @@ func (d *driver) DeleteEndpoint(nid, eid string) error {
 			n.Unlock()
 		}
 	}()
+
+	// Try removal of neighbor proxy. Discard error: it is a best effort.
+	// Also make sure defer does not see this error either.
+	if n.config.NDPProxyInterface != "" && n.config.EnableIPv6 {
+		link, err := d.nlh.LinkByName(n.config.NDPProxyInterface)
+		if err == nil {
+			neighbor := netlink.Neigh{
+				LinkIndex:    link.Attrs().Index,
+				Family:       netlink.FAMILY_V6,
+				State:        netlink.NUD_PERMANENT,
+				Type:         netlink.NDA_UNSPEC,
+				Flags:        netlink.NTF_PROXY,
+				IP:           ep.addrv6.IP,
+				HardwareAddr: ep.macAddress,
+			}
+			d.nlh.NeighDel(&neighbor)
+		}
+	}
 
 	// Try removal of link. Discard error: it is a best effort.
 	// Also make sure defer does not see this error either.

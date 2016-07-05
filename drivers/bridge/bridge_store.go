@@ -136,6 +136,7 @@ func (ncfg *networkConfiguration) MarshalJSON() ([]byte, error) {
 	nMap["BridgeName"] = ncfg.BridgeName
 	nMap["EnableIPv6"] = ncfg.EnableIPv6
 	nMap["EnableIPMasquerade"] = ncfg.EnableIPMasquerade
+	nMap["NDPProxyInterface"] = ncfg.NDPProxyInterface
 	nMap["EnableICC"] = ncfg.EnableICC
 	nMap["Mtu"] = ncfg.Mtu
 	nMap["Internal"] = ncfg.Internal
@@ -185,6 +186,9 @@ func (ncfg *networkConfiguration) UnmarshalJSON(b []byte) error {
 	ncfg.BridgeName = nMap["BridgeName"].(string)
 	ncfg.EnableIPv6 = nMap["EnableIPv6"].(bool)
 	ncfg.EnableIPMasquerade = nMap["EnableIPMasquerade"].(bool)
+	if v, ok := nMap["NDPProxyInterface"]; ok {
+		ncfg.NDPProxyInterface = v.(string)
+	}
 	ncfg.EnableICC = nMap["EnableICC"].(bool)
 	ncfg.Mtu = int(nMap["Mtu"].(float64))
 	if v, ok := nMap["Internal"]; ok {
