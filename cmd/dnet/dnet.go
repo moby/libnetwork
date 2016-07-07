@@ -329,6 +329,14 @@ func (d *dnetConnection) ListenClusterEvents() <-chan struct{} {
 	return d.configEvent
 }
 
+func (d *dnetConnection) AllocateEndpoint(string, string, []string) (interface{}, interface{}, error) {
+	return nil, nil, nil
+}
+
+func (d *dnetConnection) DeallocateEndpoint(string) error {
+	return nil
+}
+
 func handleSignals(controller libnetwork.NetworkController) {
 	c := make(chan os.Signal, 1)
 	signals := []os.Signal{os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT}
