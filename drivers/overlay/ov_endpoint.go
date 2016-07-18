@@ -89,10 +89,6 @@ func (d *driver) CreateEndpoint(nid, eid string, ifInfo driverapi.InterfaceInfo,
 
 	n.addEndpoint(ep)
 
-	if err := d.writeEndpointToStore(ep); err != nil {
-		return fmt.Errorf("failed to update overlay endpoint %s to local store: %v", ep.id[0:7], err)
-	}
-
 	return nil
 }
 

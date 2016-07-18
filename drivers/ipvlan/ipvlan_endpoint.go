@@ -52,10 +52,6 @@ func (d *driver) CreateEndpoint(nid, eid string, ifInfo driverapi.InterfaceInfo,
 		}
 	}
 
-	if err := d.storeUpdate(ep); err != nil {
-		return fmt.Errorf("failed to save ipvlan endpoint %s to store: %v", ep.id[0:7], err)
-	}
-
 	n.addEndpoint(ep)
 
 	return nil

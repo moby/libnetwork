@@ -1019,10 +1019,6 @@ func (d *driver) CreateEndpoint(nid, eid string, ifInfo driverapi.InterfaceInfo,
 		}
 	}
 
-	if err = d.storeUpdate(endpoint); err != nil {
-		return fmt.Errorf("failed to save bridge endpoint %s to store: %v", endpoint.id[0:7], err)
-	}
-
 	return nil
 }
 
@@ -1183,6 +1179,10 @@ func (d *driver) Join(nid, eid string, sboxKey string, jinfo driverapi.JoinInfo,
 	err = jinfo.SetGatewayIPv6(network.bridge.gatewayIPv6)
 	if err != nil {
 		return err
+	}
+
+	if err = d.storeUpdate(endpoint); err != nil {
+		return fmt.Errorf("failed to save bridge endpoint %s to store: %v", endpoint.id[0:7], err)
 	}
 
 	return nil
