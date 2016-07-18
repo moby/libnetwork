@@ -194,7 +194,22 @@ func New(cfgOptions ...config.Option) (NetworkController, error) {
 		}
 	}
 
-	if err = initIPAMDrivers(drvRegistry, nil, c.getStore(datastore.GlobalScope)); err != nil {
+	networks, err := c.getNetworksFromStore()
+	if err != nil {
+		log.Errorf("Failed to get network from stores")
+	}
+	poolIDs := make(map[string]interface{})
+	for _, n := range networks {
+		ipinfov4, ipinfov6 := n.IpamInfo()
+		for _, ipinfo := range ipinfov4 {
+			poolIDs[ipinfo.PoolID] = true
+		}
+		for _, ip6info := range ipinfov6 {
+			poolIDs[ip6info.PoolID] = true
+		}
+	}
+
+	if err = initIPAMDrivers(drvRegistry, nil, c.getStore(datastore.GlobalScope), poolIDs); err != nil {
 		return nil, err
 	}
 

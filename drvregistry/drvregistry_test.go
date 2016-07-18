@@ -101,12 +101,12 @@ func getNew(t *testing.T) *DrvRegistry {
 }
 
 func initIPAMDrivers(r *DrvRegistry, lDs, gDs interface{}) error {
-	for _, fn := range [](func(ipamapi.Callback, interface{}, interface{}) error){
+	for _, fn := range [](func(ipamapi.Callback, interface{}, interface{}, map[string]interface{}) error){
 		builtinIpam.Init,
 		remoteIpam.Init,
 		nullIpam.Init,
 	} {
-		if err := fn(r, lDs, gDs); err != nil {
+		if err := fn(r, lDs, gDs, nil); err != nil {
 			return err
 		}
 	}

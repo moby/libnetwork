@@ -8,13 +8,13 @@ import (
 	remoteIpam "github.com/docker/libnetwork/ipams/remote"
 )
 
-func initIPAMDrivers(r *drvregistry.DrvRegistry, lDs, gDs interface{}) error {
-	for _, fn := range [](func(ipamapi.Callback, interface{}, interface{}) error){
+func initIPAMDrivers(r *drvregistry.DrvRegistry, lDs, gDs interface{}, options map[string]interface{}) error {
+	for _, fn := range [](func(ipamapi.Callback, interface{}, interface{}, map[string]interface{}) error){
 		builtinIpam.Init,
 		remoteIpam.Init,
 		nullIpam.Init,
 	} {
-		if err := fn(r, lDs, gDs); err != nil {
+		if err := fn(r, lDs, gDs, options); err != nil {
 			return err
 		}
 	}
