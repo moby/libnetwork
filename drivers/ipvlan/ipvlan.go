@@ -20,6 +20,20 @@ const (
 	modeL3              = "l3"     // ipvlan L3 mode
 	parentOpt           = "parent" // parent interface -o parent
 	modeOpt             = "_mode"  // ipvlan mode ux opt suffix
+	// RIP
+	ripOpt            = "rip"              // advertise ipvlan L3 networks via RIP
+	ripIPv4           = "ipv4"             // advertise only IPv4 networks
+	ripIPv6           = "ipv6"             // advertise only IPv6 network
+	ripNone           = ""                 // do not advertise
+	ripAll            = "all"              // advertise all networks
+	ripAdvertiseOpt   = "rip-advertise"    // what do we advertise, hosts, networks or both?
+	ripNetworks       = "networks"         // advertise only networks
+	ripHosts          = "hosts"            // advertise only hosts
+	ripUpdateTimerOpt = "rip-update"       // rip update timer in seconds
+	ripUpdateDelayOpt = "rip-update-delay" // rip delay timer in seconds
+	ripGCTimerOpt     = "rip-gc"           // rip GC timer in seconds
+	ripMetricOpt      = "rip-metric"       // rip advertised metric
+	ripTagOpt         = "rip-tag"          // rip advertised tag
 )
 
 var driverModeOpt = ipvlanType + modeOpt // mode -o ipvlan_mode

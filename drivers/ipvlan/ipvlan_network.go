@@ -2,6 +2,8 @@ package ipvlan
 
 import (
 	"fmt"
+	"strconv"
+	"time"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/pkg/parsers/kernel"
@@ -113,6 +115,14 @@ func (d *driver) createNetwork(config *configuration) error {
 		endpoints: endpointTable{},
 		config:    config,
 	}
+
+	if config.IpvlanMode == modeL3 && n.config.Rip {
+		// Run ripManager only on ipvlan L3 networks with parent interface
+		if n.config.Parent != getDummyName(stringid.TruncateID(n.config.ID)) {
+			NewRipManager(n.config)
+		}
+	}
+
 	// add the *network
 	d.addNetwork(n)
 
@@ -147,6 +157,14 @@ func (d *driver) DeleteNetwork(nid string) error {
 			}
 		}
 	}
+
+	if n.config.IpvlanMode == modeL3 && n.config.Rip {
+		// Run ripManager only on ipvlan L3 networks with parent interface
+		if _, ok := RipManagers[n.config.ID]; ok {
+			RipManagers[n.config.ID].Close()
+		}
+	}
+
 	// delete the *network
 	d.deleteNetwork(nid)
 	// delete the network record from persistent cache
@@ -211,7 +229,63 @@ func (config *configuration) fromOptions(labels map[string]string) error {
 		case driverModeOpt:
 			// parse driver option '-o ipvlan_mode'
 			config.IpvlanMode = value
+		case ripOpt:
+			// parse driver option '-o rip'
+			config.Rip = true
+			if value == ripIPv4 {
+				config.RipIPv4 = true
+			} else if value == ripIPv6 {
+				config.RipIPv6 = true
+			} else {
+				config.RipIPv4 = true
+				config.RipIPv6 = true
+			}
+		case ripAdvertiseOpt:
+			// parse driver option '-o rip-advertise'
+			if value == ripNetworks {
+				config.RipAdvertiseNetworks = true
+			} else if value == ripHosts {
+				config.RipAdvertiseHosts = true
+			} else {
+				config.RipAdvertiseNetworks = true
+				config.RipAdvertiseHosts = true
+			}
+		case ripUpdateTimerOpt:
+			// parse driver option '-o rip-update'
+			valueInt, err := strconv.Atoi(value)
+			if err == nil {
+				config.RipUpdateTimer = time.Duration(int(valueInt*1000)) * time.Millisecond
+			}
+		case ripUpdateDelayOpt:
+			// parse driver option '-o rip-update-delay'
+			valueInt, err := strconv.Atoi(value)
+			if err == nil {
+				config.RipUpdateDelay = time.Duration(int(valueInt*1000)) * time.Millisecond
+			}
+		case ripGCTimerOpt:
+			// parse driver option '-o rip-gc'
+			valueInt, err := strconv.Atoi(value)
+			if err == nil {
+				config.RipGCTimer = time.Duration(int(valueInt*1000)) * time.Millisecond
+			}
+		case ripMetricOpt:
+			// parse driver option '-o rip-metric'
+			valueInt, err := strconv.Atoi(value)
+			if err == nil {
+				config.RipMetric = uint8(valueInt)
+			}
+		case ripTagOpt:
+			// parse driver option '-o rip-tag'
+			valueInt, err := strconv.Atoi(value)
+			if err == nil {
+				config.RipTag = uint16(valueInt)
+			}
 		}
+	}
+	// If -o rip is enabled and there is no -o rip-advertise, it defaults to advertising all
+	if config.Rip && !config.RipAdvertiseNetworks && !config.RipAdvertiseHosts {
+		config.RipAdvertiseNetworks = true
+		config.RipAdvertiseHosts = true
 	}
 	return nil
 }

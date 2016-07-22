@@ -5,6 +5,7 @@ import (
 	"net"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/docker/docker/pkg/stringid"
 	"github.com/docker/libnetwork/driverapi"
 	"github.com/docker/libnetwork/netutils"
 	"github.com/docker/libnetwork/ns"
@@ -74,6 +75,15 @@ func (d *driver) Join(nid, eid string, sboxKey string, jinfo driverapi.JoinInfo,
 			logrus.Debugf("Ipvlan Endpoint Joined with IPv6_Addr: %s, Ipvlan_Mode: %s, Parent: %s",
 				ep.addrv6.IP.String(), n.config.IpvlanMode, n.config.Parent)
 		}
+		// Add endpoint to ripManager
+		if n.config.Parent != getDummyName(stringid.TruncateID(n.config.ID)) {
+			if ep.addr != nil && n.config.RipIPv4 {
+				RipManagers[ep.nid].AddIpv4Endpoint(*ep.addr)
+			}
+			if ep.addrv6 != nil && n.config.RipIPv6 {
+				RipManagers[ep.nid].AddIpv6Endpoint(*ep.addrv6)
+			}
+		}
 	}
 	if n.config.IpvlanMode == modeL2 {
 		// parse and correlate the endpoint v4 address with the available v4 subnets
@@ -136,6 +146,16 @@ func (d *driver) Leave(nid, eid string) error {
 	}
 	if endpoint == nil {
 		return fmt.Errorf("could not find endpoint with id %s", eid)
+	}
+
+	if network.config.IpvlanMode == modeL3 {
+		// Run ripManager only on ipvlan L3 networks with parent interface
+		if network.config.RipIPv4 {
+			RipManagers[endpoint.nid].DeleteIpv4Endpoint(*endpoint.addr)
+		}
+		if network.config.RipIPv6 {
+			RipManagers[endpoint.nid].DeleteIpv6Endpoint(*endpoint.addrv6)
+		}
 	}
 
 	return nil

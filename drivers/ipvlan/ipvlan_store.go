@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"time"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/libnetwork/datastore"
@@ -30,6 +31,17 @@ type configuration struct {
 	CreatedSlaveLink bool
 	Ipv4Subnets      []*ipv4Subnet
 	Ipv6Subnets      []*ipv6Subnet
+	// RIP configuration
+	Rip                  bool
+	RipIPv4              bool
+	RipIPv6              bool
+	RipAdvertiseHosts    bool
+	RipAdvertiseNetworks bool
+	RipUpdateTimer       time.Duration
+	RipUpdateDelay       time.Duration
+	RipGCTimer           time.Duration
+	RipMetric            uint8
+	RipTag               uint16
 }
 
 type ipv4Subnet struct {
@@ -164,6 +176,16 @@ func (config *configuration) MarshalJSON() ([]byte, error) {
 		}
 		nMap["Ipv6Subnets"] = string(iis)
 	}
+	nMap["Rip"] = config.Rip
+	nMap["RipIPv4"] = config.RipIPv4
+	nMap["RipIPv6"] = config.RipIPv6
+	nMap["RipAdvertiseHosts"] = config.RipAdvertiseHosts
+	nMap["RipAdvertiseNetworks"] = config.RipAdvertiseNetworks
+	nMap["RipUpdateTimer"] = config.RipUpdateTimer.String()
+	nMap["RipUpdateDelay"] = config.RipUpdateDelay.String()
+	nMap["RipGCTimer"] = config.RipGCTimer.String()
+	nMap["RipMetric"] = config.RipMetric
+	nMap["RipTag"] = config.RipTag
 
 	return json.Marshal(nMap)
 }
@@ -192,6 +214,24 @@ func (config *configuration) UnmarshalJSON(b []byte) error {
 		if err := json.Unmarshal([]byte(v.(string)), &config.Ipv6Subnets); err != nil {
 			return err
 		}
+	}
+	if nMap["Rip"] != nil {
+		config.Rip = nMap["Rip"].(bool)
+		config.RipIPv4 = nMap["RipIPv4"].(bool)
+		config.RipIPv6 = nMap["RipIPv6"].(bool)
+		config.RipAdvertiseHosts = nMap["RipAdvertiseHosts"].(bool)
+		config.RipAdvertiseNetworks = nMap["RipAdvertiseNetworks"].(bool)
+		if d, err := time.ParseDuration(nMap["RipUpdateTimer"].(string)); err == nil {
+			config.RipUpdateTimer = d
+		}
+		if d, err := time.ParseDuration(nMap["RipUpdateDelay"].(string)); err == nil {
+			config.RipUpdateDelay = d
+		}
+		if d, err := time.ParseDuration(nMap["RipGCTimer"].(string)); err == nil {
+			config.RipGCTimer = d
+		}
+		config.RipMetric = uint8(nMap["RipMetric"].(float64))
+		config.RipTag = uint16(nMap["RipTag"].(float64))
 	}
 
 	return nil
