@@ -37,6 +37,7 @@ type driver struct {
 	exitCh           chan chan struct{}
 	bindAddress      string
 	advertiseAddress string
+	advAddrIsLocal   bool
 	neighIP          string
 	config           map[string]interface{}
 	peerDb           peerNetworkMap
@@ -238,6 +239,13 @@ func (d *driver) nodeJoin(advertiseAddress, bindAddress string, self bool) {
 				d.Unlock()
 				return
 			}
+		}
+
+		if isLocal, iface := isAddressLocal(advertiseAddress); isLocal {
+			d.Lock()
+			d.advAddrIsLocal = true
+			d.Unlock()
+			logrus.Infof("Advertise address %s is local (%v)", advertiseAddress, iface)
 		}
 	}
 

@@ -153,3 +153,25 @@ func deleteVxlanByVNI(path string, vni uint32) error {
 
 	return fmt.Errorf("could not find a vxlan interface to delete with id %d", vni)
 }
+
+func isAddressLocal(ip string) (bool, string) {
+	linkList, err := ns.NlHandle().LinkList()
+	if err != nil {
+		logrus.Warnf("Failed to retrieve the link list while checking locality for %s: %v", ip, err)
+		return false, ""
+	}
+	for _, l := range linkList {
+		addrList, err := ns.NlHandle().AddrList(l, netlink.FAMILY_ALL)
+		if err != nil {
+			logrus.Warnf("Failed to retrieve the address list for link %v, "+
+				"while checking locality for address %s: %v", ip, l.Attrs().Name, err)
+			continue
+		}
+		for _, addr := range addrList {
+			if ip == addr.IP.String() {
+				return true, l.Attrs().Name
+			}
+		}
+	}
+	return false, ""
+}
