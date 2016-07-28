@@ -654,9 +654,7 @@ func (c *controller) NewNetwork(networkType, name string, id string, options ...
 
 var joinCluster NetworkWalker = func(nw Network) bool {
 	n := nw.(*network)
-	if err := n.joinCluster(); err != nil {
-		log.Errorf("Failed to join network %s (%s) into agent cluster: %v", n.Name(), n.ID(), err)
-	}
+	n.joinCluster()
 	n.addDriverWatches()
 	return false
 }

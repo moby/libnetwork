@@ -417,13 +417,25 @@ func (n *network) isClusterEligible() bool {
 	return true
 }
 
-func (n *network) joinCluster() error {
+func (n *network) joinCluster() {
 	if !n.isClusterEligible() {
-		return nil
+		return
 	}
 
 	c := n.getController()
-	return c.agent.networkDB.JoinNetwork(n.ID())
+	if err := c.agent.networkDB.JoinNetwork(n.ID()); err != nil {
+		logrus.Errorf("Failed to join network %s (%s) into agent cluster: %v", n.Name(), n.ID(), err)
+		return
+	}
+
+	// After reload, ingress sandbox is likely already connected to
+	// the ingress network. Other nodes needs to know this.
+	for _, ep := range n.Endpoints() {
+		if err := ep.(*endpoint).addToCluster(); err != nil {
+			logrus.Errorf("Failed to join existing endpoint %s (%s) on network %s (%s) into agent cluster: %v",
+				ep.Name(), ep.ID(), n.Name(), n.ID(), err)
+		}
+	}
 }
 
 func (n *network) leaveCluster() error {
