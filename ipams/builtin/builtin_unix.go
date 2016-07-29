@@ -12,7 +12,7 @@ import (
 )
 
 // Init registers the built-in ipam service with libnetwork
-func Init(ic ipamapi.Callback, l, g interface{}) error {
+func Init(ic ipamapi.Callback, l, g interface{}, opts map[string]interface{}) error {
 	var (
 		ok                bool
 		localDs, globalDs datastore.DataStore
@@ -32,7 +32,7 @@ func Init(ic ipamapi.Callback, l, g interface{}) error {
 
 	ipamutils.InitNetworks()
 
-	a, err := ipam.NewAllocator(localDs, globalDs)
+	a, err := ipam.NewAllocator(localDs, globalDs, opts)
 	if err != nil {
 		return err
 	}

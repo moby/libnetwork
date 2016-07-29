@@ -38,7 +38,7 @@ type Allocator struct {
 }
 
 // NewAllocator returns an instance of libnetwork ipam
-func NewAllocator(lcDs, glDs datastore.DataStore) (*Allocator, error) {
+func NewAllocator(lcDs, glDs datastore.DataStore, opts map[string]interface{}) (*Allocator, error) {
 	a := &Allocator{}
 
 	// Load predefined subnet pools
@@ -62,7 +62,35 @@ func NewAllocator(lcDs, glDs datastore.DataStore) (*Allocator, error) {
 		a.initializeAddressSpace(aspc.as, aspc.ds)
 	}
 
+	a.cleanupPool(opts)
 	return a, nil
+}
+
+func (a *Allocator) cleanupPool(opts map[string]interface{}) {
+	for _, aSpace := range a.addrSpaces {
+		for k, pd := range aSpace.subnets {
+			if k.ChildSubnet != "" {
+				opts[pd.ParentKey.String()] = true
+			}
+		}
+	}
+	for _, aSpace := range a.addrSpaces {
+		for k := range aSpace.subnets {
+			if _, ok := opts[k.String()]; !ok {
+				log.Debugf("remove stale pool %s", k.String())
+				remove, err := aSpace.updatePoolDBOnRemoval(k)
+				if err != nil {
+					log.Errorf("pool (%s) removal failed in updatePoolDBOnRemoval because of %v", k.String(), err)
+					continue
+				}
+				if err = a.writeToStore(aSpace); err != nil {
+					log.Errorf("pool (%s) removal failed in writeToStore because of %v", k.String(), err)
+					continue
+				}
+				remove()
+			}
+		}
+	}
 }
 
 func (a *Allocator) refresh(as string) error {

@@ -56,7 +56,7 @@ func getAllocator() (*Allocator, error) {
 	if err != nil {
 		return nil, err
 	}
-	a, err := NewAllocator(ds, nil)
+	a, err := NewAllocator(ds, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -987,7 +987,7 @@ func testAllocateRandomDeallocate(t *testing.T, pool, subPool string, num int) {
 		t.Fatal(err)
 	}
 
-	a, err := NewAllocator(ds, nil)
+	a, err := NewAllocator(ds, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1055,7 +1055,7 @@ func TestRetrieveFromStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a, err := NewAllocator(ds, nil)
+	a, err := NewAllocator(ds, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1070,7 +1070,7 @@ func TestRetrieveFromStore(t *testing.T) {
 	}
 
 	// Restore
-	a1, err := NewAllocator(ds, nil)
+	a1, err := NewAllocator(ds, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1092,7 +1092,7 @@ func TestRetrieveFromStore(t *testing.T) {
 	}
 
 	// Restore
-	a2, err := NewAllocator(ds, nil)
+	a2, err := NewAllocator(ds, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1109,7 +1109,7 @@ func TestRetrieveFromStore(t *testing.T) {
 	}
 
 	// Restore
-	a3, err := NewAllocator(ds, nil)
+	a3, err := NewAllocator(ds, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1126,7 +1126,7 @@ func TestRetrieveFromStore(t *testing.T) {
 	}
 
 	// Restore
-	a4, err := NewAllocator(ds, nil)
+	a4, err := NewAllocator(ds, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

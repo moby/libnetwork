@@ -66,6 +66,6 @@ func (a *allocator) DiscoverDelete(dType discoverapi.DiscoveryType, data interfa
 }
 
 // Init registers a remote ipam when its plugin is activated
-func Init(ic ipamapi.Callback, l, g interface{}) error {
+func Init(ic ipamapi.Callback, l, g interface{}, opts map[string]interface{}) error {
 	return ic.RegisterIpamDriver(ipamapi.NullIPAM, &allocator{})
 }
