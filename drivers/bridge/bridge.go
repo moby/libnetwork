@@ -133,6 +133,7 @@ type driver struct {
 	natChain       *iptables.ChainInfo
 	filterChain    *iptables.ChainInfo
 	isolationChain *iptables.ChainInfo
+	mangleChain    *iptables.ChainInfo
 	networks       map[string]*bridgeNetwork
 	store          datastore.DataStore
 	nlh            *netlink.Handle
@@ -253,15 +254,15 @@ func (n *bridgeNetwork) registerIptCleanFunc(clean iptableCleanFunc) {
 	n.iptCleanFuncs = append(n.iptCleanFuncs, clean)
 }
 
-func (n *bridgeNetwork) getDriverChains() (*iptables.ChainInfo, *iptables.ChainInfo, *iptables.ChainInfo, error) {
+func (n *bridgeNetwork) getDriverChains() (*iptables.ChainInfo, *iptables.ChainInfo, *iptables.ChainInfo, *iptables.ChainInfo, error) {
 	n.Lock()
 	defer n.Unlock()
 
 	if n.driver == nil {
-		return nil, nil, nil, types.BadRequestErrorf("no driver found")
+		return nil, nil, nil, nil, types.BadRequestErrorf("no driver found")
 	}
 
-	return n.driver.natChain, n.driver.filterChain, n.driver.isolationChain, nil
+	return n.driver.natChain, n.driver.filterChain, n.driver.isolationChain, n.driver.mangleChain, nil
 }
 
 func (n *bridgeNetwork) getNetworkBridgeName() string {
@@ -360,6 +361,7 @@ func (d *driver) configure(option map[string]interface{}) error {
 		natChain       *iptables.ChainInfo
 		filterChain    *iptables.ChainInfo
 		isolationChain *iptables.ChainInfo
+		mangleChain    *iptables.ChainInfo
 	)
 
 	genericData, ok := option[netlabel.GenericData]
@@ -394,7 +396,7 @@ func (d *driver) configure(option map[string]interface{}) error {
 			}
 		}
 		removeIPChains()
-		natChain, filterChain, isolationChain, err = setupIPChains(config)
+		natChain, filterChain, isolationChain, mangleChain, err = setupIPChains(config)
 		if err != nil {
 			return err
 		}
@@ -406,6 +408,7 @@ func (d *driver) configure(option map[string]interface{}) error {
 	d.natChain = natChain
 	d.filterChain = filterChain
 	d.isolationChain = isolationChain
+	d.mangleChain = mangleChain
 	d.config = config
 	d.Unlock()
 
@@ -587,7 +590,7 @@ func (d *driver) CreateNetwork(id string, option map[string]interface{}, nInfo d
 	}
 	d.Unlock()
 
-	// Parse and validate the config. It should not be conflict with existing networks' config
+	// Parse and validate the config. It should not conflict with existing networks' config
 	config, err := parseNetworkOptions(id, option)
 	if err != nil {
 		return err

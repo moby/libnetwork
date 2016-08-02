@@ -994,7 +994,7 @@ func TestCleanupIptableRules(t *testing.T) {
 		{Name: DockerChain, Table: iptables.Filter},
 		{Name: IsolationChain, Table: iptables.Filter},
 	}
-	if _, _, _, err := setupIPChains(&configuration{EnableIPTables: true}); err != nil {
+	if _, _, _, _, err := setupIPChains(&configuration{EnableIPTables: true}); err != nil {
 		t.Fatalf("Error setting up ip chains: %v", err)
 	}
 	for _, chainInfo := range bridgeChain {

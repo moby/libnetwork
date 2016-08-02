@@ -15,6 +15,7 @@ const chainName = "DOCKEREST"
 
 var natChain *ChainInfo
 var filterChain *ChainInfo
+var mangleChain *ChainInfo
 var bridgeName string
 
 func TestNewChain(t *testing.T) {
@@ -22,6 +23,9 @@ func TestNewChain(t *testing.T) {
 
 	bridgeName = "lo"
 	natChain, err = NewChain(chainName, Nat, false)
+	if err != nil {
+		t.Fatal(err)
+	}
 	err = ProgramChain(natChain, bridgeName, false, true)
 	if err != nil {
 		t.Fatal(err)
@@ -32,12 +36,18 @@ func TestNewChain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	mangleChain, err = NewChain(chainName, Mangle, false)
+	err = ProgramChain(mangleChain, bridgeName, false, true)
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestForward(t *testing.T) {
 	ip := net.ParseIP("192.168.1.1")
 	port := 1234
-	dstAddr := "172.17.0.1"
+	dstAddr := net.ParseIP("172.17.0.1")
 	dstPort := 4321
 	proto := "tcp"
 
@@ -52,7 +62,7 @@ func TestForward(t *testing.T) {
 		"-p", proto,
 		"--dport", strconv.Itoa(port),
 		"-j", "DNAT",
-		"--to-destination", dstAddr + ":" + strconv.Itoa(dstPort),
+		"--to-destination", dstAddr.String() + ":" + strconv.Itoa(dstPort),
 		"!", "-i", bridgeName,
 	}
 
@@ -63,7 +73,7 @@ func TestForward(t *testing.T) {
 	filterRule := []string{
 		"!", "-i", bridgeName,
 		"-o", bridgeName,
-		"-d", dstAddr,
+		"-d", dstAddr.String(),
 		"-p", proto,
 		"--dport", strconv.Itoa(dstPort),
 		"-j", "ACCEPT",
@@ -73,11 +83,23 @@ func TestForward(t *testing.T) {
 		t.Fatalf("filter rule does not exist")
 	}
 
+}
+
+func TestMasq(t *testing.T) {
+	ip := net.ParseIP("192.168.1.1")
+	port := 1234
+	proto := "tcp"
+
+	err := natChain.Masq(Insert, proto, ip, port)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	masqRule := []string{
-		"-d", dstAddr,
-		"-s", dstAddr,
+		"-d", ip.String(),
+		"-s", ip.String(),
 		"-p", proto,
-		"--dport", strconv.Itoa(dstPort),
+		"--dport", strconv.Itoa(port),
 		"-j", "MASQUERADE",
 	}
 
@@ -132,7 +154,7 @@ func TestPrerouting(t *testing.T) {
 		"-i", "lo",
 		"-d", "192.168.1.1"}
 
-	err := natChain.Prerouting(Insert, args...)
+	err := natChain.Prerouting(Nat, Insert, args...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,7 +212,7 @@ func RunConcurrencyTest(t *testing.T, allowXlock bool) {
 
 	ip := net.ParseIP("192.168.1.1")
 	port := 1234
-	dstAddr := "172.17.0.1"
+	dstAddr := net.ParseIP("172.17.0.1")
 	dstPort := 4321
 	proto := "tcp"
 
@@ -222,6 +244,12 @@ func TestCleanup(t *testing.T) {
 	filterChain.Remove()
 
 	err = RemoveExistingChain(chainName, Nat)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mangleChain.Remove()
+	err = RemoveExistingChain(chainName, Mangle)
 	if err != nil {
 		t.Fatal(err)
 	}
