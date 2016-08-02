@@ -1027,6 +1027,10 @@ func (ep *endpoint) assignAddressVersion(ipVer int, ipam ipamapi.Ipam) error {
 			ep.Unlock()
 			return nil
 		}
+		if err == ipamapi.ErrNoIPReturned {
+			// No IP was returned intentionally, don't treat as error
+			return nil
+		}
 		if err != ipamapi.ErrNoAvailableIPs || progAdd != nil {
 			return err
 		}
