@@ -1235,7 +1235,7 @@ func (n *network) ipamAllocateVersion(ipVer int, ipam ipamapi.Ipam) error {
 	}
 
 	if len(*cfgList) == 0 {
-		if ipVer == 6 {
+		if ipVer == 6 && !n.enableIPv6 {
 			return nil
 		}
 		*cfgList = []*IpamConf{{}}
