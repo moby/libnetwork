@@ -90,9 +90,7 @@ func Init(dc driverapi.DriverCallback, config map[string]interface{}) error {
 		}
 	}
 
-	if err := d.restoreEndpoints(); err != nil {
-		logrus.Warnf("Failure during overlay endpoints restore: %v", err)
-	}
+	d.restoreEndpoints()
 
 	// If an error happened when the network join the sandbox during the endpoints restore
 	// we should reset it now along with the once variable, so that subsequent endpoint joins
@@ -109,19 +107,21 @@ func Init(dc driverapi.DriverCallback, config map[string]interface{}) error {
 }
 
 // Endpoints are stored in the local store. Restore them and reconstruct the overlay sandbox
-func (d *driver) restoreEndpoints() error {
+func (d *driver) restoreEndpoints() {
 	if d.localStore == nil {
-		logrus.Warnf("Cannot restore overlay endpoints because local datastore is missing")
-		return nil
+		logrus.Errorf("Cannot restore overlay endpoints because local datastore is missing")
+		return
 	}
 	kvol, err := d.localStore.List(datastore.Key(overlayEndpointPrefix), &endpoint{})
 	if err != nil && err != datastore.ErrKeyNotFound {
-		return fmt.Errorf("failed to read overlay endpoint from store: %v", err)
+		logrus.Errorf("Failed to retrieve overlay endpoints list from store: %v", err)
+		return
 	}
 
 	if err == datastore.ErrKeyNotFound {
-		return nil
+		return
 	}
+	nwSboxMap := map[string]struct{}{}
 	for _, kvo := range kvol {
 		ep := kvo.(*endpoint)
 		n := d.network(ep.nid)
@@ -133,35 +133,48 @@ func (d *driver) restoreEndpoints() error {
 			}
 			continue
 		}
+		if n.initErr != nil {
+			logrus.Warnf("Network (%s) in initError while attempting restore for endpoint (%s)", ep.nid[0:7], ep.id[0:7])
+			continue
+		}
 		n.addEndpoint(ep)
 
 		s := n.getSubnetforIP(ep.addr)
 		if s == nil {
-			return fmt.Errorf("could not find subnet for endpoint %s", ep.id)
+			logrus.Warnf("Could not find subnet for endpoint %s during restore", ep.id[0:7])
+			continue
 		}
 
 		if err := n.joinSandbox(true); err != nil {
-			return fmt.Errorf("restore network sandbox failed: %v", err)
+			logrus.Warnf("Restore network sandbox failed: %v", err)
+			continue
 		}
 
 		if err := n.joinSubnetSandbox(s, true); err != nil {
-			return fmt.Errorf("restore subnet sandbox failed for %q: %v", s.subnetIP.String(), err)
+			logrus.Warnf("Restore subnet sandbox failed for %q: %v", s.subnetIP.String(), err)
+			continue
 		}
 
-		Ifaces := make(map[string][]osl.IfaceOption)
-		vethIfaceOption := make([]osl.IfaceOption, 1)
-		vethIfaceOption = append(vethIfaceOption, n.sbox.InterfaceOptions().Master(s.brName))
-		Ifaces[fmt.Sprintf("%s+%s", "veth", "veth")] = vethIfaceOption
+		// Restore overlay sandbox for this network if not already done
+		if _, ok := nwSboxMap[n.id]; !ok {
+			Ifaces := make(map[string][]osl.IfaceOption)
+			vethIfaceOption := make([]osl.IfaceOption, 1)
+			vethIfaceOption = append(vethIfaceOption, n.sbox.InterfaceOptions().Master(s.brName))
+			Ifaces[fmt.Sprintf("%s+%s", "veth", "veth")] = vethIfaceOption
 
-		err := n.sbox.Restore(Ifaces, nil, nil, nil)
-		if err != nil {
-			return fmt.Errorf("failed to restore overlay sandbox: %v", err)
+			err := n.sbox.Restore(Ifaces, nil, nil, nil)
+			if err != nil {
+				logrus.Warnf("Failed to restore overlay sandbox during endpoint %s restore: %v", ep.id[0:7], err)
+				continue
+			}
+
+			nwSboxMap[n.id] = struct{}{}
 		}
 
 		n.incEndpointCount()
 		d.peerDbAdd(ep.nid, ep.id, ep.addr.IP, ep.addr.Mask, ep.mac, net.ParseIP(d.advertiseAddress), true)
+		logrus.Debugf("Endpoint (%s) restored to network (%s)", ep.id[0:7], ep.nid[0:7])
 	}
-	return nil
 }
 
 // Fini cleans up the driver resources
