@@ -5,6 +5,7 @@ package overlay
 import (
 	"fmt"
 	"net"
+	"strconv"
 	"sync"
 
 	"github.com/Sirupsen/logrus"
@@ -24,9 +25,12 @@ const (
 	vethLen      = 7
 	vxlanIDStart = 256
 	vxlanIDEnd   = (1 << 24) - 1
-	vxlanPort    = 4789
 	vxlanEncap   = 50
 	secureOption = "encrypted"
+)
+
+var (
+	vxlanPort = int(4789)
 )
 
 var initVxlanIdm = make(chan (bool), 1)
@@ -89,6 +93,14 @@ func Init(dc driverapi.DriverCallback, config map[string]interface{}) error {
 		d.localStore, err = datastore.NewDataStoreFromConfig(dsc)
 		if err != nil {
 			return types.InternalErrorf("failed to initialize local data store: %v", err)
+		}
+	}
+
+	if port, ok := config[VxlanPortLabel]; ok {
+		if val, found := port.(string); found {
+			if intVal, err := strconv.ParseInt(val, 10, 32); err == nil {
+				vxlanPort = int(intVal)
+			}
 		}
 	}
 
