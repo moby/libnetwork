@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/docker/libnetwork/etchosts"
@@ -313,8 +314,18 @@ func (sb *sandbox) rebuildDNS() error {
 	// external v6 DNS servers has to be listed in resolv.conf
 	dnsList = append(dnsList, resolvconf.GetNameservers(currRC.Content, types.IPv6)...)
 
-	// Resolver returns the options in the format resolv.conf expects
-	dnsOptionsList = append(dnsOptionsList, sb.resolver.ResolverOptions()...)
+	// ResolverOptions returns the options in the format resolv.conf expects
+	resOptions := sb.resolver.ResolverOptions()
+	for _, option := range dnsOptionsList {
+		if strings.Contains(option, "ndots") {
+			for i, resOpt := range resOptions {
+				if strings.Contains(resOpt, "ndots") {
+					resOptions = append(resOptions[:i], resOptions[i+1:]...)
+				}
+			}
+		}
+	}
+	dnsOptionsList = append(dnsOptionsList, resOptions...)
 
 	_, err = resolvconf.Build(sb.config.resolvConfPath, dnsList, dnsSearchList, dnsOptionsList)
 	return err
