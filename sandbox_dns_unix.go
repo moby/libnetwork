@@ -314,8 +314,15 @@ func (sb *sandbox) rebuildDNS() error {
 	dnsList = append(dnsList, resolvconf.GetNameservers(currRC.Content, types.IPv6)...)
 
 	// Resolver returns the options in the format resolv.conf expects
+	for _, option := range dnsOptionsList {
+		if strings.Contains(option, "ndots") {
+			goto build
+		}
+	}
+
 	dnsOptionsList = append(dnsOptionsList, sb.resolver.ResolverOptions()...)
 
+build:
 	_, err = resolvconf.Build(sb.config.resolvConfPath, dnsList, dnsSearchList, dnsOptionsList)
 	return err
 }
