@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/libnetwork/datastore"
@@ -876,6 +877,54 @@ func setHairpinMode(nlh *netlink.Handle, link netlink.Link, enable bool) error {
 	return nil
 }
 
+func waitForIfaces(ifaceNames []string, timeout time.Duration, trigger func() error) error {
+	// Map interface names to their readiness states (false by default)
+	ifaceStates := make(map[string]bool)
+	allRunning := func() bool {
+		for _, ifaceState := range ifaceStates {
+			if !ifaceState {
+				return false
+			}
+		}
+		return true
+	}
+	for _, ifaceName := range ifaceNames {
+		ifaceStates[ifaceName] = false
+	}
+
+	// Start watching for link changes
+	notifyLink := make(chan netlink.LinkUpdate)
+	notifyDone := make(chan struct{})
+	netlink.LinkSubscribeAt(ns.GetHandler(), notifyLink, notifyDone)
+	defer close(notifyDone)
+
+	// Run the given function to trigger link changes
+	if err := trigger(); err != nil {
+		return err
+	}
+
+	// Do not return until the given interfaces are running, or timeout
+	timer := time.After(timeout)
+	for {
+		select {
+		case update := <-notifyLink:
+			if update.Header.Type == syscall.RTM_NEWLINK &&
+				update.IfInfomsg.Flags&syscall.IFF_RUNNING != 0 {
+				ifaceName := update.Link.Attrs().Name
+				if _, set := ifaceStates[ifaceName]; set {
+					logrus.Debugf("LinkSubscribe notified %s is running", ifaceName)
+					ifaceStates[ifaceName] = true
+					if allRunning() {
+						return nil
+					}
+				}
+			}
+		case <-timer:
+			return fmt.Errorf("timeout after %s waiting for network interfaces %v", timeout, ifaceNames)
+		}
+	}
+}
+
 func (d *driver) CreateEndpoint(nid, eid string, ifInfo driverapi.InterfaceInfo, epOptions map[string]interface{}) error {
 	defer osl.InitOSContext()()
 
@@ -948,12 +997,18 @@ func (d *driver) CreateEndpoint(nid, eid string, ifInfo driverapi.InterfaceInfo,
 		return err
 	}
 
-	// Generate and add the interface pipe host <-> sandbox
-	veth := &netlink.Veth{
-		LinkAttrs: netlink.LinkAttrs{Name: hostIfName, TxQLen: 0},
-		PeerName:  containerIfName}
-	if err = d.nlh.LinkAdd(veth); err != nil {
-		return types.InternalErrorf("failed to add the host (%s) <=> sandbox (%s) pair interfaces: %v", hostIfName, containerIfName, err)
+	// Generate and add the interface pipe host <-> sandbox, synchronously
+	err = waitForIfaces([]string{containerIfName, hostIfName}, time.Second, func() error {
+		veth := &netlink.Veth{
+			LinkAttrs: netlink.LinkAttrs{Name: hostIfName, TxQLen: 0},
+			PeerName:  containerIfName}
+		if err = d.nlh.LinkAdd(veth); err != nil {
+			return types.InternalErrorf("failed to add the host (%s) <=> sandbox (%s) pair interfaces: %v", hostIfName, containerIfName, err)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 
 	// Get the host side pipe interface handler
