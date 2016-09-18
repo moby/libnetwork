@@ -20,12 +20,11 @@
 		},
 		{
 			"ImportPath": "github.com/Microsoft/go-winio",
-			"Comment": "v0.1.0",
-			"Rev": "8f9387ea7efabb228a981b9c381142be7667967f"
+			"Rev": "4f1a71750d95a5a8a46c40a67ffbed8129c2f138"
 		},
 		{
 			"ImportPath": "github.com/Microsoft/hcsshim",
-			"Rev": "116e0e9f5ced0cec94ae46d0aa1b3002a325f532"
+			"Rev": "59dba3910e81e634b380f9872349d1d359d2b497"
 		},
 		{
 			"ImportPath": "github.com/Sirupsen/logrus",
