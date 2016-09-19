@@ -47,11 +47,11 @@ func SetNamespace() error {
 
 // ParseHandlerInt transforms the namespace handler into an integer
 func ParseHandlerInt() int {
-	return int(getHandler())
+	return int(GetHandler())
 }
 
 // GetHandler returns the namespace handler
-func getHandler() netns.NsHandle {
+func GetHandler() netns.NsHandle {
 	initOnce.Do(Init)
 	return initNs
 }
