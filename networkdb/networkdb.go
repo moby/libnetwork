@@ -57,7 +57,7 @@ type NetworkDB struct {
 	// A map of nodes which are participating in a given
 	// network. The key is a network ID.
 
-	networkNodes map[string][]string
+	networkNodes map[string]map[string]bool
 
 	// A table of ack channels for every node from which we are
 	// waiting for an ack.
@@ -167,7 +167,7 @@ func New(c *Config) (*NetworkDB, error) {
 		nodes:          make(map[string]*node),
 		failedNodes:    make(map[string]*node),
 		leftNodes:      make(map[string]*node),
-		networkNodes:   make(map[string][]string),
+		networkNodes:   make(map[string]map[string]bool),
 		bulkSyncAckTbl: make(map[string]chan struct{}),
 		broadcaster:    events.NewBroadcaster(),
 	}
@@ -308,17 +308,8 @@ func (nDB *NetworkDB) DeleteEntry(tname, nid, key string) error {
 
 func (nDB *NetworkDB) deleteNetworkEntriesForNode(deletedNode string) {
 	nDB.Lock()
-	for nid, nodes := range nDB.networkNodes {
-		updatedNodes := make([]string, 0, len(nodes))
-		for _, node := range nodes {
-			if node == deletedNode {
-				continue
-			}
-
-			updatedNodes = append(updatedNodes, node)
-		}
-
-		nDB.networkNodes[nid] = updatedNodes
+	for _, nodes := range nDB.networkNodes {
+		delete(nodes, deletedNode)
 	}
 
 	delete(nDB.networks, deletedNode)
@@ -402,8 +393,7 @@ func (nDB *NetworkDB) JoinNetwork(nid string) error {
 		},
 		RetransmitMult: 4,
 	}
-	nDB.networkNodes[nid] = append(nDB.networkNodes[nid], nDB.config.NodeName)
-	networkNodes := nDB.networkNodes[nid]
+	nDB.addNetworkNode(nid, nDB.config.NodeName)
 	nDB.Unlock()
 
 	if err := nDB.sendNetworkEvent(nid, NetworkEventTypeJoin, ltime); err != nil {
@@ -411,7 +401,7 @@ func (nDB *NetworkDB) JoinNetwork(nid string) error {
 	}
 
 	logrus.Debugf("%s: joined network %s", nDB.config.NodeName, nid)
-	if _, err := nDB.bulkSync(networkNodes, true); err != nil {
+	if _, err := nDB.bulkSync(nDB.getNetworkNodes(nid), true); err != nil {
 		logrus.Errorf("Error bulk syncing while joining network %s: %v", nid, err)
 	}
 
@@ -481,29 +471,19 @@ func (nDB *NetworkDB) LeaveNetwork(nid string) error {
 // in the passed network only if it is not already present. Caller
 // should hold the NetworkDB lock while calling this
 func (nDB *NetworkDB) addNetworkNode(nid string, nodeName string) {
-	nodes := nDB.networkNodes[nid]
-	for _, node := range nodes {
-		if node == nodeName {
-			return
-		}
+	networkNodes, ok := nDB.networkNodes[nid]
+	if !ok {
+		networkNodes = make(map[string]bool)
+		nDB.networkNodes[nid] = networkNodes
 	}
-
-	nDB.networkNodes[nid] = append(nDB.networkNodes[nid], nodeName)
+	networkNodes[nDB.config.NodeName] = true
 }
 
 // Deletes the node from the list of nodes which participate in the
 // passed network. Caller should hold the NetworkDB lock while calling
 // this
 func (nDB *NetworkDB) deleteNetworkNode(nid string, nodeName string) {
-	nodes := nDB.networkNodes[nid]
-	for i, name := range nodes {
-		if name == nodeName {
-			nodes[i] = nodes[len(nodes)-1]
-			nodes = nodes[:len(nodes)-1]
-			break
-		}
-	}
-	nDB.networkNodes[nid] = nodes
+	delete(nDB.networkNodes[nid], nodeName)
 }
 
 // findCommonnetworks find the networks that both this node and the
@@ -556,4 +536,14 @@ func (nDB *NetworkDB) updateLocalTableTime() {
 
 		return false
 	})
+}
+
+// getNetworkNodes gets the list of nodes which participate
+// in the passed network.
+func (nDB *NetworkDB) getNetworkNodes(nid string) []string {
+	names := []string{}
+	for name := range nDB.networkNodes[nid] {
+		names = append(names, name)
+	}
+	return names
 }

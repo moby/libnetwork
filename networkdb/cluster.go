@@ -327,7 +327,7 @@ func (nDB *NetworkDB) gossip() {
 	nDB.RLock()
 	thisNodeNetworks := nDB.networks[nDB.config.NodeName]
 	for nid := range thisNodeNetworks {
-		networkNodes[nid] = nDB.networkNodes[nid]
+		networkNodes[nid] = nDB.getNetworkNodes(nid)
 
 	}
 	nDB.RUnlock()
@@ -399,7 +399,7 @@ func (nDB *NetworkDB) bulkSyncTables() {
 		networks = networks[1:]
 
 		nDB.RLock()
-		nodes := nDB.networkNodes[nid]
+		nodes := nDB.getNetworkNodes(nid)
 		nDB.RUnlock()
 
 		// No peer nodes on this network. Move on.
