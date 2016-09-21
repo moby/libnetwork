@@ -111,6 +111,11 @@
 			"Comment": "v1.4.1-11716-g24076ed",
 			"Rev": "24076ed4d9c82d387029b8a65e21873db5676f6a"
 		},
+                {
+                        "ImportPath": "github.com/docker/docker/pkg/locker",
+                        "Comment": "v1.4.1-11716-g24076ed",
+                        "Rev": "24076ed4d9c82d387029b8a65e21873db5676f6a"
+                },
 		{
 			"ImportPath": "github.com/docker/docker/pkg/mflag",
 			"Comment": "v1.4.1-11716-g24076ed",
