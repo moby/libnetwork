@@ -436,8 +436,8 @@ func (sb *sandbox) ResolveIP(ip string) string {
 	return svc
 }
 
-func (sb *sandbox) execFunc(f func()) {
-	sb.osSbox.InvokeFunc(f)
+func (sb *sandbox) execFunc(f func()) error {
+	return sb.osSbox.InvokeFunc(f)
 }
 
 func (sb *sandbox) ResolveService(name string) ([]*net.SRV, []net.IP, error) {
@@ -707,9 +707,12 @@ func (sb *sandbox) SetKey(basePath string) error {
 	if oldosSbox != nil && sb.resolver != nil {
 		sb.resolver.Stop()
 
-		sb.osSbox.InvokeFunc(sb.resolver.SetupFunc())
-		if err := sb.resolver.Start(); err != nil {
-			log.Errorf("Resolver Setup/Start failed for container %s, %q", sb.ContainerID(), err)
+		if err := sb.osSbox.InvokeFunc(sb.resolver.SetupFunc()); err == nil {
+			if err := sb.resolver.Start(); err != nil {
+				log.Errorf("Resolver Start failed for container %s, %q", sb.ContainerID(), err)
+			}
+		} else {
+			log.Errorf("Resolver Setup Function failed for container %s, %q", sb.ContainerID(), err)
 		}
 	}
 

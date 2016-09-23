@@ -314,6 +314,10 @@ func (d *dnetConnection) GetLocalAddress() string {
 	return d.Orchestration.Bind
 }
 
+func (d *dnetConnection) GetListenAddress() string {
+	return d.Orchestration.Bind
+}
+
 func (d *dnetConnection) GetRemoteAddress() string {
 	return d.Orchestration.Peer
 }
