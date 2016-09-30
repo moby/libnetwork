@@ -3,6 +3,7 @@ package overlay
 //go:generate protoc -I.:../../Godeps/_workspace/src/github.com/gogo/protobuf  --gogo_out=import_path=github.com/docker/libnetwork/drivers/overlay,Mgogoproto/gogo.proto=github.com/gogo/protobuf/gogoproto:. overlay.proto
 
 import (
+	"encoding/base64"
 	"fmt"
 	"net"
 	"sync"
@@ -49,6 +50,7 @@ type driver struct {
 	once             sync.Once
 	joinOnce         sync.Once
 	keys             []*key
+	globalKey        []byte
 	sync.Mutex
 }
 
@@ -104,6 +106,8 @@ func Init(dc driverapi.DriverCallback, config map[string]interface{}) error {
 			n.once = &sync.Once{}
 		}
 	}
+	// PoC code to verify per network encryption in libnetwork
+	d.globalKey, _ = base64.StdEncoding.DecodeString("Uv38ByGCZU8WP18PmmIdcg==")
 
 	return dc.RegisterDriver(networkType, d, c)
 }

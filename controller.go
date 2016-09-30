@@ -45,6 +45,7 @@ package libnetwork
 
 import (
 	"container/heap"
+	"encoding/base64"
 	"fmt"
 	"net"
 	"strings"
@@ -153,6 +154,7 @@ type controller struct {
 	networkLocker          *locker.Locker
 	agentInitDone          chan struct{}
 	keys                   []*types.EncryptionKey
+	globalKey              []byte
 	clusterConfigAvailable bool
 	sync.Mutex
 }
@@ -226,6 +228,9 @@ func New(cfgOptions ...config.Option) (NetworkController, error) {
 	if err := c.startExternalKeyListener(); err != nil {
 		return nil, err
 	}
+
+	// PoC code to verify per network encryption in libnetwork
+	c.globalKey, _ = base64.StdEncoding.DecodeString("Uv38ByGCZU8WP18PmmIdcg==")
 
 	return c, nil
 }

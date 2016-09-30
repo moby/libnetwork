@@ -1,11 +1,13 @@
 package overlay
 
 import (
+	"bytes"
 	"fmt"
 	"net"
 	"syscall"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/docker/libnetwork/crypto"
 	"github.com/docker/libnetwork/driverapi"
 	"github.com/docker/libnetwork/ns"
 	"github.com/docker/libnetwork/types"
@@ -136,7 +138,14 @@ func (d *driver) Join(nid, eid string, sboxKey string, jinfo driverapi.JoinInfo,
 		return err
 	}
 
-	if err := jinfo.AddTableEntry(ovPeerTable, eid, buf); err != nil {
+	// Encrypt the networkDB data with per-network encryption key. globalKay to be replaced
+	// with per network Keyring from swarm manager.
+	var msg bytes.Buffer
+	if err = crypto.EncryptPayload(crypto.Aes128Gcm, d.globalKey, buf, nil, &msg); err != nil {
+		return err
+	}
+
+	if err := jinfo.AddTableEntry(ovPeerTable, eid, msg.Bytes()); err != nil {
 		log.Errorf("overlay: Failed adding table entry to joininfo: %v", err)
 	}
 
@@ -153,8 +162,17 @@ func (d *driver) EventNotify(etype driverapi.EventType, nid, tableName, key stri
 
 	eid := key
 
-	var peer PeerRecord
-	if err := proto.Unmarshal(value, &peer); err != nil {
+	var (
+		buff []byte
+		err  error
+		peer PeerRecord
+	)
+	if buff, err = crypto.DecryptPayload(crypto.Aes128Gcm, [][]byte{d.globalKey}, value, nil); err != nil {
+		log.Errorf("Decrypting networkdb notification failed: %v", err)
+		return
+	}
+
+	if err := proto.Unmarshal(buff, &peer); err != nil {
 		log.Errorf("Failed to unmarshal peer record: %v", err)
 		return
 	}
