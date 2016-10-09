@@ -141,8 +141,8 @@ func TestPrerouting(t *testing.T) {
 		t.Fatalf("rule does not exist")
 	}
 
-	delRule := append([]string{"-D", "PREROUTING", "-t", string(Nat)}, args...)
-	if _, err = Raw(delRule...); err != nil {
+	delRule := append([]string{"PREROUTING"}, args...)
+	if _, err = DispatchRule(Nat, Delete, delRule...); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -161,9 +161,8 @@ func TestOutput(t *testing.T) {
 		t.Fatalf("rule does not exist")
 	}
 
-	delRule := append([]string{"-D", "OUTPUT", "-t",
-		string(natChain.Table)}, args...)
-	if _, err = Raw(delRule...); err != nil {
+	delRule := append([]string{"OUTPUT"}, args...)
+	if _, err = DispatchRule(natChain.Table, Delete, delRule...); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -212,11 +211,11 @@ func TestCleanup(t *testing.T) {
 	var rules []byte
 
 	// Cleanup filter/FORWARD first otherwise output of iptables-save is dirty
-	link := []string{"-t", string(filterChain.Table),
-		string(Delete), "FORWARD",
+	link := []string{
+		"FORWARD",
 		"-o", bridgeName,
 		"-j", filterChain.Name}
-	if _, err = Raw(link...); err != nil {
+	if _, err = DispatchRule(filterChain.Table, Delete, link...); err != nil {
 		t.Fatal(err)
 	}
 	filterChain.Remove()
