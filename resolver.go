@@ -212,6 +212,17 @@ func createRespMsg(query *dns.Msg) *dns.Msg {
 	return resp
 }
 
+func (r *resolver) handleMXQuery(name string, query *dns.Msg) (*dns.Msg, error) {
+	log.Debugf("Lookup MX record for %s: return an A record response %s", name, name)
+	rr := new(dns.MX)
+	rr.Hdr = dns.RR_Header{Name: name, Rrtype: dns.TypeMX, Class: dns.ClassINET, Ttl: respTTL}
+	rr.Mx = name
+
+	resp := createRespMsg(query)
+	resp.Answer = append(resp.Answer, rr)
+	return resp, nil
+}
+
 func (r *resolver) handleIPQuery(name string, query *dns.Msg, ipType int) (*dns.Msg, error) {
 	var addr []net.IP
 	var ipv6Miss bool
@@ -345,6 +356,8 @@ func (r *resolver) ServeDNS(w dns.ResponseWriter, query *dns.Msg) {
 		resp, err = r.handleIPQuery(name, query, types.IPv4)
 	case dns.TypeAAAA:
 		resp, err = r.handleIPQuery(name, query, types.IPv6)
+	case dns.TypeMX:
+		resp, err = r.handleMXQuery(name, query)
 	case dns.TypePTR:
 		resp, err = r.handlePTRQuery(name, query)
 	case dns.TypeSRV:
