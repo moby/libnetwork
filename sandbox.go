@@ -80,6 +80,7 @@ type sandbox struct {
 	ingress            bool
 	ndotsSet           bool
 	sync.Mutex
+	sync.RWMutex
 }
 
 // These are the container configs used to customize container /etc/hosts file.
@@ -899,9 +900,10 @@ func (sb *sandbox) clearNetworkResources(origEp *endpoint) error {
 }
 
 func (sb *sandbox) isEndpointPopulated(ep *endpoint) bool {
-	sb.Lock()
+	sb.RLock()
+	defer sb.RUnlock()
+
 	_, ok := sb.populatedEndpoints[ep.ID()]
-	sb.Unlock()
 	return ok
 }
 
