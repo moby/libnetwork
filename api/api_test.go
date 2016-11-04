@@ -228,9 +228,7 @@ func TestCreateDeleteNetwork(t *testing.T) {
 	dops := map[string]string{
 		bridge.BridgeName: "abc",
 	}
-	nops := map[string]string{
-		netlabel.EnableIPv6: "true",
-	}
+	nops := map[string]string{}
 	nc := networkCreate{Name: "network_1", NetworkType: bridgeNetType, DriverOpts: dops, NetworkOpts: nops}
 	goodBody, err := json.Marshal(nc)
 	if err != nil {
@@ -1815,9 +1813,7 @@ func TestEndToEnd(t *testing.T) {
 		bridge.BridgeName:  "cdef",
 		netlabel.DriverMTU: "1460",
 	}
-	nops := map[string]string{
-		netlabel.EnableIPv6: "true",
-	}
+	nops := map[string]string{}
 
 	// Create network
 	nc := networkCreate{Name: "network-fiftyfive", NetworkType: bridgeNetType, DriverOpts: dops, NetworkOpts: nops}
