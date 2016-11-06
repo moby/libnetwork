@@ -3,6 +3,7 @@ package libnetwork
 //go:generate protoc -I.:Godeps/_workspace/src/github.com/gogo/protobuf  --gogo_out=import_path=github.com/docker/libnetwork,Mgogoproto/gogo.proto=github.com/gogo/protobuf/gogoproto:. agent.proto
 
 import (
+	"bytes"
 	"fmt"
 	"net"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/pkg/stringid"
 	"github.com/docker/go-events"
+	"github.com/docker/libnetwork/crypto"
 	"github.com/docker/libnetwork/datastore"
 	"github.com/docker/libnetwork/discoverapi"
 	"github.com/docker/libnetwork/driverapi"
@@ -416,7 +418,14 @@ func (ep *endpoint) addToCluster() error {
 			return err
 		}
 
-		if err := c.agent.networkDB.CreateEntry("endpoint_table", n.ID(), ep.ID(), buf); err != nil {
+		// Encrypt the networkDB data with per-network encryption key. globalKay to be replaced
+		// with per network Keyring from swarm manager.
+		var msg bytes.Buffer
+		if err := crypto.EncryptPayload(crypto.Aes128Gcm, c.globalKey, buf, nil, &msg); err != nil {
+			return err
+		}
+
+		if err := c.agent.networkDB.CreateEntry("endpoint_table", n.ID(), ep.ID(), msg.Bytes()); err != nil {
 			return err
 		}
 	}
@@ -594,7 +603,12 @@ func (c *controller) handleEpTableEvent(ev events.Event) {
 	}
 	n := nw.(*network)
 
-	err = proto.Unmarshal(value, &epRec)
+	var buff []byte
+	if buff, err = crypto.DecryptPayload(crypto.Aes128Gcm, [][]byte{c.globalKey}, value, nil); err != nil {
+		return
+	}
+
+	err = proto.Unmarshal(buff, &epRec)
 	if err != nil {
 		logrus.Errorf("Failed to unmarshal service table value: %v", err)
 		return
