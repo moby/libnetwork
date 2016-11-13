@@ -12,6 +12,7 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/libnetwork/types"
+	"github.com/docker/libnetwork/types/common"
 	"github.com/opencontainers/runc/libcontainer/configs"
 )
 
@@ -162,7 +163,7 @@ func (c *controller) processExternalKey(conn net.Conn) error {
 		return err
 	}
 
-	var sandbox Sandbox
+	var sandbox common.Sandbox
 	search := SandboxContainerWalker(&sandbox, s.ContainerID)
 	c.WalkSandboxes(search)
 	if sandbox == nil {

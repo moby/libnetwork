@@ -6,6 +6,7 @@ import (
 
 	"github.com/docker/libkv/store"
 	"github.com/docker/libnetwork/datastore"
+	"github.com/docker/libnetwork/types/common"
 )
 
 func TestBoltdbBackend(t *testing.T) {
@@ -30,7 +31,7 @@ func TestNoPersist(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error creating default \"host\" network: %v", err)
 	}
-	ep, err := nw.CreateEndpoint("newendpoint", []EndpointOption{}...)
+	ep, err := nw.CreateEndpoint("newendpoint", []common.EndpointOption{}...)
 	if err != nil {
 		t.Fatalf("Error creating endpoint: %v", err)
 	}

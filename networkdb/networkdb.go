@@ -11,6 +11,7 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/armon/go-radix"
 	"github.com/docker/go-events"
+	dbtypes "github.com/docker/libnetwork/networkdb/types"
 	"github.com/docker/libnetwork/types"
 	"github.com/hashicorp/memberlist"
 	"github.com/hashicorp/serf/serf"
@@ -88,12 +89,6 @@ type NetworkDB struct {
 
 	// Reference to the memberlist's keyring to add & remove keys
 	keyring *memberlist.Keyring
-}
-
-// PeerInfo represents the peer (gossip cluster) nodes of a network
-type PeerInfo struct {
-	Name string
-	IP   string
 }
 
 type node struct {
@@ -206,12 +201,12 @@ func (nDB *NetworkDB) Close() {
 }
 
 // Peers returns the gossip peers for a given network.
-func (nDB *NetworkDB) Peers(nid string) []PeerInfo {
+func (nDB *NetworkDB) Peers(nid string) []dbtypes.PeerInfo {
 	nDB.RLock()
 	defer nDB.RUnlock()
-	peers := make([]PeerInfo, 0, len(nDB.networkNodes[nid]))
+	peers := make([]dbtypes.PeerInfo, 0, len(nDB.networkNodes[nid]))
 	for _, nodeName := range nDB.networkNodes[nid] {
-		peers = append(peers, PeerInfo{
+		peers = append(peers, dbtypes.PeerInfo{
 			Name: nDB.nodes[nodeName].Name,
 			IP:   nDB.nodes[nodeName].Addr.String(),
 		})

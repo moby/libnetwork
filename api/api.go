@@ -12,6 +12,7 @@ import (
 	"github.com/docker/libnetwork/netlabel"
 	"github.com/docker/libnetwork/netutils"
 	"github.com/docker/libnetwork/types"
+	"github.com/docker/libnetwork/types/common"
 	"github.com/gorilla/mux"
 )
 
@@ -181,7 +182,7 @@ func makeHandler(ctrl libnetwork.NetworkController, fct processor) http.HandlerF
  Resource Builders
 ******************/
 
-func buildNetworkResource(nw libnetwork.Network) *networkResource {
+func buildNetworkResource(nw common.Network) *networkResource {
 	r := &networkResource{}
 	if nw != nil {
 		r.Name = nw.Name()
@@ -197,7 +198,7 @@ func buildNetworkResource(nw libnetwork.Network) *networkResource {
 	return r
 }
 
-func buildEndpointResource(ep libnetwork.Endpoint) *endpointResource {
+func buildEndpointResource(ep common.Endpoint) *endpointResource {
 	r := &endpointResource{}
 	if ep != nil {
 		r.Name = ep.Name()
@@ -207,7 +208,7 @@ func buildEndpointResource(ep libnetwork.Endpoint) *endpointResource {
 	return r
 }
 
-func buildSandboxResource(sb libnetwork.Sandbox) *sandboxResource {
+func buildSandboxResource(sb common.Sandbox) *sandboxResource {
 	r := &sandboxResource{}
 	if sb != nil {
 		r.ID = sb.ID()
@@ -221,8 +222,8 @@ func buildSandboxResource(sb libnetwork.Sandbox) *sandboxResource {
  Options Parsers
 *****************/
 
-func (sc *sandboxCreate) parseOptions() []libnetwork.SandboxOption {
-	var setFctList []libnetwork.SandboxOption
+func (sc *sandboxCreate) parseOptions() []common.SandboxOption {
+	var setFctList []common.SandboxOption
 	if sc.HostName != "" {
 		setFctList = append(setFctList, libnetwork.OptionHostname(sc.HostName))
 	}
@@ -260,9 +261,9 @@ func (sc *sandboxCreate) parseOptions() []libnetwork.SandboxOption {
 	return setFctList
 }
 
-func (ej *endpointJoin) parseOptions() []libnetwork.EndpointOption {
+func (ej *endpointJoin) parseOptions() []common.EndpointOption {
 	// priority will go here
-	return []libnetwork.EndpointOption{}
+	return []common.EndpointOption{}
 }
 
 /******************
@@ -309,12 +310,12 @@ func procCreateNetwork(c libnetwork.NetworkController, vars map[string]string, b
 	}
 
 	if len(create.IPv4Conf) > 0 {
-		ipamV4Conf := &libnetwork.IpamConf{
+		ipamV4Conf := &common.IpamConf{
 			PreferredPool: create.IPv4Conf[0].PreferredPool,
 			SubPool:       create.IPv4Conf[0].SubPool,
 		}
 
-		options = append(options, libnetwork.NetworkOptionIpam("default", "", []*libnetwork.IpamConf{ipamV4Conf}, nil, nil))
+		options = append(options, libnetwork.NetworkOptionIpam("default", "", []*common.IpamConf{ipamV4Conf}, nil, nil))
 	}
 
 	nw, err := c.NewNetwork(create.NetworkType, create.Name, create.ID, options...)
@@ -350,7 +351,7 @@ func procGetNetworks(c libnetwork.NetworkController, vars map[string]string, bod
 		}
 	} else if queryByPid {
 		// Return all the prefix-matching networks
-		l := func(nw libnetwork.Network) bool {
+		l := func(nw common.Network) bool {
 			if strings.HasPrefix(nw.ID(), shortID) {
 				list = append(list, buildNetworkResource(nw))
 			}
@@ -399,7 +400,7 @@ func procCreateEndpoint(c libnetwork.NetworkController, vars map[string]string, 
 		return "", errRsp
 	}
 
-	var setFctList []libnetwork.EndpointOption
+	var setFctList []common.EndpointOption
 	for _, str := range ec.MyAliases {
 		setFctList = append(setFctList, libnetwork.CreateOptionMyAlias(str))
 	}
@@ -447,7 +448,7 @@ func procGetEndpoints(c libnetwork.NetworkController, vars map[string]string, bo
 		}
 	} else if queryByPid {
 		// Return all the prefix-matching endpoints
-		l := func(ep libnetwork.Endpoint) bool {
+		l := func(ep common.Endpoint) bool {
 			if strings.HasPrefix(ep.ID(), shortID) {
 				list = append(list, buildEndpointResource(ep))
 			}
@@ -485,7 +486,7 @@ func procDeleteNetwork(c libnetwork.NetworkController, vars map[string]string, b
 *******************/
 func procJoinEndpoint(c libnetwork.NetworkController, vars map[string]string, body []byte) (interface{}, *responseStatus) {
 	var ej endpointJoin
-	var setFctList []libnetwork.EndpointOption
+	var setFctList []common.EndpointOption
 	err := json.Unmarshal(body, &ej)
 	if err != nil {
 		return nil, &responseStatus{Status: "Invalid body: " + err.Error(), StatusCode: http.StatusBadRequest}
@@ -586,7 +587,7 @@ func procGetServices(c libnetwork.NetworkController, vars map[string]string, bod
 		}
 	case queryBySvName:
 		// Look in each network for the service with the specified name
-		l := func(ep libnetwork.Endpoint) bool {
+		l := func(ep common.Endpoint) bool {
 			if ep.Name() == svName {
 				list = append(list, buildEndpointResource(ep))
 				return true
@@ -598,7 +599,7 @@ func procGetServices(c libnetwork.NetworkController, vars map[string]string, bod
 		}
 	case queryBySvPID:
 		// Return all the prefix-matching services
-		l := func(ep libnetwork.Endpoint) bool {
+		l := func(ep common.Endpoint) bool {
 			if strings.HasPrefix(ep.ID(), shortID) {
 				list = append(list, buildEndpointResource(ep))
 			}
@@ -641,7 +642,7 @@ func procPublishService(c libnetwork.NetworkController, vars map[string]string, 
 		return "", errRsp
 	}
 
-	var setFctList []libnetwork.EndpointOption
+	var setFctList []common.EndpointOption
 	for _, str := range sp.MyAliases {
 		setFctList = append(setFctList, libnetwork.CreateOptionMyAlias(str))
 	}
@@ -678,7 +679,7 @@ func procUnpublishService(c libnetwork.NetworkController, vars map[string]string
 
 func procAttachBackend(c libnetwork.NetworkController, vars map[string]string, body []byte) (interface{}, *responseStatus) {
 	var bk endpointJoin
-	var setFctList []libnetwork.EndpointOption
+	var setFctList []common.EndpointOption
 	err := json.Unmarshal(body, &bk)
 	if err != nil {
 		return nil, &responseStatus{Status: "Invalid body: " + err.Error(), StatusCode: http.StatusBadRequest}
@@ -752,7 +753,7 @@ func procGetSandbox(c libnetwork.NetworkController, vars map[string]string, body
 }
 
 type cndFnMkr func(string) cndFn
-type cndFn func(libnetwork.Sandbox) bool
+type cndFn func(common.Sandbox) bool
 
 // list of (query type, condition function makers) couples
 var cndMkrList = []struct {
@@ -760,27 +761,27 @@ var cndMkrList = []struct {
 	maker      cndFnMkr
 }{
 	{urlSbPID, func(id string) cndFn {
-		return func(sb libnetwork.Sandbox) bool { return strings.HasPrefix(sb.ID(), id) }
+		return func(sb common.Sandbox) bool { return strings.HasPrefix(sb.ID(), id) }
 	}},
 	{urlCnID, func(id string) cndFn {
-		return func(sb libnetwork.Sandbox) bool { return sb.ContainerID() == id }
+		return func(sb common.Sandbox) bool { return sb.ContainerID() == id }
 	}},
 	{urlCnPID, func(id string) cndFn {
-		return func(sb libnetwork.Sandbox) bool { return strings.HasPrefix(sb.ContainerID(), id) }
+		return func(sb common.Sandbox) bool { return strings.HasPrefix(sb.ContainerID(), id) }
 	}},
 }
 
-func getQueryCondition(vars map[string]string) func(libnetwork.Sandbox) bool {
+func getQueryCondition(vars map[string]string) func(common.Sandbox) bool {
 	for _, im := range cndMkrList {
 		if val, ok := vars[im.identifier]; ok {
 			return im.maker(val)
 		}
 	}
-	return func(sb libnetwork.Sandbox) bool { return true }
+	return func(sb common.Sandbox) bool { return true }
 }
 
 func sandboxWalker(condition cndFn, list *[]*sandboxResource) libnetwork.SandboxWalker {
-	return func(sb libnetwork.Sandbox) bool {
+	return func(sb common.Sandbox) bool {
 		if condition(sb) {
 			*list = append(*list, buildSandboxResource(sb))
 		}
@@ -851,9 +852,9 @@ func detectEndpointTarget(vars map[string]string) (string, int) {
 	panic("Missing URL variable parameter for endpoint")
 }
 
-func findNetwork(c libnetwork.NetworkController, s string, by int) (libnetwork.Network, *responseStatus) {
+func findNetwork(c libnetwork.NetworkController, s string, by int) (common.Network, *responseStatus) {
 	var (
-		nw  libnetwork.Network
+		nw  common.Network
 		err error
 	)
 	switch by {
@@ -876,9 +877,9 @@ func findNetwork(c libnetwork.NetworkController, s string, by int) (libnetwork.N
 	return nw, &successResponse
 }
 
-func findSandbox(c libnetwork.NetworkController, s string, by int) (libnetwork.Sandbox, *responseStatus) {
+func findSandbox(c libnetwork.NetworkController, s string, by int) (common.Sandbox, *responseStatus) {
 	var (
-		sb  libnetwork.Sandbox
+		sb  common.Sandbox
 		err error
 	)
 
@@ -897,14 +898,14 @@ func findSandbox(c libnetwork.NetworkController, s string, by int) (libnetwork.S
 	return sb, &successResponse
 }
 
-func findEndpoint(c libnetwork.NetworkController, ns, es string, nwBy, epBy int) (libnetwork.Endpoint, *responseStatus) {
+func findEndpoint(c libnetwork.NetworkController, ns, es string, nwBy, epBy int) (common.Endpoint, *responseStatus) {
 	nw, errRsp := findNetwork(c, ns, nwBy)
 	if !errRsp.isOK() {
 		return nil, errRsp
 	}
 	var (
 		err error
-		ep  libnetwork.Endpoint
+		ep  common.Endpoint
 	)
 	switch epBy {
 	case byID:
@@ -923,10 +924,10 @@ func findEndpoint(c libnetwork.NetworkController, ns, es string, nwBy, epBy int)
 	return ep, &successResponse
 }
 
-func findService(c libnetwork.NetworkController, svs string, svBy int) (libnetwork.Endpoint, *responseStatus) {
+func findService(c libnetwork.NetworkController, svs string, svBy int) (common.Endpoint, *responseStatus) {
 	for _, nw := range c.Networks() {
 		var (
-			ep  libnetwork.Endpoint
+			ep  common.Endpoint
 			err error
 		)
 		switch svBy {

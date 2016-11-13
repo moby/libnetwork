@@ -9,6 +9,7 @@ import (
 	"github.com/docker/libkv/store/etcd"
 	"github.com/docker/libkv/store/zookeeper"
 	"github.com/docker/libnetwork/datastore"
+	"github.com/docker/libnetwork/types/common"
 )
 
 func registerKVStores() {
@@ -473,7 +474,7 @@ func (c *controller) networkCleanup() {
 	}
 }
 
-var populateSpecial NetworkWalker = func(nw Network) bool {
+var populateSpecial NetworkWalker = func(nw common.Network) bool {
 	if n := nw.(*network); n.hasSpecialDriver() {
 		if err := n.getController().addNetwork(n); err != nil {
 			logrus.Warnf("Failed to populate network %q with driver %q", nw.Name(), nw.Type())

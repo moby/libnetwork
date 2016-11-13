@@ -23,6 +23,7 @@ import (
 	"github.com/docker/libnetwork/osl"
 	"github.com/docker/libnetwork/testutils"
 	"github.com/docker/libnetwork/types"
+	"github.com/docker/libnetwork/types/common"
 	"github.com/opencontainers/runc/libcontainer"
 	"github.com/opencontainers/runc/libcontainer/configs"
 	"github.com/vishvananda/netlink"
@@ -143,8 +144,8 @@ func TestBridgeIpv6FromMac(t *testing.T) {
 			"EnableIPMasquerade": true,
 		},
 	}
-	ipamV4ConfList := []*libnetwork.IpamConf{{PreferredPool: "192.168.100.0/24", Gateway: "192.168.100.1"}}
-	ipamV6ConfList := []*libnetwork.IpamConf{{PreferredPool: "fe90::/64", Gateway: "fe90::22"}}
+	ipamV4ConfList := []*common.IpamConf{{PreferredPool: "192.168.100.0/24", Gateway: "192.168.100.1"}}
+	ipamV6ConfList := []*common.IpamConf{{PreferredPool: "fe90::/64", Gateway: "fe90::22"}}
 
 	network, err := controller.NewNetwork(bridgeNetType, "testipv6mac", "",
 		libnetwork.NetworkOptionGeneric(netOption),
@@ -183,7 +184,7 @@ func TestBridgeIpv6FromMac(t *testing.T) {
 	}
 }
 
-func checkSandbox(t *testing.T, info libnetwork.EndpointInfo) {
+func checkSandbox(t *testing.T, info common.EndpointInfo) {
 	key := info.Sandbox().Key()
 	sbNs, err := netns.GetFromPath(key)
 	if err != nil {
@@ -220,7 +221,7 @@ func TestEndpointJoin(t *testing.T) {
 			"EnableIPMasquerade": true,
 		},
 	}
-	ipamV6ConfList := []*libnetwork.IpamConf{{PreferredPool: "fe90::/64", Gateway: "fe90::22"}}
+	ipamV6ConfList := []*common.IpamConf{{PreferredPool: "fe90::/64", Gateway: "fe90::22"}}
 	n1, err := controller.NewNetwork(bridgeNetType, "testnetwork1", "",
 		libnetwork.NetworkOptionGeneric(netOption),
 		libnetwork.NetworkOptionEnableIPv6(true),
@@ -567,7 +568,7 @@ func TestEnableIPv6(t *testing.T) {
 			"BridgeName": "testnetwork",
 		},
 	}
-	ipamV6ConfList := []*libnetwork.IpamConf{{PreferredPool: "fe99::/64", Gateway: "fe99::9"}}
+	ipamV6ConfList := []*common.IpamConf{{PreferredPool: "fe99::/64", Gateway: "fe99::9"}}
 
 	n, err := createTestNetwork("bridge", "testnetwork", netOption, nil, ipamV6ConfList)
 	if err != nil {
@@ -840,7 +841,7 @@ func TestResolvConf(t *testing.T) {
 	}
 }
 
-func parallelJoin(t *testing.T, rc libnetwork.Sandbox, ep libnetwork.Endpoint, thrNumber int) {
+func parallelJoin(t *testing.T, rc common.Sandbox, ep common.Endpoint, thrNumber int) {
 	debugf("J%d.", thrNumber)
 	var err error
 
@@ -857,7 +858,7 @@ func parallelJoin(t *testing.T, rc libnetwork.Sandbox, ep libnetwork.Endpoint, t
 	debugf("JD%d.", thrNumber)
 }
 
-func parallelLeave(t *testing.T, rc libnetwork.Sandbox, ep libnetwork.Endpoint, thrNumber int) {
+func parallelLeave(t *testing.T, rc common.Sandbox, ep common.Endpoint, thrNumber int) {
 	debugf("L%d.", thrNumber)
 	var err error
 
@@ -876,8 +877,8 @@ func parallelLeave(t *testing.T, rc libnetwork.Sandbox, ep libnetwork.Endpoint, 
 
 func runParallelTests(t *testing.T, thrNumber int) {
 	var (
-		ep  libnetwork.Endpoint
-		sb  libnetwork.Sandbox
+		ep  common.Endpoint
+		sb  common.Sandbox
 		err error
 	)
 

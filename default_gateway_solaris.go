@@ -5,15 +5,16 @@ import (
 	"strconv"
 
 	"github.com/docker/libnetwork/drivers/solaris/bridge"
+	"github.com/docker/libnetwork/types/common"
 )
 
 const libnGWNetwork = "docker_gwbridge"
 
-func getPlatformOption() EndpointOption {
+func getPlatformOption() common.EndpointOption {
 	return nil
 }
 
-func (c *controller) createGWNetwork() (Network, error) {
+func (c *controller) createGWNetwork() (common.Network, error) {
 	netOption := map[string]string{
 		bridge.BridgeName:         libnGWNetwork,
 		bridge.EnableICC:          strconv.FormatBool(false),

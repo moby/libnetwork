@@ -7,46 +7,8 @@ import (
 
 	"github.com/docker/libnetwork/driverapi"
 	"github.com/docker/libnetwork/types"
+	"github.com/docker/libnetwork/types/common"
 )
-
-// EndpointInfo provides an interface to retrieve network resources bound to the endpoint.
-type EndpointInfo interface {
-	// Iface returns InterfaceInfo, go interface that can be used
-	// to get more information on the interface which was assigned to
-	// the endpoint by the driver. This can be used after the
-	// endpoint has been created.
-	Iface() InterfaceInfo
-
-	// Gateway returns the IPv4 gateway assigned by the driver.
-	// This will only return a valid value if a container has joined the endpoint.
-	Gateway() net.IP
-
-	// GatewayIPv6 returns the IPv6 gateway assigned by the driver.
-	// This will only return a valid value if a container has joined the endpoint.
-	GatewayIPv6() net.IP
-
-	// StaticRoutes returns the list of static routes configured by the network
-	// driver when the container joins a network
-	StaticRoutes() []*types.StaticRoute
-
-	// Sandbox returns the attached sandbox if there, nil otherwise.
-	Sandbox() Sandbox
-}
-
-// InterfaceInfo provides an interface to retrieve interface addresses bound to the endpoint.
-type InterfaceInfo interface {
-	// MacAddress returns the MAC address assigned to the endpoint.
-	MacAddress() net.HardwareAddr
-
-	// Address returns the IPv4 address assigned to the endpoint.
-	Address() *net.IPNet
-
-	// AddressIPv6 returns the IPv6 address assigned to the endpoint.
-	AddressIPv6() *net.IPNet
-
-	// LinkLocalAddresses returns the list of link-local (IPv4/IPv6) addresses assigned to the endpoint.
-	LinkLocalAddresses() []*net.IPNet
-}
 
 type endpointInterface struct {
 	mac       net.HardwareAddr
@@ -180,7 +142,7 @@ type tableEntry struct {
 	value     []byte
 }
 
-func (ep *endpoint) Info() EndpointInfo {
+func (ep *endpoint) Info() common.EndpointInfo {
 	n, err := ep.getNetworkFromStore()
 	if err != nil {
 		return nil
@@ -205,7 +167,7 @@ func (ep *endpoint) Info() EndpointInfo {
 	return nil
 }
 
-func (ep *endpoint) Iface() InterfaceInfo {
+func (ep *endpoint) Iface() common.InterfaceInfo {
 	ep.Lock()
 	defer ep.Unlock()
 
@@ -318,7 +280,7 @@ func (ep *endpoint) AddTableEntry(tableName, key string, value []byte) error {
 	return nil
 }
 
-func (ep *endpoint) Sandbox() Sandbox {
+func (ep *endpoint) Sandbox() common.Sandbox {
 	cnt, ok := ep.getSandbox()
 	if !ok {
 		return nil

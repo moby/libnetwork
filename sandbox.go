@@ -14,48 +14,10 @@ import (
 	"github.com/docker/libnetwork/netlabel"
 	"github.com/docker/libnetwork/osl"
 	"github.com/docker/libnetwork/types"
+	"github.com/docker/libnetwork/types/common"
 )
 
-// Sandbox provides the control over the network container entity. It is a one to one mapping with the container.
-type Sandbox interface {
-	// ID returns the ID of the sandbox
-	ID() string
-	// Key returns the sandbox's key
-	Key() string
-	// ContainerID returns the container id associated to this sandbox
-	ContainerID() string
-	// Labels returns the sandbox's labels
-	Labels() map[string]interface{}
-	// Statistics retrieves the interfaces' statistics for the sandbox
-	Statistics() (map[string]*types.InterfaceStatistics, error)
-	// Refresh leaves all the endpoints, resets and re-applies the options,
-	// re-joins all the endpoints without destroying the osl sandbox
-	Refresh(options ...SandboxOption) error
-	// SetKey updates the Sandbox Key
-	SetKey(key string) error
-	// Rename changes the name of all attached Endpoints
-	Rename(name string) error
-	// Delete destroys this container after detaching it from all connected endpoints.
-	Delete() error
-	// Endpoints returns all the endpoints connected to the sandbox
-	Endpoints() []Endpoint
-	// ResolveService returns all the backend details about the containers or hosts
-	// backing a service. Its purpose is to satisfy an SRV query
-	ResolveService(name string) ([]*net.SRV, []net.IP)
-	// EnableService  makes a managed container's service available by adding the
-	// endpoint to the service load balancer and service discovery
-	EnableService() error
-	// DisableService removes a managed contianer's endpoints from the load balancer
-	// and service discovery
-	DisableService() error
-}
-
-// SandboxOption is an option setter function type used to pass various options to
-// NewNetContainer method. The various setter functions of type SandboxOption are
-// provided by libnetwork, they look like ContainerOptionXXXX(...)
-type SandboxOption func(sb *sandbox)
-
-func (sb *sandbox) processOptions(options ...SandboxOption) {
+func (sb *sandbox) processOptions(options ...common.SandboxOption) {
 	for _, opt := range options {
 		if opt != nil {
 			opt(sb)
@@ -284,7 +246,7 @@ func (sb *sandbox) Rename(name string) error {
 	return err
 }
 
-func (sb *sandbox) Refresh(options ...SandboxOption) error {
+func (sb *sandbox) Refresh(options ...common.SandboxOption) error {
 	// Store connected endpoints
 	epList := sb.getConnectedEndpoints()
 
@@ -334,11 +296,11 @@ func (sb *sandbox) UnmarshalJSON(b []byte) (err error) {
 	return nil
 }
 
-func (sb *sandbox) Endpoints() []Endpoint {
+func (sb *sandbox) Endpoints() []common.Endpoint {
 	sb.Lock()
 	defer sb.Unlock()
 
-	endpoints := make([]Endpoint, len(sb.endpoints))
+	endpoints := make([]common.Endpoint, len(sb.endpoints))
 	for i, ep := range sb.endpoints {
 		endpoints[i] = ep
 	}
@@ -969,104 +931,156 @@ func (sb *sandbox) hasPortConfigs() bool {
 
 // OptionHostname function returns an option setter for hostname option to
 // be passed to NewSandbox method.
-func OptionHostname(name string) SandboxOption {
-	return func(sb *sandbox) {
+func OptionHostname(name string) common.SandboxOption {
+	return func(s common.Sandbox) {
+		sb, ok := s.(*sandbox)
+		if !ok {
+			return
+		}
 		sb.config.hostName = name
 	}
 }
 
 // OptionDomainname function returns an option setter for domainname option to
 // be passed to NewSandbox method.
-func OptionDomainname(name string) SandboxOption {
-	return func(sb *sandbox) {
+func OptionDomainname(name string) common.SandboxOption {
+	return func(s common.Sandbox) {
+		sb, ok := s.(*sandbox)
+		if !ok {
+			return
+		}
 		sb.config.domainName = name
 	}
 }
 
 // OptionHostsPath function returns an option setter for hostspath option to
 // be passed to NewSandbox method.
-func OptionHostsPath(path string) SandboxOption {
-	return func(sb *sandbox) {
+func OptionHostsPath(path string) common.SandboxOption {
+	return func(s common.Sandbox) {
+		sb, ok := s.(*sandbox)
+		if !ok {
+			return
+		}
 		sb.config.hostsPath = path
 	}
 }
 
 // OptionOriginHostsPath function returns an option setter for origin hosts file path
 // to be passed to NewSandbox method.
-func OptionOriginHostsPath(path string) SandboxOption {
-	return func(sb *sandbox) {
+func OptionOriginHostsPath(path string) common.SandboxOption {
+	return func(s common.Sandbox) {
+		sb, ok := s.(*sandbox)
+		if !ok {
+			return
+		}
 		sb.config.originHostsPath = path
 	}
 }
 
 // OptionExtraHost function returns an option setter for extra /etc/hosts options
 // which is a name and IP as strings.
-func OptionExtraHost(name string, IP string) SandboxOption {
-	return func(sb *sandbox) {
+func OptionExtraHost(name string, IP string) common.SandboxOption {
+	return func(s common.Sandbox) {
+		sb, ok := s.(*sandbox)
+		if !ok {
+			return
+		}
 		sb.config.extraHosts = append(sb.config.extraHosts, extraHost{name: name, IP: IP})
 	}
 }
 
 // OptionParentUpdate function returns an option setter for parent container
 // which needs to update the IP address for the linked container.
-func OptionParentUpdate(cid string, name, ip string) SandboxOption {
-	return func(sb *sandbox) {
+func OptionParentUpdate(cid string, name, ip string) common.SandboxOption {
+	return func(s common.Sandbox) {
+		sb, ok := s.(*sandbox)
+		if !ok {
+			return
+		}
 		sb.config.parentUpdates = append(sb.config.parentUpdates, parentUpdate{cid: cid, name: name, ip: ip})
 	}
 }
 
 // OptionResolvConfPath function returns an option setter for resolvconfpath option to
 // be passed to net container methods.
-func OptionResolvConfPath(path string) SandboxOption {
-	return func(sb *sandbox) {
+func OptionResolvConfPath(path string) common.SandboxOption {
+	return func(s common.Sandbox) {
+		sb, ok := s.(*sandbox)
+		if !ok {
+			return
+		}
 		sb.config.resolvConfPath = path
 	}
 }
 
 // OptionOriginResolvConfPath function returns an option setter to set the path to the
 // origin resolv.conf file to be passed to net container methods.
-func OptionOriginResolvConfPath(path string) SandboxOption {
-	return func(sb *sandbox) {
+func OptionOriginResolvConfPath(path string) common.SandboxOption {
+	return func(s common.Sandbox) {
+		sb, ok := s.(*sandbox)
+		if !ok {
+			return
+		}
 		sb.config.originResolvConfPath = path
 	}
 }
 
 // OptionDNS function returns an option setter for dns entry option to
 // be passed to container Create method.
-func OptionDNS(dns string) SandboxOption {
-	return func(sb *sandbox) {
+func OptionDNS(dns string) common.SandboxOption {
+	return func(s common.Sandbox) {
+		sb, ok := s.(*sandbox)
+		if !ok {
+			return
+		}
 		sb.config.dnsList = append(sb.config.dnsList, dns)
 	}
 }
 
 // OptionDNSSearch function returns an option setter for dns search entry option to
 // be passed to container Create method.
-func OptionDNSSearch(search string) SandboxOption {
-	return func(sb *sandbox) {
+func OptionDNSSearch(search string) common.SandboxOption {
+	return func(s common.Sandbox) {
+		sb, ok := s.(*sandbox)
+		if !ok {
+			return
+		}
 		sb.config.dnsSearchList = append(sb.config.dnsSearchList, search)
 	}
 }
 
 // OptionDNSOptions function returns an option setter for dns options entry option to
 // be passed to container Create method.
-func OptionDNSOptions(options string) SandboxOption {
-	return func(sb *sandbox) {
+func OptionDNSOptions(options string) common.SandboxOption {
+	return func(s common.Sandbox) {
+		sb, ok := s.(*sandbox)
+		if !ok {
+			return
+		}
 		sb.config.dnsOptionsList = append(sb.config.dnsOptionsList, options)
 	}
 }
 
 // OptionUseDefaultSandbox function returns an option setter for using default sandbox to
 // be passed to container Create method.
-func OptionUseDefaultSandbox() SandboxOption {
-	return func(sb *sandbox) {
+func OptionUseDefaultSandbox() common.SandboxOption {
+	return func(s common.Sandbox) {
+		sb, ok := s.(*sandbox)
+		if !ok {
+			return
+		}
 		sb.config.useDefaultSandBox = true
 	}
 }
 
 // OptionUseExternalKey function returns an option setter for using provided namespace
 // instead of creating one.
-func OptionUseExternalKey() SandboxOption {
-	return func(sb *sandbox) {
+func OptionUseExternalKey() common.SandboxOption {
+	return func(s common.Sandbox) {
+		sb, ok := s.(*sandbox)
+		if !ok {
+			return
+		}
 		sb.config.useExternalKey = true
 	}
 }
@@ -1074,8 +1088,12 @@ func OptionUseExternalKey() SandboxOption {
 // OptionGeneric function returns an option setter for Generic configuration
 // that is not managed by libNetwork but can be used by the Drivers during the call to
 // net container creation method. Container Labels are a good example.
-func OptionGeneric(generic map[string]interface{}) SandboxOption {
-	return func(sb *sandbox) {
+func OptionGeneric(generic map[string]interface{}) common.SandboxOption {
+	return func(s common.Sandbox) {
+		sb, ok := s.(*sandbox)
+		if !ok {
+			return
+		}
 		if sb.config.generic == nil {
 			sb.config.generic = make(map[string]interface{}, len(generic))
 		}
@@ -1087,8 +1105,12 @@ func OptionGeneric(generic map[string]interface{}) SandboxOption {
 
 // OptionExposedPorts function returns an option setter for the container exposed
 // ports option to be passed to container Create method.
-func OptionExposedPorts(exposedPorts []types.TransportPort) SandboxOption {
-	return func(sb *sandbox) {
+func OptionExposedPorts(exposedPorts []types.TransportPort) common.SandboxOption {
+	return func(s common.Sandbox) {
+		sb, ok := s.(*sandbox)
+		if !ok {
+			return
+		}
 		if sb.config.generic == nil {
 			sb.config.generic = make(map[string]interface{})
 		}
@@ -1103,8 +1125,12 @@ func OptionExposedPorts(exposedPorts []types.TransportPort) SandboxOption {
 
 // OptionPortMapping function returns an option setter for the mapping
 // ports option to be passed to container Create method.
-func OptionPortMapping(portBindings []types.PortBinding) SandboxOption {
-	return func(sb *sandbox) {
+func OptionPortMapping(portBindings []types.PortBinding) common.SandboxOption {
+	return func(s common.Sandbox) {
+		sb, ok := s.(*sandbox)
+		if !ok {
+			return
+		}
 		if sb.config.generic == nil {
 			sb.config.generic = make(map[string]interface{})
 		}
@@ -1117,9 +1143,13 @@ func OptionPortMapping(portBindings []types.PortBinding) SandboxOption {
 
 // OptionIngress function returns an option setter for marking a
 // sandbox as the controller's ingress sandbox.
-func OptionIngress() SandboxOption {
-	return func(sb *sandbox) {
-		sb.ingress = true
+func OptionIngress() common.SandboxOption {
+	return func(sb common.Sandbox) {
+		o, ok := sb.(*sandbox)
+		if !ok {
+			return
+		}
+		o.ingress = true
 	}
 }
 

@@ -22,6 +22,7 @@ import (
 	"github.com/docker/libnetwork/options"
 	"github.com/docker/libnetwork/testutils"
 	"github.com/docker/libnetwork/types"
+	"github.com/docker/libnetwork/types/common"
 	"github.com/vishvananda/netns"
 )
 
@@ -71,7 +72,7 @@ func createController() error {
 	return nil
 }
 
-func createTestNetwork(networkType, networkName string, netOption options.Generic, ipamV4Configs, ipamV6Configs []*libnetwork.IpamConf) (libnetwork.Network, error) {
+func createTestNetwork(networkType, networkName string, netOption options.Generic, ipamV4Configs, ipamV6Configs []*common.IpamConf) (common.Network, error) {
 	return controller.NewNetwork(networkType, networkName, "",
 		libnetwork.NetworkOptionGeneric(netOption),
 		libnetwork.NetworkOptionIpam(ipamapi.DefaultIPAM, "", ipamV4Configs, ipamV6Configs, nil))
@@ -153,8 +154,8 @@ func TestBridge(t *testing.T) {
 			"EnableIPMasquerade": true,
 		},
 	}
-	ipamV4ConfList := []*libnetwork.IpamConf{{PreferredPool: "192.168.100.0/24", Gateway: "192.168.100.1"}}
-	ipamV6ConfList := []*libnetwork.IpamConf{{PreferredPool: "fe90::/64", Gateway: "fe90::22"}}
+	ipamV4ConfList := []*common.IpamConf{{PreferredPool: "192.168.100.0/24", Gateway: "192.168.100.1"}}
+	ipamV6ConfList := []*common.IpamConf{{PreferredPool: "fe90::/64", Gateway: "fe90::22"}}
 
 	network, err := createTestNetwork(bridgeNetType, "testnetwork", netOption, ipamV4ConfList, ipamV6ConfList)
 	if err != nil {
@@ -402,7 +403,7 @@ func TestUnknownEndpoint(t *testing.T) {
 	option := options.Generic{
 		netlabel.GenericData: netOption,
 	}
-	ipamV4ConfList := []*libnetwork.IpamConf{{PreferredPool: "192.168.100.0/24"}}
+	ipamV4ConfList := []*common.IpamConf{{PreferredPool: "192.168.100.0/24"}}
 
 	network, err := createTestNetwork(bridgeNetType, "testnetwork", option, ipamV4ConfList, nil)
 	if err != nil {
@@ -489,8 +490,8 @@ func TestNetworkEndpointsWalkers(t *testing.T) {
 
 	// Test Endpoint Walk method
 	var epName string
-	var epWanted libnetwork.Endpoint
-	wlk := func(ep libnetwork.Endpoint) bool {
+	var epWanted common.Endpoint
+	wlk := func(ep common.Endpoint) bool {
 		if ep.Name() == epName {
 			epWanted = ep
 			return true
@@ -534,8 +535,8 @@ func TestNetworkEndpointsWalkers(t *testing.T) {
 
 	// Test Network Walk method
 	var netName string
-	var netWanted libnetwork.Network
-	nwWlk := func(nw libnetwork.Network) bool {
+	var netWanted common.Network
+	nwWlk := func(nw common.Network) bool {
 		if nw.Name() == netName {
 			netWanted = nw
 			return true
@@ -823,7 +824,7 @@ func (f *fakeSandbox) Statistics() (map[string]*types.InterfaceStatistics, error
 	return nil, nil
 }
 
-func (f *fakeSandbox) Refresh(opts ...libnetwork.SandboxOption) error {
+func (f *fakeSandbox) Refresh(opts ...common.SandboxOption) error {
 	return nil
 }
 
@@ -851,7 +852,7 @@ func (f *fakeSandbox) ResolveService(name string) ([]*net.SRV, []net.IP) {
 	return nil, nil
 }
 
-func (f *fakeSandbox) Endpoints() []libnetwork.Endpoint {
+func (f *fakeSandbox) Endpoints() []common.Endpoint {
 	return nil
 }
 
@@ -1315,7 +1316,7 @@ var (
 	done   = make(chan chan struct{}, numThreads-1)
 	origns = netns.None()
 	testns = netns.None()
-	sboxes = make([]libnetwork.Sandbox, numThreads)
+	sboxes = make([]common.Sandbox, numThreads)
 )
 
 const (

@@ -18,66 +18,11 @@ import (
 	"github.com/docker/libnetwork/netlabel"
 	"github.com/docker/libnetwork/netutils"
 	"github.com/docker/libnetwork/networkdb"
+	networkdbtypes "github.com/docker/libnetwork/networkdb/types"
 	"github.com/docker/libnetwork/options"
 	"github.com/docker/libnetwork/types"
+	"github.com/docker/libnetwork/types/common"
 )
-
-// A Network represents a logical connectivity zone that containers may
-// join using the Link method. A Network is managed by a specific driver.
-type Network interface {
-	// A user chosen name for this network.
-	Name() string
-
-	// A system generated id for this network.
-	ID() string
-
-	// The type of network, which corresponds to its managing driver.
-	Type() string
-
-	// Create a new endpoint to this network symbolically identified by the
-	// specified unique name. The options parameter carries driver specific options.
-	CreateEndpoint(name string, options ...EndpointOption) (Endpoint, error)
-
-	// Delete the network.
-	Delete() error
-
-	// Endpoints returns the list of Endpoint(s) in this network.
-	Endpoints() []Endpoint
-
-	// WalkEndpoints uses the provided function to walk the Endpoints
-	WalkEndpoints(walker EndpointWalker)
-
-	// EndpointByName returns the Endpoint which has the passed name. If not found, the error ErrNoSuchEndpoint is returned.
-	EndpointByName(name string) (Endpoint, error)
-
-	// EndpointByID returns the Endpoint which has the passed id. If not found, the error ErrNoSuchEndpoint is returned.
-	EndpointByID(id string) (Endpoint, error)
-
-	// Return certain operational data belonging to this network
-	Info() NetworkInfo
-}
-
-// NetworkInfo returns some configuration and operational information about the network
-type NetworkInfo interface {
-	IpamConfig() (string, map[string]string, []*IpamConf, []*IpamConf)
-	IpamInfo() ([]*IpamInfo, []*IpamInfo)
-	DriverOptions() map[string]string
-	Scope() string
-	IPv6Enabled() bool
-	Internal() bool
-	Labels() map[string]string
-	Dynamic() bool
-	Created() time.Time
-	// Peers returns a slice of PeerInfo structures which has the information about the peer
-	// nodes participating in the same overlay network. This is currently the per-network
-	// gossip cluster. For non-dynamic overlay networks and bridge networks it returns an
-	// empty slice
-	Peers() []networkdb.PeerInfo
-}
-
-// EndpointWalker is a client provided function which will be used to walk the Endpoints.
-// When the function returns true, the walk will stop.
-type EndpointWalker func(ep Endpoint) bool
 
 type svcInfo struct {
 	svcMap     map[string][]net.IP
@@ -99,76 +44,6 @@ type servicePorts struct {
 	target   []serviceTarget
 }
 
-// IpamConf contains all the ipam related configurations for a network
-type IpamConf struct {
-	// The master address pool for containers and network interfaces
-	PreferredPool string
-	// A subset of the master pool. If specified,
-	// this becomes the container pool
-	SubPool string
-	// Preferred Network Gateway address (optional)
-	Gateway string
-	// Auxiliary addresses for network driver. Must be within the master pool.
-	// libnetwork will reserve them if they fall into the container pool
-	AuxAddresses map[string]string
-}
-
-// Validate checks whether the configuration is valid
-func (c *IpamConf) Validate() error {
-	if c.Gateway != "" && nil == net.ParseIP(c.Gateway) {
-		return types.BadRequestErrorf("invalid gateway address %s in Ipam configuration", c.Gateway)
-	}
-	return nil
-}
-
-// IpamInfo contains all the ipam related operational info for a network
-type IpamInfo struct {
-	PoolID string
-	Meta   map[string]string
-	driverapi.IPAMData
-}
-
-// MarshalJSON encodes IpamInfo into json message
-func (i *IpamInfo) MarshalJSON() ([]byte, error) {
-	m := map[string]interface{}{
-		"PoolID": i.PoolID,
-	}
-	v, err := json.Marshal(&i.IPAMData)
-	if err != nil {
-		return nil, err
-	}
-	m["IPAMData"] = string(v)
-
-	if i.Meta != nil {
-		m["Meta"] = i.Meta
-	}
-	return json.Marshal(m)
-}
-
-// UnmarshalJSON decodes json message into PoolData
-func (i *IpamInfo) UnmarshalJSON(data []byte) error {
-	var (
-		m   map[string]interface{}
-		err error
-	)
-	if err = json.Unmarshal(data, &m); err != nil {
-		return err
-	}
-	i.PoolID = m["PoolID"].(string)
-	if v, ok := m["Meta"]; ok {
-		b, _ := json.Marshal(v)
-		if err = json.Unmarshal(b, &i.Meta); err != nil {
-			return err
-		}
-	}
-	if v, ok := m["IPAMData"]; ok {
-		if err = json.Unmarshal([]byte(v.(string)), &i.IPAMData); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 type network struct {
 	ctrlr        *controller
 	name         string
@@ -180,10 +55,10 @@ type network struct {
 	ipamType     string
 	ipamOptions  map[string]string
 	addrSpace    string
-	ipamV4Config []*IpamConf
-	ipamV6Config []*IpamConf
-	ipamV4Info   []*IpamInfo
-	ipamV6Info   []*IpamInfo
+	ipamV4Config []*common.IpamConf
+	ipamV6Config []*common.IpamConf
+	ipamV4Info   []*common.IpamInfo
+	ipamV6Info   []*common.IpamInfo
 	enableIPv6   bool
 	postIPv6     bool
 	epCnt        *endpointCnt
@@ -291,44 +166,6 @@ func (n *network) New() datastore.KVObject {
 	}
 }
 
-// CopyTo deep copies to the destination IpamConfig
-func (c *IpamConf) CopyTo(dstC *IpamConf) error {
-	dstC.PreferredPool = c.PreferredPool
-	dstC.SubPool = c.SubPool
-	dstC.Gateway = c.Gateway
-	if c.AuxAddresses != nil {
-		dstC.AuxAddresses = make(map[string]string, len(c.AuxAddresses))
-		for k, v := range c.AuxAddresses {
-			dstC.AuxAddresses[k] = v
-		}
-	}
-	return nil
-}
-
-// CopyTo deep copies to the destination IpamInfo
-func (i *IpamInfo) CopyTo(dstI *IpamInfo) error {
-	dstI.PoolID = i.PoolID
-	if i.Meta != nil {
-		dstI.Meta = make(map[string]string)
-		for k, v := range i.Meta {
-			dstI.Meta[k] = v
-		}
-	}
-
-	dstI.AddressSpace = i.AddressSpace
-	dstI.Pool = types.GetIPNetCopy(i.Pool)
-	dstI.Gateway = types.GetIPNetCopy(i.Gateway)
-
-	if i.AuxAddresses != nil {
-		dstI.AuxAddresses = make(map[string]*net.IPNet)
-		for k, v := range i.AuxAddresses {
-			dstI.AuxAddresses[k] = types.GetIPNetCopy(v)
-		}
-	}
-
-	return nil
-}
-
 func (n *network) CopyTo(o datastore.KVObject) error {
 	n.Lock()
 	defer n.Unlock()
@@ -367,25 +204,25 @@ func (n *network) CopyTo(o datastore.KVObject) error {
 	}
 
 	for _, v4conf := range n.ipamV4Config {
-		dstV4Conf := &IpamConf{}
+		dstV4Conf := &common.IpamConf{}
 		v4conf.CopyTo(dstV4Conf)
 		dstN.ipamV4Config = append(dstN.ipamV4Config, dstV4Conf)
 	}
 
 	for _, v4info := range n.ipamV4Info {
-		dstV4Info := &IpamInfo{}
+		dstV4Info := &common.IpamInfo{}
 		v4info.CopyTo(dstV4Info)
 		dstN.ipamV4Info = append(dstN.ipamV4Info, dstV4Info)
 	}
 
 	for _, v6conf := range n.ipamV6Config {
-		dstV6Conf := &IpamConf{}
+		dstV6Conf := &common.IpamConf{}
 		v6conf.CopyTo(dstV6Conf)
 		dstN.ipamV6Config = append(dstN.ipamV6Config, dstV6Conf)
 	}
 
 	for _, v6info := range n.ipamV6Info {
-		dstV6Info := &IpamInfo{}
+		dstV6Info := &common.IpamInfo{}
 		v6info.CopyTo(dstV6Info)
 		dstN.ipamV6Info = append(dstN.ipamV6Info, dstV6Info)
 	}
@@ -629,7 +466,7 @@ func NetworkOptionInternalNetwork() NetworkOption {
 }
 
 // NetworkOptionIpam function returns an option setter for the ipam configuration for this network
-func NetworkOptionIpam(ipamDriver string, addrSpace string, ipV4 []*IpamConf, ipV6 []*IpamConf, opts map[string]string) NetworkOption {
+func NetworkOptionIpam(ipamDriver string, addrSpace string, ipV4 []*common.IpamConf, ipV6 []*common.IpamConf, opts map[string]string) NetworkOption {
 	return func(n *network) {
 		if ipamDriver != "" {
 			n.ipamType = ipamDriver
@@ -855,7 +692,7 @@ func (n *network) addEndpoint(ep *endpoint) error {
 	return nil
 }
 
-func (n *network) CreateEndpoint(name string, options ...EndpointOption) (Endpoint, error) {
+func (n *network) CreateEndpoint(name string, options ...common.EndpointOption) (common.Endpoint, error) {
 	var err error
 
 	if err = config.ValidateName(name); err != nil {
@@ -959,8 +796,8 @@ func (n *network) CreateEndpoint(name string, options ...EndpointOption) (Endpoi
 	return ep, nil
 }
 
-func (n *network) Endpoints() []Endpoint {
-	var list []Endpoint
+func (n *network) Endpoints() []common.Endpoint {
+	var list []common.Endpoint
 
 	endpoints, err := n.getEndpointsFromStore()
 	if err != nil {
@@ -974,7 +811,7 @@ func (n *network) Endpoints() []Endpoint {
 	return list
 }
 
-func (n *network) WalkEndpoints(walker EndpointWalker) {
+func (n *network) WalkEndpoints(walker common.EndpointWalker) {
 	for _, e := range n.Endpoints() {
 		if walker(e) {
 			return
@@ -982,13 +819,13 @@ func (n *network) WalkEndpoints(walker EndpointWalker) {
 	}
 }
 
-func (n *network) EndpointByName(name string) (Endpoint, error) {
+func (n *network) EndpointByName(name string) (common.Endpoint, error) {
 	if name == "" {
 		return nil, ErrInvalidName(name)
 	}
-	var e Endpoint
+	var e common.Endpoint
 
-	s := func(current Endpoint) bool {
+	s := func(current common.Endpoint) bool {
 		if current.Name() == name {
 			e = current
 			return true
@@ -1005,7 +842,7 @@ func (n *network) EndpointByName(name string) (Endpoint, error) {
 	return e, nil
 }
 
-func (n *network) EndpointByID(id string) (Endpoint, error) {
+func (n *network) EndpointByID(id string) (common.Endpoint, error) {
 	if id == "" {
 		return nil, ErrInvalidID(id)
 	}
@@ -1272,8 +1109,8 @@ func (n *network) requestPoolHelper(ipam ipamapi.Ipam, addressSpace, preferredPo
 
 func (n *network) ipamAllocateVersion(ipVer int, ipam ipamapi.Ipam) error {
 	var (
-		cfgList  *[]*IpamConf
-		infoList *[]*IpamInfo
+		cfgList  *[]*common.IpamConf
+		infoList *[]*common.IpamInfo
 		err      error
 	)
 
@@ -1292,10 +1129,10 @@ func (n *network) ipamAllocateVersion(ipVer int, ipam ipamapi.Ipam) error {
 		if ipVer == 6 {
 			return nil
 		}
-		*cfgList = []*IpamConf{{}}
+		*cfgList = []*common.IpamConf{{}}
 	}
 
-	*infoList = make([]*IpamInfo, len(*cfgList))
+	*infoList = make([]*common.IpamInfo, len(*cfgList))
 
 	logrus.Debugf("Allocating IPv%d pools for network %s (%s)", ipVer, n.Name(), n.ID())
 
@@ -1303,7 +1140,7 @@ func (n *network) ipamAllocateVersion(ipVer int, ipam ipamapi.Ipam) error {
 		if err = cfg.Validate(); err != nil {
 			return err
 		}
-		d := &IpamInfo{}
+		d := &common.IpamInfo{}
 		(*infoList)[i] = d
 
 		d.AddressSpace = n.addrSpace
@@ -1375,7 +1212,7 @@ func (n *network) ipamRelease() {
 }
 
 func (n *network) ipamReleaseVersion(ipVer int, ipam ipamapi.Ipam) {
-	var infoList *[]*IpamInfo
+	var infoList *[]*common.IpamInfo
 
 	switch ipVer {
 	case 4:
@@ -1416,8 +1253,8 @@ func (n *network) ipamReleaseVersion(ipVer int, ipam ipamapi.Ipam) {
 	*infoList = nil
 }
 
-func (n *network) getIPInfo(ipVer int) []*IpamInfo {
-	var info []*IpamInfo
+func (n *network) getIPInfo(ipVer int) []*common.IpamInfo {
+	var info []*common.IpamInfo
 	switch ipVer {
 	case 4:
 		info = n.ipamV4Info
@@ -1426,7 +1263,7 @@ func (n *network) getIPInfo(ipVer int) []*IpamInfo {
 	default:
 		return nil
 	}
-	l := make([]*IpamInfo, 0, len(info))
+	l := make([]*common.IpamInfo, 0, len(info))
 	n.Lock()
 	for _, d := range info {
 		l = append(l, d)
@@ -1436,7 +1273,7 @@ func (n *network) getIPInfo(ipVer int) []*IpamInfo {
 }
 
 func (n *network) getIPData(ipVer int) []driverapi.IPAMData {
-	var info []*IpamInfo
+	var info []*common.IpamInfo
 	switch ipVer {
 	case 4:
 		info = n.ipamV4Info
@@ -1465,13 +1302,13 @@ func (n *network) deriveAddressSpace() (string, error) {
 	return local, nil
 }
 
-func (n *network) Info() NetworkInfo {
+func (n *network) Info() common.NetworkInfo {
 	return n
 }
 
-func (n *network) Peers() []networkdb.PeerInfo {
+func (n *network) Peers() []networkdbtypes.PeerInfo {
 	if !n.Dynamic() {
-		return []networkdb.PeerInfo{}
+		return []networkdbtypes.PeerInfo{}
 	}
 
 	var nDB *networkdb.NetworkDB
@@ -1484,7 +1321,7 @@ func (n *network) Peers() []networkdb.PeerInfo {
 	if nDB != nil {
 		return n.ctrlr.agent.networkDB.Peers(n.id)
 	}
-	return []networkdb.PeerInfo{}
+	return []networkdbtypes.PeerInfo{}
 }
 
 func (n *network) DriverOptions() map[string]string {
@@ -1504,21 +1341,21 @@ func (n *network) Scope() string {
 	return n.scope
 }
 
-func (n *network) IpamConfig() (string, map[string]string, []*IpamConf, []*IpamConf) {
+func (n *network) IpamConfig() (string, map[string]string, []*common.IpamConf, []*common.IpamConf) {
 	n.Lock()
 	defer n.Unlock()
 
-	v4L := make([]*IpamConf, len(n.ipamV4Config))
-	v6L := make([]*IpamConf, len(n.ipamV6Config))
+	v4L := make([]*common.IpamConf, len(n.ipamV4Config))
+	v6L := make([]*common.IpamConf, len(n.ipamV6Config))
 
 	for i, c := range n.ipamV4Config {
-		cc := &IpamConf{}
+		cc := &common.IpamConf{}
 		c.CopyTo(cc)
 		v4L[i] = cc
 	}
 
 	for i, c := range n.ipamV6Config {
-		cc := &IpamConf{}
+		cc := &common.IpamConf{}
 		c.CopyTo(cc)
 		v6L[i] = cc
 	}
@@ -1526,21 +1363,21 @@ func (n *network) IpamConfig() (string, map[string]string, []*IpamConf, []*IpamC
 	return n.ipamType, n.ipamOptions, v4L, v6L
 }
 
-func (n *network) IpamInfo() ([]*IpamInfo, []*IpamInfo) {
+func (n *network) IpamInfo() ([]*common.IpamInfo, []*common.IpamInfo) {
 	n.Lock()
 	defer n.Unlock()
 
-	v4Info := make([]*IpamInfo, len(n.ipamV4Info))
-	v6Info := make([]*IpamInfo, len(n.ipamV6Info))
+	v4Info := make([]*common.IpamInfo, len(n.ipamV4Info))
+	v6Info := make([]*common.IpamInfo, len(n.ipamV6Info))
 
 	for i, info := range n.ipamV4Info {
-		ic := &IpamInfo{}
+		ic := &common.IpamInfo{}
 		info.CopyTo(ic)
 		v4Info[i] = ic
 	}
 
 	for i, info := range n.ipamV6Info {
-		ic := &IpamInfo{}
+		ic := &common.IpamInfo{}
 		info.CopyTo(ic)
 		v6Info[i] = ic
 	}
