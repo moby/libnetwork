@@ -32,8 +32,8 @@ build: ${build_image}.created
 
 build-local:
 	@mkdir -p "bin"
-	$(shell which godep) go build -tags experimental -o "bin/dnet" ./cmd/dnet
-	$(shell which godep) go build -o "bin/docker-proxy" ./cmd/proxy
+	$(shell command -v godep) go build -tags experimental -o "bin/dnet" ./cmd/dnet
+	$(shell command -v godep) go build -o "bin/docker-proxy" ./cmd/proxy
 
 clean:
 	@if [ -d bin ]; then \
@@ -50,8 +50,8 @@ cross: ${build_image}.created
 	done
 
 cross-local:
-	$(shell which godep) go build -o "bin/dnet-$$GOOS-$$GOARCH" ./cmd/dnet
-	$(shell which godep) go build -o "bin/docker-proxy-$$GOOS-$$GOARCH" ./cmd/proxy
+	$(shell command -v godep) go build -o "bin/dnet-$$GOOS-$$GOARCH" ./cmd/dnet
+	$(shell command -v godep) go build -o "bin/docker-proxy-$$GOOS-$$GOARCH" ./cmd/proxy
 
 check: ${build_image}.created
 	@${docker} ./wrapmake.sh check-local
@@ -107,7 +107,7 @@ run-tests:
 	    if ls $$dir/*.go &> /dev/null; then \
 		pushd . &> /dev/null ; \
 		cd $$dir ; \
-		$(shell which godep) go test ${INSIDECONTAINER} -test.parallel 5 -test.v -covermode=count -coverprofile=./profile.tmp ; \
+		$(shell command -v godep) go test ${INSIDECONTAINER} -test.parallel 5 -test.v -covermode=count -coverprofile=./profile.tmp ; \
 		ret=$$? ;\
 		if [ $$ret -ne 0 ]; then exit $$ret; fi ;\
 		popd &> /dev/null; \
