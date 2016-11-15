@@ -10,6 +10,7 @@ import (
 	"github.com/docker/libnetwork/datastore"
 	"github.com/docker/libnetwork/netlabel"
 	"github.com/docker/libnetwork/options"
+	"github.com/docker/libnetwork/types/common"
 )
 
 func testZooKeeperBackend(t *testing.T) {
@@ -49,7 +50,7 @@ func testLocalBackend(t *testing.T, provider, url string, storeConfig *store.Con
 	if err != nil {
 		t.Fatalf("Error creating default \"host\" network: %v", err)
 	}
-	ep, err := nw.CreateEndpoint("newendpoint", []EndpointOption{}...)
+	ep, err := nw.CreateEndpoint("newendpoint", []common.EndpointOption{}...)
 	if err != nil {
 		t.Fatalf("Error creating endpoint: %v", err)
 	}

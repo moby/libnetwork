@@ -68,6 +68,7 @@ import (
 	"github.com/docker/libnetwork/netlabel"
 	"github.com/docker/libnetwork/osl"
 	"github.com/docker/libnetwork/types"
+	"github.com/docker/libnetwork/types/common"
 )
 
 // NetworkController provides the interface for controller instance which manages
@@ -83,31 +84,31 @@ type NetworkController interface {
 	Config() config.Config
 
 	// Create a new network. The options parameter carries network specific options.
-	NewNetwork(networkType, name string, id string, options ...NetworkOption) (Network, error)
+	NewNetwork(networkType, name string, id string, options ...NetworkOption) (common.Network, error)
 
 	// Networks returns the list of Network(s) managed by this controller.
-	Networks() []Network
+	Networks() []common.Network
 
 	// WalkNetworks uses the provided function to walk the Network(s) managed by this controller.
 	WalkNetworks(walker NetworkWalker)
 
 	// NetworkByName returns the Network which has the passed name. If not found, the error ErrNoSuchNetwork is returned.
-	NetworkByName(name string) (Network, error)
+	NetworkByName(name string) (common.Network, error)
 
 	// NetworkByID returns the Network which has the passed id. If not found, the error ErrNoSuchNetwork is returned.
-	NetworkByID(id string) (Network, error)
+	NetworkByID(id string) (common.Network, error)
 
 	// NewSandbox creates a new network sandbox for the passed container id
-	NewSandbox(containerID string, options ...SandboxOption) (Sandbox, error)
+	NewSandbox(containerID string, options ...common.SandboxOption) (common.Sandbox, error)
 
 	// Sandboxes returns the list of Sandbox(s) managed by this controller.
-	Sandboxes() []Sandbox
+	Sandboxes() []common.Sandbox
 
 	// WalkSandboxes uses the provided function to walk the Sandbox(s) managed by this controller.
 	WalkSandboxes(walker SandboxWalker)
 
 	// SandboxByID returns the Sandbox which has the passed id. If not found, a types.NotFoundError is returned.
-	SandboxByID(id string) (Sandbox, error)
+	SandboxByID(id string) (common.Sandbox, error)
 
 	// SandboxDestroy destroys a sandbox given a container ID
 	SandboxDestroy(id string) error
@@ -130,11 +131,11 @@ type NetworkController interface {
 
 // NetworkWalker is a client provided function which will be used to walk the Networks.
 // When the function returns true, the walk will stop.
-type NetworkWalker func(nw Network) bool
+type NetworkWalker func(nw common.Network) bool
 
 // SandboxWalker is a client provided function which will be used to walk the Sandboxes.
 // When the function returns true, the walk will stop.
-type SandboxWalker func(sb Sandbox) bool
+type SandboxWalker func(sb common.Sandbox) bool
 
 type sandboxTable map[string]*sandbox
 
@@ -616,7 +617,7 @@ func (c *controller) RegisterDriver(networkType string, driver driverapi.Driver,
 
 // NewNetwork creates a new network of the specified network type. The options
 // are network specific and modeled in a generic way.
-func (c *controller) NewNetwork(networkType, name string, id string, options ...NetworkOption) (Network, error) {
+func (c *controller) NewNetwork(networkType, name string, id string, options ...NetworkOption) (common.Network, error) {
 	if id != "" {
 		c.networkLocker.Lock(id)
 		defer c.networkLocker.Unlock(id)
@@ -720,7 +721,7 @@ func (c *controller) NewNetwork(networkType, name string, id string, options ...
 	return network, nil
 }
 
-var joinCluster NetworkWalker = func(nw Network) bool {
+var joinCluster NetworkWalker = func(nw common.Network) bool {
 	n := nw.(*network)
 	if err := n.joinCluster(); err != nil {
 		logrus.Errorf("Failed to join network %s (%s) into agent cluster: %v", n.Name(), n.ID(), err)
@@ -744,10 +745,10 @@ func (c *controller) reservePools() {
 		autoIPv4 := (len(n.ipamV4Config) == 0 || (len(n.ipamV4Config) == 1 && n.ipamV4Config[0].PreferredPool == "")) && len(n.ipamV4Info) > 0
 		autoIPv6 := (len(n.ipamV6Config) == 0 || (len(n.ipamV6Config) == 1 && n.ipamV6Config[0].PreferredPool == "")) && len(n.ipamV6Info) > 0
 		if autoIPv4 {
-			n.ipamV4Config = []*IpamConf{{PreferredPool: n.ipamV4Info[0].Pool.String()}}
+			n.ipamV4Config = []*common.IpamConf{{PreferredPool: n.ipamV4Info[0].Pool.String()}}
 		}
 		if n.enableIPv6 && autoIPv6 {
-			n.ipamV6Config = []*IpamConf{{PreferredPool: n.ipamV6Info[0].Pool.String()}}
+			n.ipamV6Config = []*common.IpamConf{{PreferredPool: n.ipamV6Info[0].Pool.String()}}
 		}
 		// Account current network gateways
 		for i, c := range n.ipamV4Config {
@@ -811,8 +812,8 @@ func (c *controller) addNetwork(n *network) error {
 	return nil
 }
 
-func (c *controller) Networks() []Network {
-	var list []Network
+func (c *controller) Networks() []common.Network {
+	var list []common.Network
 
 	networks, err := c.getNetworksFromStore()
 	if err != nil {
@@ -837,13 +838,13 @@ func (c *controller) WalkNetworks(walker NetworkWalker) {
 	}
 }
 
-func (c *controller) NetworkByName(name string) (Network, error) {
+func (c *controller) NetworkByName(name string) (common.Network, error) {
 	if name == "" {
 		return nil, ErrInvalidName(name)
 	}
-	var n Network
+	var n common.Network
 
-	s := func(current Network) bool {
+	s := func(current common.Network) bool {
 		if current.Name() == name {
 			n = current
 			return true
@@ -860,7 +861,7 @@ func (c *controller) NetworkByName(name string) (Network, error) {
 	return n, nil
 }
 
-func (c *controller) NetworkByID(id string) (Network, error) {
+func (c *controller) NetworkByID(id string) (common.Network, error) {
 	if id == "" {
 		return nil, ErrInvalidID(id)
 	}
@@ -874,7 +875,7 @@ func (c *controller) NetworkByID(id string) (Network, error) {
 }
 
 // NewSandbox creates a new sandbox for the passed container id
-func (c *controller) NewSandbox(containerID string, options ...SandboxOption) (sBox Sandbox, err error) {
+func (c *controller) NewSandbox(containerID string, options ...common.SandboxOption) (sBox common.Sandbox, err error) {
 	if containerID == "" {
 		return nil, types.BadRequestErrorf("invalid container ID")
 	}
@@ -982,11 +983,11 @@ func (c *controller) NewSandbox(containerID string, options ...SandboxOption) (s
 	return sb, nil
 }
 
-func (c *controller) Sandboxes() []Sandbox {
+func (c *controller) Sandboxes() []common.Sandbox {
 	c.Lock()
 	defer c.Unlock()
 
-	list := make([]Sandbox, 0, len(c.sandboxes))
+	list := make([]common.Sandbox, 0, len(c.sandboxes))
 	for _, s := range c.sandboxes {
 		// Hide stub sandboxes from libnetwork users
 		if s.isStub {
@@ -1007,7 +1008,7 @@ func (c *controller) WalkSandboxes(walker SandboxWalker) {
 	}
 }
 
-func (c *controller) SandboxByID(id string) (Sandbox, error) {
+func (c *controller) SandboxByID(id string) (common.Sandbox, error) {
 	if id == "" {
 		return nil, ErrInvalidID(id)
 	}
@@ -1041,8 +1042,8 @@ func (c *controller) SandboxDestroy(id string) error {
 }
 
 // SandboxContainerWalker returns a Sandbox Walker function which looks for an existing Sandbox with the passed containerID
-func SandboxContainerWalker(out *Sandbox, containerID string) SandboxWalker {
-	return func(sb Sandbox) bool {
+func SandboxContainerWalker(out *common.Sandbox, containerID string) SandboxWalker {
+	return func(sb common.Sandbox) bool {
 		if sb.ContainerID() == containerID {
 			*out = sb
 			return true
@@ -1052,8 +1053,8 @@ func SandboxContainerWalker(out *Sandbox, containerID string) SandboxWalker {
 }
 
 // SandboxKeyWalker returns a Sandbox Walker function which looks for an existing Sandbox with the passed key
-func SandboxKeyWalker(out *Sandbox, key string) SandboxWalker {
-	return func(sb Sandbox) bool {
+func SandboxKeyWalker(out *common.Sandbox, key string) SandboxWalker {
+	return func(sb common.Sandbox) bool {
 		if sb.Key() == key {
 			*out = sb
 			return true

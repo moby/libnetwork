@@ -6,6 +6,7 @@ import (
 
 	"github.com/docker/libnetwork/netlabel"
 	"github.com/docker/libnetwork/types"
+	"github.com/docker/libnetwork/types/common"
 )
 
 const (
@@ -46,7 +47,7 @@ func (sb *sandbox) setupDefaultGW() error {
 		}
 	}
 
-	createOptions := []EndpointOption{CreateOptionAnonymous()}
+	createOptions := []common.EndpointOption{CreateOptionAnonymous()}
 
 	eplen := gwEPlen
 	if len(sb.containerID) < gwEPlen {
@@ -163,7 +164,7 @@ func (sb *sandbox) getEPwithoutGateway() *endpoint {
 
 // Looks for the default gw network and creates it if not there.
 // Parallel executions are serialized.
-func (c *controller) defaultGwNetwork() (Network, error) {
+func (c *controller) defaultGwNetwork() (common.Network, error) {
 	procGwNetwork <- true
 	defer func() { <-procGwNetwork }()
 

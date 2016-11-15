@@ -19,6 +19,7 @@ import (
 	"github.com/docker/libnetwork/iptables"
 	"github.com/docker/libnetwork/ipvs"
 	"github.com/docker/libnetwork/ns"
+	"github.com/docker/libnetwork/types/common"
 	"github.com/gogo/protobuf/proto"
 	"github.com/vishvananda/netlink/nl"
 	"github.com/vishvananda/netns"
@@ -119,7 +120,7 @@ func (sb *sandbox) populateLoadbalancers(ep *endpoint) {
 // this network. If needed add the service as well, as specified by
 // the addService bool.
 func (n *network) addLBBackend(ip, vip net.IP, fwMark uint32, ingressPorts []*PortConfig, addService bool) {
-	n.WalkEndpoints(func(e Endpoint) bool {
+	n.WalkEndpoints(func(e common.Endpoint) bool {
 		ep := e.(*endpoint)
 		if sb, ok := ep.getSandbox(); ok {
 			if !sb.isEndpointPopulated(ep) {
@@ -150,7 +151,7 @@ func (n *network) addLBBackend(ip, vip net.IP, fwMark uint32, ingressPorts []*Po
 // connection to this network. If needed remove the service entry as
 // well, as specified by the rmService bool.
 func (n *network) rmLBBackend(ip, vip net.IP, fwMark uint32, ingressPorts []*PortConfig, rmService bool) {
-	n.WalkEndpoints(func(e Endpoint) bool {
+	n.WalkEndpoints(func(e common.Endpoint) bool {
 		ep := e.(*endpoint)
 		if sb, ok := ep.getSandbox(); ok {
 			if !sb.isEndpointPopulated(ep) {

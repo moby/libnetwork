@@ -14,40 +14,8 @@ import (
 	"github.com/docker/libnetwork/netlabel"
 	"github.com/docker/libnetwork/options"
 	"github.com/docker/libnetwork/types"
+	"github.com/docker/libnetwork/types/common"
 )
-
-// Endpoint represents a logical connection between a network and a sandbox.
-type Endpoint interface {
-	// A system generated id for this endpoint.
-	ID() string
-
-	// Name returns the name of this endpoint.
-	Name() string
-
-	// Network returns the name of the network to which this endpoint is attached.
-	Network() string
-
-	// Join joins the sandbox to the endpoint and populates into the sandbox
-	// the network resources allocated for the endpoint.
-	Join(sandbox Sandbox, options ...EndpointOption) error
-
-	// Leave detaches the network resources populated in the sandbox.
-	Leave(sandbox Sandbox, options ...EndpointOption) error
-
-	// Return certain operational data belonging to this endpoint
-	Info() EndpointInfo
-
-	// DriverInfo returns a collection of driver operational data related to this endpoint retrieved from the driver
-	DriverInfo() (map[string]interface{}, error)
-
-	// Delete and detaches this endpoint from the network.
-	Delete(force bool) error
-}
-
-// EndpointOption is an option setter function type used to pass various options to Network
-// and Endpoint interfaces methods. The various setter functions of type EndpointOption are
-// provided by libnetwork, they look like <Create|Join|Leave>Option[...](...)
-type EndpointOption func(ep *endpoint)
 
 type endpoint struct {
 	name              string
@@ -385,7 +353,7 @@ func (ep *endpoint) Skip() bool {
 	return ep.getNetwork().Skip()
 }
 
-func (ep *endpoint) processOptions(options ...EndpointOption) {
+func (ep *endpoint) processOptions(options ...common.EndpointOption) {
 	ep.Lock()
 	defer ep.Unlock()
 
@@ -411,7 +379,7 @@ func (ep *endpoint) getNetworkFromStore() (*network, error) {
 	return ep.network.getController().getNetworkFromStore(ep.network.id)
 }
 
-func (ep *endpoint) Join(sbox Sandbox, options ...EndpointOption) error {
+func (ep *endpoint) Join(sbox common.Sandbox, options ...common.EndpointOption) error {
 	if sbox == nil {
 		return types.BadRequestErrorf("endpoint cannot be joined by nil container")
 	}
@@ -427,7 +395,7 @@ func (ep *endpoint) Join(sbox Sandbox, options ...EndpointOption) error {
 	return ep.sbJoin(sb, options...)
 }
 
-func (ep *endpoint) sbJoin(sb *sandbox, options ...EndpointOption) error {
+func (ep *endpoint) sbJoin(sb *sandbox, options ...common.EndpointOption) error {
 	n, err := ep.getNetworkFromStore()
 	if err != nil {
 		return fmt.Errorf("failed to get network from store during join: %v", err)
@@ -626,7 +594,7 @@ func (ep *endpoint) hasInterface(iName string) bool {
 	return ep.iface != nil && ep.iface.srcName == iName
 }
 
-func (ep *endpoint) Leave(sbox Sandbox, options ...EndpointOption) error {
+func (ep *endpoint) Leave(sbox common.Sandbox, options ...common.EndpointOption) error {
 	if sbox == nil || sbox.ID() == "" || sbox.Key() == "" {
 		return types.BadRequestErrorf("invalid Sandbox passed to enpoint leave: %v", sbox)
 	}
@@ -642,7 +610,7 @@ func (ep *endpoint) Leave(sbox Sandbox, options ...EndpointOption) error {
 	return ep.sbLeave(sb, false, options...)
 }
 
-func (ep *endpoint) sbLeave(sb *sandbox, force bool, options ...EndpointOption) error {
+func (ep *endpoint) sbLeave(sb *sandbox, force bool, options ...common.EndpointOption) error {
 	n, err := ep.getNetworkFromStore()
 	if err != nil {
 		return fmt.Errorf("failed to get network from store during leave: %v", err)
@@ -859,10 +827,15 @@ func (ep *endpoint) getFirstInterfaceAddress() net.IP {
 
 // EndpointOptionGeneric function returns an option setter for a Generic option defined
 // in a Dictionary of Key-Value pair
-func EndpointOptionGeneric(generic map[string]interface{}) EndpointOption {
-	return func(ep *endpoint) {
+func EndpointOptionGeneric(generic map[string]interface{}) common.EndpointOption {
+	return func(ep common.Endpoint) {
+		// TODO(cpuguy83): This interface is extremely weird
+		o, ok := ep.(*endpoint)
+		if !ok {
+			return
+		}
 		for k, v := range generic {
-			ep.generic[k] = v
+			o.generic[k] = v
 		}
 	}
 }
@@ -873,8 +846,12 @@ var (
 )
 
 // CreateOptionIpam function returns an option setter for the ipam configuration for this endpoint
-func CreateOptionIpam(ipV4, ipV6 net.IP, llIPs []net.IP, ipamOptions map[string]string) EndpointOption {
-	return func(ep *endpoint) {
+func CreateOptionIpam(ipV4, ipV6 net.IP, llIPs []net.IP, ipamOptions map[string]string) common.EndpointOption {
+	return func(e common.Endpoint) {
+		ep, ok := e.(*endpoint)
+		if !ok {
+			return
+		}
 		ep.prefAddress = ipV4
 		ep.prefAddressV6 = ipV6
 		if len(llIPs) != 0 {
@@ -892,8 +869,12 @@ func CreateOptionIpam(ipV4, ipV6 net.IP, llIPs []net.IP, ipamOptions map[string]
 
 // CreateOptionExposedPorts function returns an option setter for the container exposed
 // ports option to be passed to network.CreateEndpoint() method.
-func CreateOptionExposedPorts(exposedPorts []types.TransportPort) EndpointOption {
-	return func(ep *endpoint) {
+func CreateOptionExposedPorts(exposedPorts []types.TransportPort) common.EndpointOption {
+	return func(e common.Endpoint) {
+		ep, ok := e.(*endpoint)
+		if !ok {
+			return
+		}
 		// Defensive copy
 		eps := make([]types.TransportPort, len(exposedPorts))
 		copy(eps, exposedPorts)
@@ -905,8 +886,12 @@ func CreateOptionExposedPorts(exposedPorts []types.TransportPort) EndpointOption
 
 // CreateOptionPortMapping function returns an option setter for the mapping
 // ports option to be passed to network.CreateEndpoint() method.
-func CreateOptionPortMapping(portBindings []types.PortBinding) EndpointOption {
-	return func(ep *endpoint) {
+func CreateOptionPortMapping(portBindings []types.PortBinding) common.EndpointOption {
+	return func(e common.Endpoint) {
+		ep, ok := e.(*endpoint)
+		if !ok {
+			return
+		}
 		// Store a copy of the bindings as generic data to pass to the driver
 		pbs := make([]types.PortBinding, len(portBindings))
 		copy(pbs, portBindings)
@@ -916,31 +901,47 @@ func CreateOptionPortMapping(portBindings []types.PortBinding) EndpointOption {
 
 // CreateOptionDNS function returns an option setter for dns entry option to
 // be passed to container Create method.
-func CreateOptionDNS(dns []string) EndpointOption {
-	return func(ep *endpoint) {
+func CreateOptionDNS(dns []string) common.EndpointOption {
+	return func(e common.Endpoint) {
+		ep, ok := e.(*endpoint)
+		if !ok {
+			return
+		}
 		ep.generic[netlabel.DNSServers] = dns
 	}
 }
 
 // CreateOptionAnonymous function returns an option setter for setting
 // this endpoint as anonymous
-func CreateOptionAnonymous() EndpointOption {
-	return func(ep *endpoint) {
+func CreateOptionAnonymous() common.EndpointOption {
+	return func(e common.Endpoint) {
+		ep, ok := e.(*endpoint)
+		if !ok {
+			return
+		}
 		ep.anonymous = true
 	}
 }
 
 // CreateOptionDisableResolution function returns an option setter to indicate
 // this endpoint doesn't want embedded DNS server functionality
-func CreateOptionDisableResolution() EndpointOption {
-	return func(ep *endpoint) {
+func CreateOptionDisableResolution() common.EndpointOption {
+	return func(e common.Endpoint) {
+		ep, ok := e.(*endpoint)
+		if !ok {
+			return
+		}
 		ep.disableResolution = true
 	}
 }
 
 //CreateOptionAlias function returns an option setter for setting endpoint alias
-func CreateOptionAlias(name string, alias string) EndpointOption {
-	return func(ep *endpoint) {
+func CreateOptionAlias(name string, alias string) common.EndpointOption {
+	return func(e common.Endpoint) {
+		ep, ok := e.(*endpoint)
+		if !ok {
+			return
+		}
 		if ep.aliases == nil {
 			ep.aliases = make(map[string]string)
 		}
@@ -949,8 +950,12 @@ func CreateOptionAlias(name string, alias string) EndpointOption {
 }
 
 // CreateOptionService function returns an option setter for setting service binding configuration
-func CreateOptionService(name, id string, vip net.IP, ingressPorts []*PortConfig, aliases []string) EndpointOption {
-	return func(ep *endpoint) {
+func CreateOptionService(name, id string, vip net.IP, ingressPorts []*PortConfig, aliases []string) common.EndpointOption {
+	return func(e common.Endpoint) {
+		ep, ok := e.(*endpoint)
+		if !ok {
+			return
+		}
 		ep.svcName = name
 		ep.svcID = id
 		ep.virtualIP = vip
@@ -960,16 +965,24 @@ func CreateOptionService(name, id string, vip net.IP, ingressPorts []*PortConfig
 }
 
 //CreateOptionMyAlias function returns an option setter for setting endpoint's self alias
-func CreateOptionMyAlias(alias string) EndpointOption {
-	return func(ep *endpoint) {
+func CreateOptionMyAlias(alias string) common.EndpointOption {
+	return func(e common.Endpoint) {
+		ep, ok := e.(*endpoint)
+		if !ok {
+			return
+		}
 		ep.myAliases = append(ep.myAliases, alias)
 	}
 }
 
 // JoinOptionPriority function returns an option setter for priority option to
 // be passed to the endpoint.Join() method.
-func JoinOptionPriority(ep Endpoint, prio int) EndpointOption {
-	return func(ep *endpoint) {
+func JoinOptionPriority(ep common.Endpoint, prio int) common.EndpointOption {
+	return func(e common.Endpoint) {
+		ep, ok := e.(*endpoint)
+		if !ok {
+			return
+		}
 		// ep lock already acquired
 		c := ep.network.getController()
 		c.Lock()

@@ -14,6 +14,7 @@ import (
 	"github.com/docker/libnetwork/netlabel"
 	"github.com/docker/libnetwork/testutils"
 	"github.com/docker/libnetwork/types"
+	"github.com/docker/libnetwork/types/common"
 )
 
 func TestNetworkMarshalling(t *testing.T) {
@@ -29,7 +30,7 @@ func TestNetworkMarshalling(t *testing.T) {
 			netlabel.MacAddress: "a:b:c:d:e:f",
 			"primary":           "",
 		},
-		ipamV4Config: []*IpamConf{
+		ipamV4Config: []*common.IpamConf{
 			{
 				PreferredPool: "10.2.0.0/16",
 				SubPool:       "10.2.0.0/24",
@@ -42,7 +43,7 @@ func TestNetworkMarshalling(t *testing.T) {
 				Gateway:       "10.2.1.254",
 			},
 		},
-		ipamV6Config: []*IpamConf{
+		ipamV6Config: []*common.IpamConf{
 			{
 				PreferredPool: "abcd::/64",
 				SubPool:       "abcd:abcd:abcd:abcd:abcd::/80",
@@ -50,7 +51,7 @@ func TestNetworkMarshalling(t *testing.T) {
 				AuxAddresses:  nil,
 			},
 		},
-		ipamV4Info: []*IpamInfo{
+		ipamV4Info: []*common.IpamInfo{
 			{
 				PoolID: "ipoolverde123",
 				Meta: map[string]string{
@@ -94,7 +95,7 @@ func TestNetworkMarshalling(t *testing.T) {
 				},
 			},
 		},
-		ipamV6Info: []*IpamInfo{
+		ipamV6Info: []*common.IpamInfo{
 			{
 				PoolID: "ipoolv6",
 				IPAMData: driverapi.IPAMData{
@@ -150,8 +151,8 @@ func TestNetworkMarshalling(t *testing.T) {
 	}
 }
 
-func printIpamConf(list []*IpamConf) string {
-	s := fmt.Sprintf("\n[]*IpamConfig{")
+func printIpamConf(list []*common.IpamConf) string {
+	s := fmt.Sprintf("\n[]*common.IpamConfig{")
 	for _, i := range list {
 		s = fmt.Sprintf("%s %v,", s, i)
 	}
@@ -159,8 +160,8 @@ func printIpamConf(list []*IpamConf) string {
 	return s
 }
 
-func printIpamInfo(list []*IpamInfo) string {
-	s := fmt.Sprintf("\n[]*IpamInfo{")
+func printIpamInfo(list []*common.IpamInfo) string {
+	s := fmt.Sprintf("\n[]*common.IpamInfo{")
 	for _, i := range list {
 		s = fmt.Sprintf("%s\n{\n%s\n}", s, i)
 	}
@@ -221,8 +222,8 @@ func compareEndpointInterface(a, b *endpointInterface) bool {
 		types.CompareIPNet(a.addr, b.addr) && types.CompareIPNet(a.addrv6, b.addrv6)
 }
 
-func compareIpamConfList(listA, listB []*IpamConf) bool {
-	var a, b *IpamConf
+func compareIpamConfList(listA, listB []*common.IpamConf) bool {
+	var a, b *common.IpamConf
 	if len(listA) != len(listB) {
 		return false
 	}
@@ -238,8 +239,8 @@ func compareIpamConfList(listA, listB []*IpamConf) bool {
 	return true
 }
 
-func compareIpamInfoList(listA, listB []*IpamInfo) bool {
-	var a, b *IpamInfo
+func compareIpamInfoList(listA, listB []*common.IpamInfo) bool {
+	var a, b *common.IpamInfo
 	if len(listA) != len(listB) {
 		return false
 	}
@@ -309,7 +310,7 @@ func TestAuxAddresses(t *testing.T) {
 
 	for _, i := range input {
 
-		n.ipamV4Config = []*IpamConf{{PreferredPool: i.masterPool, SubPool: i.subPool, AuxAddresses: i.auxAddresses}}
+		n.ipamV4Config = []*common.IpamConf{{PreferredPool: i.masterPool, SubPool: i.subPool, AuxAddresses: i.auxAddresses}}
 
 		err = n.ipamAllocate()
 
@@ -437,7 +438,7 @@ func TestIpamReleaseOnNetDriverFailures(t *testing.T) {
 
 	// Test whether ipam state release is invoked  on network create failure from net driver
 	// by checking whether subsequent network creation requesting same gateway IP succeeds
-	ipamOpt := NetworkOptionIpam(ipamapi.DefaultIPAM, "", []*IpamConf{{PreferredPool: "10.34.0.0/16", Gateway: "10.34.255.254"}}, nil, nil)
+	ipamOpt := NetworkOptionIpam(ipamapi.DefaultIPAM, "", []*common.IpamConf{{PreferredPool: "10.34.0.0/16", Gateway: "10.34.255.254"}}, nil, nil)
 	if _, err := c.NewNetwork(badDriverName, "badnet1", "", ipamOpt); err == nil {
 		t.Fatalf("bad network driver should have failed network creation")
 	}
@@ -461,7 +462,7 @@ func TestIpamReleaseOnNetDriverFailures(t *testing.T) {
 	}
 
 	// Now create good bridge network with different gateway
-	ipamOpt2 := NetworkOptionIpam(ipamapi.DefaultIPAM, "", []*IpamConf{{PreferredPool: "10.34.0.0/16", Gateway: "10.34.255.253"}}, nil, nil)
+	ipamOpt2 := NetworkOptionIpam(ipamapi.DefaultIPAM, "", []*common.IpamConf{{PreferredPool: "10.34.0.0/16", Gateway: "10.34.255.253"}}, nil, nil)
 	gnw, err = c.NewNetwork("bridge", "goodnet2", "", ipamOpt2)
 	if err != nil {
 		t.Fatal(err)

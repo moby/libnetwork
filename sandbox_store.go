@@ -8,6 +8,7 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/libnetwork/datastore"
 	"github.com/docker/libnetwork/osl"
+	"github.com/docker/libnetwork/types/common"
 )
 
 const (
@@ -215,7 +216,7 @@ func (c *controller) sandboxCleanup(activeSandboxes map[string]interface{}) {
 			msg = ""
 			sb.isStub = false
 			isRestore = true
-			opts := val.([]SandboxOption)
+			opts := val.([]common.SandboxOption)
 			sb.processOptions(opts...)
 			sb.restorePath()
 			create = !sb.config.useDefaultSandBox

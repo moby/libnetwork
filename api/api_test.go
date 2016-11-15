@@ -19,6 +19,7 @@ import (
 	"github.com/docker/libnetwork/options"
 	"github.com/docker/libnetwork/testutils"
 	"github.com/docker/libnetwork/types"
+	"github.com/docker/libnetwork/types/common"
 )
 
 const (
@@ -82,7 +83,7 @@ func i2sbL(i interface{}) []*sandboxResource {
 	return s
 }
 
-func createTestNetwork(t *testing.T, network string) (libnetwork.NetworkController, libnetwork.Network) {
+func createTestNetwork(t *testing.T, network string) (libnetwork.NetworkController, common.Network) {
 	// Cleanup local datastore file
 	os.Remove(datastore.DefaultScopes("")[datastore.LocalScope].Client.Address)
 

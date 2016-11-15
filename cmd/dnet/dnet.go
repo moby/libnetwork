@@ -34,6 +34,7 @@ import (
 	"github.com/docker/libnetwork/netutils"
 	"github.com/docker/libnetwork/options"
 	"github.com/docker/libnetwork/types"
+	"github.com/docker/libnetwork/types/common"
 	"github.com/gorilla/mux"
 	"golang.org/x/net/context"
 )
@@ -508,12 +509,12 @@ func encodeData(data interface{}) (*bytes.Buffer, error) {
 
 func ipamOption(bridgeName string) libnetwork.NetworkOption {
 	if nws, _, err := netutils.ElectInterfaceAddresses(bridgeName); err == nil {
-		ipamV4Conf := &libnetwork.IpamConf{PreferredPool: nws[0].String()}
+		ipamV4Conf := &common.IpamConf{PreferredPool: nws[0].String()}
 		hip, _ := types.GetHostPartIP(nws[0].IP, nws[0].Mask)
 		if hip.IsGlobalUnicast() {
 			ipamV4Conf.Gateway = nws[0].IP.String()
 		}
-		return libnetwork.NetworkOptionIpam("default", "", []*libnetwork.IpamConf{ipamV4Conf}, nil, nil)
+		return libnetwork.NetworkOptionIpam("default", "", []*common.IpamConf{ipamV4Conf}, nil, nil)
 	}
 	return nil
 }

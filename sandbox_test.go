@@ -9,9 +9,10 @@ import (
 	"github.com/docker/libnetwork/options"
 	"github.com/docker/libnetwork/osl"
 	"github.com/docker/libnetwork/testutils"
+	"github.com/docker/libnetwork/types/common"
 )
 
-func getTestEnv(t *testing.T, numNetworks int) (NetworkController, []Network) {
+func getTestEnv(t *testing.T, numNetworks int) (NetworkController, []common.Network) {
 	netType := "bridge"
 
 	option := options.Generic{
@@ -33,7 +34,7 @@ func getTestEnv(t *testing.T, numNetworks int) (NetworkController, []Network) {
 		return c, nil
 	}
 
-	nwList := make([]Network, 0, numNetworks)
+	nwList := make([]common.Network, 0, numNetworks)
 	for i := 0; i < numNetworks; i++ {
 		name := fmt.Sprintf("test_nw_%d", i)
 		netOption := options.Generic{

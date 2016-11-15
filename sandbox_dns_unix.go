@@ -15,6 +15,7 @@ import (
 	"github.com/docker/libnetwork/etchosts"
 	"github.com/docker/libnetwork/resolvconf"
 	"github.com/docker/libnetwork/types"
+	"github.com/docker/libnetwork/types/common"
 )
 
 const (
@@ -136,7 +137,7 @@ func (sb *sandbox) deleteHostsEntries(recs []etchosts.Record) {
 }
 
 func (sb *sandbox) updateParentHosts() error {
-	var pSb Sandbox
+	var pSb common.Sandbox
 
 	for _, update := range sb.config.parentUpdates {
 		sb.controller.WalkSandboxes(SandboxContainerWalker(&pSb, update.cid))
