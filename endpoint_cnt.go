@@ -3,7 +3,9 @@ package libnetwork
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"sync"
+	"time"
 
 	"github.com/docker/libnetwork/datastore"
 )
@@ -160,6 +162,7 @@ retry:
 				return fmt.Errorf("could not update the kvobject to latest when trying to atomic add endpoint count: %v", err)
 			}
 
+			time.Sleep(time.Duration(50+int(rand.Float32()*100)) * time.Millisecond)
 			goto retry
 		}
 
