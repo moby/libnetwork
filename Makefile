@@ -1,5 +1,7 @@
 .PHONY: all all-local build build-local clean cross cross-local check check-code check-format run-tests integration-tests check-local coveralls circle-ci-cross circle-ci-build circle-ci-check circle-ci
 SHELL=/bin/bash
+COMMIT_NO := $(shell git rev-parse HEAD 2> /dev/null || true)
+COMMIT := $(if $(shell git status --porcelain --untracked-files=no),"${COMMIT_NO}-dirty","${COMMIT_NO}")
 build_image=libnetworkbuild
 dockerargs = --privileged -v $(shell pwd):/go/src/github.com/docker/libnetwork -w /go/src/github.com/docker/libnetwork
 container_env = -e "INSIDECONTAINER=-incontainer=true"
@@ -30,10 +32,15 @@ build: ${build_image}.created
 	@${docker} ./wrapmake.sh build-local
 	@echo "Done building code"
 
-build-local:
+create-bin:
 	@mkdir -p "bin"
+
+build-local: create-bin build-proxy
 	$(shell which godep) go build -tags experimental -o "bin/dnet" ./cmd/dnet
-	$(shell which godep) go build -o "bin/docker-proxy" ./cmd/proxy
+
+build-proxy: create-bin
+	$(shell which godep) go build -i -ldflags "-X main.gitCommit=${COMMIT}" -o "bin/docker-proxy" ./cmd/proxy
+
 
 clean:
 	@if [ -d bin ]; then \

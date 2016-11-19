@@ -10,6 +10,10 @@ import (
 	"syscall"
 )
 
+// gitCommit will be the hash that the binary was built from
+// and will be populated by the Makefile
+var gitCommit = ""
+
 func main() {
 	f := os.NewFile(3, "signal-parent")
 	host, container := parseHostContainerAddrs()
@@ -37,9 +41,15 @@ func parseHostContainerAddrs() (host net.Addr, container net.Addr) {
 		hostPort      = flag.Int("host-port", -1, "host port")
 		containerIP   = flag.String("container-ip", "", "container ip")
 		containerPort = flag.Int("container-port", -1, "container port")
+		version       = flag.Bool("version", false, "print version and exit")
 	)
 
 	flag.Parse()
+
+	if *version {
+		fmt.Println(gitCommit)
+		os.Exit(0)
+	}
 
 	switch *proto {
 	case "tcp":
