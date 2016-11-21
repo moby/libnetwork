@@ -27,6 +27,7 @@ import (
 func init() {
 	reexec.Register("fwmarker", fwMarker)
 	reexec.Register("redirecter", redirecter)
+	reexec.Register("dropPing", dropPing)
 }
 
 // Get all loadbalancers on this network that is currently discovered
@@ -104,6 +105,55 @@ func (sb *sandbox) populateLoadbalancers(ep *endpoint) {
 			addService = false
 		}
 		lb.service.Unlock()
+	}
+
+	if len(ep.virtualIP) != 0 {
+		err := sb.programICMPDropRule(ep.virtualIP)
+		if err != nil {
+			logrus.Errorf("failed to program ICMP DROP rule for VIP %s : %v", ep.virtualIP, err)
+		}
+	}
+}
+
+func (sb *sandbox) programICMPDropRule(vip net.IP) error {
+	cmd := &exec.Cmd{
+		Path:   reexec.Self(),
+		Args:   append([]string{"dropPing"}, sb.Key(), vip.String()),
+		Stdout: os.Stdout,
+		Stderr: os.Stderr,
+	}
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("reexec failed: %v", err)
+	}
+	return nil
+}
+
+func dropPing() {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	if len(os.Args) < 2 {
+		logrus.Error("invalid number of arguments..")
+		os.Exit(1)
+	}
+
+	ns, err := netns.GetFromPath(os.Args[1])
+	if err != nil {
+		logrus.Errorf("failed get network namespace %q: %v", os.Args[1], err)
+		os.Exit(2)
+	}
+	defer ns.Close()
+
+	if err := netns.Set(ns); err != nil {
+		logrus.Errorf("setting into container net ns %v failed, %v", os.Args[1], err)
+		os.Exit(3)
+	}
+
+	err = iptables.RawCombinedOutputNative("-A", "INPUT", "-p", "icmp", "--icmp", "echo-request", "-d", os.Args[2], "-j", "DROP")
+	if err != nil {
+		logrus.Errorf("failed to add ICMP DROP rule for VIP %s : %v", os.Args[2], err)
+		os.Exit(4)
 	}
 }
 
