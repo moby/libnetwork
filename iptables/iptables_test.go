@@ -42,7 +42,7 @@ func TestForward(t *testing.T) {
 	proto := "tcp"
 
 	bridgeName := "lo"
-	err := natChain.Forward(Insert, ip, port, proto, dstAddr, dstPort, bridgeName)
+	err := natChain.Forward(Insert, "", ip, port, proto, dstAddr, dstPort, bridgeName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,6 @@ func TestForward(t *testing.T) {
 
 	masqRule := []string{
 		"-d", dstAddr,
-		"-s", dstAddr,
 		"-p", proto,
 		"--dport", strconv.Itoa(dstPort),
 		"-j", "MASQUERADE",
@@ -198,7 +197,7 @@ func RunConcurrencyTest(t *testing.T, allowXlock bool) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			err := natChain.Forward(Append, ip, port, proto, dstAddr, dstPort, "lo")
+			err := natChain.Forward(Append, "", ip, port, proto, dstAddr, dstPort, "lo")
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -111,7 +111,7 @@ func (n *bridgeNetwork) setupIPTables(config *networkConfiguration, i *bridgeInt
 			return iptables.ProgramChain(filterChain, config.BridgeName, hairpinMode, false)
 		})
 
-		n.portMapper.SetIptablesChain(natChain, n.getNetworkBridgeName())
+		n.portMapper.SetIptablesChain(natChain, n.getNetworkBridgeName(), maskedAddrv4.String())
 	}
 
 	if err := ensureJumpRule("FORWARD", IsolationChain); err != nil {
