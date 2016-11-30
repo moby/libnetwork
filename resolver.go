@@ -363,8 +363,12 @@ func (r *resolver) ServeDNS(w dns.ResponseWriter, query *dns.Msg) {
 			}
 
 			execErr := r.sb.execFunc(extConnect)
-			if execErr != nil || err != nil {
-				log.Debugf("Connect failed, %s", err)
+			if execErr != nil {
+				log.Warn(execErr)
+				continue
+			}
+			if err != nil {
+				log.Warnf("Connect failed: %s", err)
 				continue
 			}
 			log.Debugf("Query %s[%d] from %s, forwarding to %s:%s", name, query.Question[0].Qtype,
