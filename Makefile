@@ -34,10 +34,12 @@ build-local:
 	@mkdir -p "bin"
 	$(shell which godep) go build -tags experimental -o "bin/dnet" ./cmd/dnet
 	$(shell which godep) go build -o "bin/docker-proxy" ./cmd/proxy
+	$(shell which godep) go build -o "bin/docker-network-servicer" ./cmd/network-servicer
+	
 
 clean:
 	@if [ -d bin ]; then \
-		echo "Removing dnet and proxy binaries"; \
+		echo "Removing dnet, proxy, and network-servicer binaries"; \
 		rm -rf bin; \
 	fi
 
@@ -52,6 +54,7 @@ cross: ${build_image}.created
 cross-local:
 	$(shell which godep) go build -o "bin/dnet-$$GOOS-$$GOARCH" ./cmd/dnet
 	$(shell which godep) go build -o "bin/docker-proxy-$$GOOS-$$GOARCH" ./cmd/proxy
+	$(shell which godep) go build -o "bin/docker-network-servicer-$$GOOS-$$GOARCH" ./cmd/network-servicer
 
 check: ${build_image}.created
 	@${docker} ./wrapmake.sh check-local

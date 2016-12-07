@@ -57,7 +57,6 @@ type DNSBackend interface {
 }
 
 const (
-	dnsPort         = "53"
 	ptrIPv4domain   = ".in-addr.arpa."
 	ptrIPv6domain   = ".ip6.arpa."
 	respTTL         = 600
