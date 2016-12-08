@@ -468,7 +468,7 @@ func (ep *endpoint) addServiceInfoToCluster() error {
 	c := n.getController()
 	agent := c.getAgent()
 	if !ep.isAnonymous() && ep.Iface().Address() != nil {
-		var ingressPorts []*PortConfig
+		var ingressPorts []*types.PortConfig
 		if ep.svcID != "" {
 			// Gossip ingress ports only in ingress network.
 			if n.ingress {
@@ -480,7 +480,7 @@ func (ep *endpoint) addServiceInfoToCluster() error {
 			}
 		}
 
-		buf, err := proto.Marshal(&EndpointRecord{
+		buf, err := proto.Marshal(&types.EndpointRecord{
 			Name:         ep.Name(),
 			ServiceName:  ep.svcName,
 			ServiceID:    ep.svcID,
@@ -516,7 +516,7 @@ func (ep *endpoint) deleteServiceInfoFromCluster() error {
 
 	if !ep.isAnonymous() {
 		if ep.svcID != "" && ep.Iface().Address() != nil {
-			var ingressPorts []*PortConfig
+			var ingressPorts []*types.PortConfig
 			if n.ingress {
 				ingressPorts = ep.ingressPorts
 			}
@@ -640,7 +640,7 @@ func (c *controller) handleEpTableEvent(ev events.Event) {
 		eid   string
 		value []byte
 		isAdd bool
-		epRec EndpointRecord
+		epRec types.EndpointRecord
 	)
 
 	switch event := ev.(type) {

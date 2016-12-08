@@ -19,6 +19,7 @@ import (
 	"github.com/docker/libnetwork/iptables"
 	"github.com/docker/libnetwork/ipvs"
 	"github.com/docker/libnetwork/ns"
+	"github.com/docker/libnetwork/types"
 	"github.com/gogo/protobuf/proto"
 	"github.com/vishvananda/netlink/nl"
 	"github.com/vishvananda/netns"
@@ -110,7 +111,7 @@ func (sb *sandbox) populateLoadbalancers(ep *endpoint) {
 // Add loadbalancer backend to all sandboxes which has a connection to
 // this network. If needed add the service as well, as specified by
 // the addService bool.
-func (n *network) addLBBackend(ip, vip net.IP, fwMark uint32, ingressPorts []*PortConfig, addService bool) {
+func (n *network) addLBBackend(ip, vip net.IP, fwMark uint32, ingressPorts []*types.PortConfig, addService bool) {
 	n.WalkEndpoints(func(e Endpoint) bool {
 		ep := e.(*endpoint)
 		if sb, ok := ep.getSandbox(); ok {
@@ -133,7 +134,7 @@ func (n *network) addLBBackend(ip, vip net.IP, fwMark uint32, ingressPorts []*Po
 // Remove loadbalancer backend from all sandboxes which has a
 // connection to this network. If needed remove the service entry as
 // well, as specified by the rmService bool.
-func (n *network) rmLBBackend(ip, vip net.IP, fwMark uint32, ingressPorts []*PortConfig, rmService bool) {
+func (n *network) rmLBBackend(ip, vip net.IP, fwMark uint32, ingressPorts []*types.PortConfig, rmService bool) {
 	n.WalkEndpoints(func(e Endpoint) bool {
 		ep := e.(*endpoint)
 		if sb, ok := ep.getSandbox(); ok {
@@ -154,7 +155,7 @@ func (n *network) rmLBBackend(ip, vip net.IP, fwMark uint32, ingressPorts []*Por
 }
 
 // Add loadbalancer backend into one connected sandbox.
-func (sb *sandbox) addLBBackend(ip, vip net.IP, fwMark uint32, ingressPorts []*PortConfig, eIP *net.IPNet, gwIP net.IP, addService bool, isIngressNetwork bool) {
+func (sb *sandbox) addLBBackend(ip, vip net.IP, fwMark uint32, ingressPorts []*types.PortConfig, eIP *net.IPNet, gwIP net.IP, addService bool, isIngressNetwork bool) {
 	if sb.osSbox == nil {
 		return
 	}
@@ -177,7 +178,7 @@ func (sb *sandbox) addLBBackend(ip, vip net.IP, fwMark uint32, ingressPorts []*P
 	}
 
 	if addService {
-		var filteredPorts []*PortConfig
+		var filteredPorts []*types.PortConfig
 		if sb.ingress {
 			filteredPorts = filterPortConfigs(ingressPorts, false)
 			if err := programIngress(gwIP, filteredPorts, false); err != nil {
@@ -213,7 +214,7 @@ func (sb *sandbox) addLBBackend(ip, vip net.IP, fwMark uint32, ingressPorts []*P
 }
 
 // Remove loadbalancer backend from one connected sandbox.
-func (sb *sandbox) rmLBBackend(ip, vip net.IP, fwMark uint32, ingressPorts []*PortConfig, eIP *net.IPNet, gwIP net.IP, rmService bool, isIngressNetwork bool) {
+func (sb *sandbox) rmLBBackend(ip, vip net.IP, fwMark uint32, ingressPorts []*types.PortConfig, eIP *net.IPNet, gwIP net.IP, rmService bool, isIngressNetwork bool) {
 	if sb.osSbox == nil {
 		return
 	}
@@ -250,7 +251,7 @@ func (sb *sandbox) rmLBBackend(ip, vip net.IP, fwMark uint32, ingressPorts []*Po
 			logrus.Errorf("Failed to delete a new service for vip %s fwmark %d: %v", vip, fwMark, err)
 		}
 
-		var filteredPorts []*PortConfig
+		var filteredPorts []*types.PortConfig
 		if sb.ingress {
 			filteredPorts = filterPortConfigs(ingressPorts, true)
 			if err := programIngress(gwIP, filteredPorts, true); err != nil {
@@ -271,12 +272,12 @@ var (
 	ingressProxyMu  sync.Mutex
 	ingressProxyTbl = make(map[string]io.Closer)
 	portConfigMu    sync.Mutex
-	portConfigTbl   = make(map[PortConfig]int)
+	portConfigTbl   = make(map[types.PortConfig]int)
 )
 
-func filterPortConfigs(ingressPorts []*PortConfig, isDelete bool) []*PortConfig {
+func filterPortConfigs(ingressPorts []*types.PortConfig, isDelete bool) []*types.PortConfig {
 	portConfigMu.Lock()
-	iPorts := make([]*PortConfig, 0, len(ingressPorts))
+	iPorts := make([]*types.PortConfig, 0, len(ingressPorts))
 	for _, pc := range ingressPorts {
 		if isDelete {
 			if cnt, ok := portConfigTbl[*pc]; ok {
@@ -311,7 +312,7 @@ func filterPortConfigs(ingressPorts []*PortConfig, isDelete bool) []*PortConfig 
 	return iPorts
 }
 
-func programIngress(gwIP net.IP, ingressPorts []*PortConfig, isDelete bool) error {
+func programIngress(gwIP net.IP, ingressPorts []*types.PortConfig, isDelete bool) error {
 	addDelOpt := "-I"
 	if isDelete {
 		addDelOpt = "-D"
@@ -394,7 +395,7 @@ func programIngress(gwIP net.IP, ingressPorts []*PortConfig, isDelete bool) erro
 	for _, iPort := range ingressPorts {
 		if iptables.ExistChain(ingressChain, iptables.Nat) {
 			rule := strings.Fields(fmt.Sprintf("-t nat %s %s -p %s --dport %d -j DNAT --to-destination %s:%d",
-				addDelOpt, ingressChain, strings.ToLower(PortConfig_Protocol_name[int32(iPort.Protocol)]), iPort.PublishedPort, gwIP, iPort.PublishedPort))
+				addDelOpt, ingressChain, strings.ToLower(types.PortConfig_Protocol_name[int32(iPort.Protocol)]), iPort.PublishedPort, gwIP, iPort.PublishedPort))
 			if err := iptables.RawCombinedOutput(rule...); err != nil {
 				errStr := fmt.Sprintf("setting up rule failed, %v: %v", rule, err)
 				if !isDelete {
@@ -409,7 +410,7 @@ func programIngress(gwIP net.IP, ingressPorts []*PortConfig, isDelete bool) erro
 		// 1) service tasks attached to other networks
 		// 2) unmanaged containers on bridge networks
 		rule := strings.Fields(fmt.Sprintf("%s %s -m state -p %s --sport %d --state ESTABLISHED,RELATED -j ACCEPT",
-			addDelOpt, ingressChain, strings.ToLower(PortConfig_Protocol_name[int32(iPort.Protocol)]), iPort.PublishedPort))
+			addDelOpt, ingressChain, strings.ToLower(types.PortConfig_Protocol_name[int32(iPort.Protocol)]), iPort.PublishedPort))
 		if err := iptables.RawCombinedOutput(rule...); err != nil {
 			errStr := fmt.Sprintf("setting up rule failed, %v: %v", rule, err)
 			if !isDelete {
@@ -419,7 +420,7 @@ func programIngress(gwIP net.IP, ingressPorts []*PortConfig, isDelete bool) erro
 		}
 
 		rule = strings.Fields(fmt.Sprintf("%s %s -p %s --dport %d -j ACCEPT",
-			addDelOpt, ingressChain, strings.ToLower(PortConfig_Protocol_name[int32(iPort.Protocol)]), iPort.PublishedPort))
+			addDelOpt, ingressChain, strings.ToLower(types.PortConfig_Protocol_name[int32(iPort.Protocol)]), iPort.PublishedPort))
 		if err := iptables.RawCombinedOutput(rule...); err != nil {
 			errStr := fmt.Sprintf("setting up rule failed, %v: %v", rule, err)
 			if !isDelete {
@@ -475,13 +476,13 @@ func findOIFName(ip net.IP) (string, error) {
 	return link.Attrs().Name, nil
 }
 
-func plumbProxy(iPort *PortConfig, isDelete bool) error {
+func plumbProxy(iPort *types.PortConfig, isDelete bool) error {
 	var (
 		err error
 		l   io.Closer
 	)
 
-	portSpec := fmt.Sprintf("%d/%s", iPort.PublishedPort, strings.ToLower(PortConfig_Protocol_name[int32(iPort.Protocol)]))
+	portSpec := fmt.Sprintf("%d/%s", iPort.PublishedPort, strings.ToLower(types.PortConfig_Protocol_name[int32(iPort.Protocol)]))
 	if isDelete {
 		ingressProxyMu.Lock()
 		if listener, ok := ingressProxyTbl[portSpec]; ok {
@@ -495,9 +496,9 @@ func plumbProxy(iPort *PortConfig, isDelete bool) error {
 	}
 
 	switch iPort.Protocol {
-	case ProtocolTCP:
+	case types.ProtocolTCP:
 		l, err = net.ListenTCP("tcp", &net.TCPAddr{Port: int(iPort.PublishedPort)})
-	case ProtocolUDP:
+	case types.ProtocolUDP:
 		l, err = net.ListenUDP("udp", &net.UDPAddr{Port: int(iPort.PublishedPort)})
 	}
 
@@ -512,14 +513,14 @@ func plumbProxy(iPort *PortConfig, isDelete bool) error {
 	return nil
 }
 
-func writePortsToFile(ports []*PortConfig) (string, error) {
+func writePortsToFile(ports []*types.PortConfig) (string, error) {
 	f, err := ioutil.TempFile("", "port_configs")
 	if err != nil {
 		return "", err
 	}
 	defer f.Close()
 
-	buf, err := proto.Marshal(&EndpointRecord{
+	buf, err := proto.Marshal(&types.EndpointRecord{
 		IngressPorts: ports,
 	})
 
@@ -535,13 +536,13 @@ func writePortsToFile(ports []*PortConfig) (string, error) {
 	return f.Name(), nil
 }
 
-func readPortsFromFile(fileName string) ([]*PortConfig, error) {
+func readPortsFromFile(fileName string) ([]*types.PortConfig, error) {
 	buf, err := ioutil.ReadFile(fileName)
 	if err != nil {
 		return nil, err
 	}
 
-	var epRec EndpointRecord
+	var epRec types.EndpointRecord
 	err = proto.Unmarshal(buf, &epRec)
 	if err != nil {
 		return nil, err
@@ -552,7 +553,7 @@ func readPortsFromFile(fileName string) ([]*PortConfig, error) {
 
 // Invoke fwmarker reexec routine to mark vip destined packets with
 // the passed firewall mark.
-func invokeFWMarker(path string, vip net.IP, fwMark uint32, ingressPorts []*PortConfig, eIP *net.IPNet, isDelete bool) error {
+func invokeFWMarker(path string, vip net.IP, fwMark uint32, ingressPorts []*types.PortConfig, eIP *net.IPNet, isDelete bool) error {
 	var ingressPortsFile string
 
 	if len(ingressPorts) != 0 {
@@ -594,7 +595,7 @@ func fwMarker() {
 		os.Exit(1)
 	}
 
-	var ingressPorts []*PortConfig
+	var ingressPorts []*types.PortConfig
 	if os.Args[5] != "" {
 		var err error
 		ingressPorts, err = readPortsFromFile(os.Args[5])
@@ -615,7 +616,7 @@ func fwMarker() {
 	rules := [][]string{}
 	for _, iPort := range ingressPorts {
 		rule := strings.Fields(fmt.Sprintf("-t mangle %s PREROUTING -p %s --dport %d -j MARK --set-mark %d",
-			addDelOpt, strings.ToLower(PortConfig_Protocol_name[int32(iPort.Protocol)]), iPort.PublishedPort, fwMark))
+			addDelOpt, strings.ToLower(types.PortConfig_Protocol_name[int32(iPort.Protocol)]), iPort.PublishedPort, fwMark))
 		rules = append(rules, rule)
 	}
 
@@ -665,7 +666,7 @@ func fwMarker() {
 	}
 }
 
-func addRedirectRules(path string, eIP *net.IPNet, ingressPorts []*PortConfig) error {
+func addRedirectRules(path string, eIP *net.IPNet, ingressPorts []*types.PortConfig) error {
 	var ingressPortsFile string
 
 	if len(ingressPorts) != 0 {
@@ -701,7 +702,7 @@ func redirecter() {
 		os.Exit(1)
 	}
 
-	var ingressPorts []*PortConfig
+	var ingressPorts []*types.PortConfig
 	if os.Args[3] != "" {
 		var err error
 		ingressPorts, err = readPortsFromFile(os.Args[3])
@@ -720,15 +721,15 @@ func redirecter() {
 	rules := [][]string{}
 	for _, iPort := range ingressPorts {
 		rule := strings.Fields(fmt.Sprintf("-t nat -A PREROUTING -d %s -p %s --dport %d -j REDIRECT --to-port %d",
-			eIP.String(), strings.ToLower(PortConfig_Protocol_name[int32(iPort.Protocol)]), iPort.PublishedPort, iPort.TargetPort))
+			eIP.String(), strings.ToLower(types.PortConfig_Protocol_name[int32(iPort.Protocol)]), iPort.PublishedPort, iPort.TargetPort))
 		rules = append(rules, rule)
 		// Allow only incoming connections to exposed ports
 		iRule := strings.Fields(fmt.Sprintf("-I INPUT -d %s -p %s --dport %d -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT",
-			eIP.String(), strings.ToLower(PortConfig_Protocol_name[int32(iPort.Protocol)]), iPort.TargetPort))
+			eIP.String(), strings.ToLower(types.PortConfig_Protocol_name[int32(iPort.Protocol)]), iPort.TargetPort))
 		rules = append(rules, iRule)
 		// Allow only outgoing connections from exposed ports
 		oRule := strings.Fields(fmt.Sprintf("-I OUTPUT -s %s -p %s --sport %d -m conntrack --ctstate ESTABLISHED -j ACCEPT",
-			eIP.String(), strings.ToLower(PortConfig_Protocol_name[int32(iPort.Protocol)]), iPort.TargetPort))
+			eIP.String(), strings.ToLower(types.PortConfig_Protocol_name[int32(iPort.Protocol)]), iPort.TargetPort))
 		rules = append(rules, oRule)
 	}
 

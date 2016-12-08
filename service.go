@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net"
 	"sync"
+
+	"github.com/docker/libnetwork/types"
 )
 
 var (
@@ -13,7 +15,7 @@ var (
 	fwMarkCtrMu sync.Mutex
 )
 
-type portConfigs []*PortConfig
+type portConfigs []*types.PortConfig
 
 func (p portConfigs) String() string {
 	if len(p) == 0 {
@@ -21,9 +23,9 @@ func (p portConfigs) String() string {
 	}
 
 	pc := p[0]
-	str := fmt.Sprintf("%d:%d/%s", pc.PublishedPort, pc.TargetPort, PortConfig_Protocol_name[int32(pc.Protocol)])
+	str := fmt.Sprintf("%d:%d/%s", pc.PublishedPort, pc.TargetPort, types.PortConfig_Protocol_name[int32(pc.Protocol)])
 	for _, pc := range p[1:] {
-		str = str + fmt.Sprintf(",%d:%d/%s", pc.PublishedPort, pc.TargetPort, PortConfig_Protocol_name[int32(pc.Protocol)])
+		str = str + fmt.Sprintf(",%d:%d/%s", pc.PublishedPort, pc.TargetPort, types.PortConfig_Protocol_name[int32(pc.Protocol)])
 	}
 
 	return str
