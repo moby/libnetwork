@@ -115,14 +115,15 @@ func (d *driver) CreateNetwork(id string, option map[string]interface{}, nInfo d
 		if _, ok := optMap[secureOption]; ok {
 			n.secure = true
 		}
-		if val, ok := optMap[netlabel.DriverMTU]; ok {
-			var err error
-			if n.mtu, err = strconv.Atoi(val); err != nil {
-				return fmt.Errorf("failed to parse %v: %v", val, err)
-			}
-			if n.mtu < 0 {
-				return fmt.Errorf("invalid MTU value: %v", n.mtu)
-			}
+	}
+
+	if val, ok := option[netlabel.DriverMTU]; ok {
+		var err error
+		if n.mtu, err = strconv.Atoi(val.(string)); err != nil {
+			return fmt.Errorf("failed to parse %v: %v", val, err)
+		}
+		if n.mtu < 0 {
+			return fmt.Errorf("invalid MTU value: %v", n.mtu)
 		}
 	}
 
