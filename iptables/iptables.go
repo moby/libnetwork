@@ -141,12 +141,12 @@ func ProgramChain(c *ChainInfo, bridgeName string, hairpinMode, enable bool) err
 			"--dst-type", "LOCAL",
 			"-j", c.Name}
 		if !Exists(Nat, "PREROUTING", preroute...) && enable {
-			if err := c.Prerouting(Append, preroute...); err != nil {
-				return fmt.Errorf("Failed to inject docker in PREROUTING chain: %s", err)
+			if err := c.Prerouting(Nat, Append, preroute...); err != nil {
+				return fmt.Errorf("Failed to inject docker in PREROUTING nat chain: %v", err)
 			}
 		} else if Exists(Nat, "PREROUTING", preroute...) && !enable {
-			if err := c.Prerouting(Delete, preroute...); err != nil {
-				return fmt.Errorf("Failed to remove docker in PREROUTING chain: %s", err)
+			if err := c.Prerouting(Nat, Delete, preroute...); err != nil {
+				return fmt.Errorf("Failed to remove docker in PREROUTING nat chain: %v", err)
 			}
 		}
 		output := []string{
@@ -163,6 +163,21 @@ func ProgramChain(c *ChainInfo, bridgeName string, hairpinMode, enable bool) err
 		} else if Exists(Nat, "OUTPUT", output...) && !enable {
 			if err := c.Output(Delete, output...); err != nil {
 				return fmt.Errorf("Failed to inject docker in OUTPUT chain: %s", err)
+			}
+		}
+	case Mangle:
+		preroute := []string{
+			"-m", "addrtype", "--dst-type", "LOCAL",
+			"-j", c.Name,
+			"!", "-d", "127.0.0.0/8",
+		}
+		if !Exists(Mangle, "PREROUTING", preroute...) && enable {
+			if err := c.Prerouting(Mangle, Append, preroute...); err != nil {
+				return fmt.Errorf("Failed to inject docker in PREROUTING mangle chain: %s", err)
+			}
+		} else if Exists(Mangle, "PREROUTING", preroute...) && !enable {
+			if err := c.Prerouting(Mangle, Delete, preroute...); err != nil {
+				return fmt.Errorf("Failed to remove docker in PREROUTING mangle chain: %s", err)
 			}
 		}
 	case Filter:
@@ -205,8 +220,8 @@ func RemoveExistingChain(name string, table Table) error {
 	return c.Remove()
 }
 
-// Forward adds forwarding rule to 'filter' table and corresponding nat rule to 'nat' table.
-func (c *ChainInfo) Forward(action Action, ip net.IP, port int, proto, destAddr string, destPort int, bridgeName string) error {
+// Mark sets up a iptables mangle rule to mark an incoming packet with the given mark value
+func (c *ChainInfo) Mark(action Action, proto string, ip net.IP, port, mark int) error {
 	daddr := ip.String()
 	if ip.IsUnspecified() {
 		// iptables interprets "0.0.0.0" as "0.0.0.0/32", whereas we
@@ -215,42 +230,100 @@ func (c *ChainInfo) Forward(action Action, ip net.IP, port int, proto, destAddr 
 		daddr = "0/0"
 	}
 
-	args := []string{
+	args := []string{"-t", string(Mangle), string(action), c.Name,
 		"-p", proto,
 		"-d", daddr,
 		"--dport", strconv.Itoa(port),
+		"-j", "MARK",
+		"--set-mark", strconv.Itoa(mark),
+	}
+
+	output, err := Raw(args...)
+	if err != nil {
+		return err
+	}
+	if len(output) != 0 {
+		return ChainError{Chain: "PREROUTING", Output: output}
+	}
+	return nil
+}
+
+// Forward adds forwarding rule to 'filter' table and corresponding nat rule to 'nat' table.
+func (c *ChainInfo) Forward(action Action, ip net.IP, port int, proto string, newIP net.IP, newPort int, bridgeName string) error {
+	args := []string{"-t", string(Nat), string(action), c.Name,
+		"-p", proto,
+		"-d", ip.String(),
+		"--dport", strconv.Itoa(port),
 		"-j", "DNAT",
-		"--to-destination", net.JoinHostPort(destAddr, strconv.Itoa(destPort))}
+		"--to-destination", net.JoinHostPort(newIP.String(), strconv.Itoa(newPort))}
 	if !c.HairpinMode {
 		args = append(args, "!", "-i", bridgeName)
 	}
-	if err := ProgramRule(Nat, c.Name, action, args); err != nil {
+
+	output, err := Raw(args...)
+	if err != nil {
 		return err
 	}
+	if len(output) != 0 {
+		return ChainError{Chain: "FORWARD", Output: output}
+	}
 
-	args = []string{
+	output, err = Raw("-t", string(Filter), string(action), c.Name,
 		"!", "-i", bridgeName,
 		"-o", bridgeName,
 		"-p", proto,
-		"-d", destAddr,
-		"--dport", strconv.Itoa(destPort),
-		"-j", "ACCEPT",
-	}
-	if err := ProgramRule(Filter, c.Name, action, args); err != nil {
+		"-d", newIP.String(),
+		"--dport", strconv.Itoa(newPort),
+		"-j", "ACCEPT")
+	if err != nil {
 		return err
 	}
+	if len(output) != 0 {
+		return ChainError{Chain: "FORWARD", Output: output}
+	}
+	return nil
+}
 
-	args = []string{
+// Masq sets up iptables masquerade rules for the given address/proto
+func (c *ChainInfo) Masq(action Action, proto string, ip net.IP, port int) error {
+	output, err := Raw("-t", string(Nat), string(action), "POSTROUTING",
 		"-p", proto,
-		"-s", destAddr,
-		"-d", destAddr,
-		"--dport", strconv.Itoa(destPort),
-		"-j", "MASQUERADE",
-	}
-	if err := ProgramRule(Nat, "POSTROUTING", action, args); err != nil {
+		"-s", ip.String(),
+		"-d", ip.String(),
+		"--dport", strconv.Itoa(port),
+		"-j", "MASQUERADE")
+	if err != nil {
 		return err
 	}
+	if len(output) != 0 {
+		return ChainError{Chain: "FORWARD", Output: output}
+	}
+	return nil
+}
 
+// Hairpin sets required iptables rules for hairpin nating
+func (c *ChainInfo) Hairpin(action Action, proto string, destIP net.IP, destPort int, sourceIP net.IP, newPort int) error {
+	destAddr := destIP.String()
+	if destIP.IsUnspecified() {
+		// iptables interprets "0.0.0.0" as "0.0.0.0/32", whereas we
+		// want "0.0.0.0/0". "0/0" is correctly interpreted as "any
+		// value" by both iptables and ip6tables.
+		destAddr = "0/0"
+	}
+	output, err := Raw("-t", string(Nat), string(action), c.Name,
+		"-p", proto,
+		"-s", sourceIP.String(),
+		"-d", destAddr,
+		"--dport", strconv.Itoa(destPort),
+		"-j", "DNAT",
+		"--to-destination", net.JoinHostPort(sourceIP.String(), strconv.Itoa(newPort)),
+	)
+	if err != nil {
+		return err
+	}
+	if len(output) > 0 {
+		return ChainError{Chain: "PREROUTING", Output: output}
+	}
 	return nil
 }
 
@@ -289,8 +362,8 @@ func ProgramRule(table Table, chain string, action Action, args []string) error 
 }
 
 // Prerouting adds linking rule to nat/PREROUTING chain.
-func (c *ChainInfo) Prerouting(action Action, args ...string) error {
-	a := []string{"-t", string(Nat), string(action), "PREROUTING"}
+func (c *ChainInfo) Prerouting(table Table, action Action, args ...string) error {
+	a := []string{"-t", string(table), string(action), "PREROUTING"}
 	if len(args) > 0 {
 		a = append(a, args...)
 	}
@@ -319,13 +392,18 @@ func (c *ChainInfo) Output(action Action, args ...string) error {
 // Remove removes the chain.
 func (c *ChainInfo) Remove() error {
 	// Ignore errors - This could mean the chains were never set up
-	if c.Table == Nat {
-		c.Prerouting(Delete, "-m", "addrtype", "--dst-type", "LOCAL", "-j", c.Name)
+	switch c.Table {
+	case Nat:
+		c.Prerouting(c.Table, Delete, "-m", "addrtype", "--dst-type", "LOCAL", "-j", c.Name)
 		c.Output(Delete, "-m", "addrtype", "--dst-type", "LOCAL", "!", "--dst", "127.0.0.0/8", "-j", c.Name)
 		c.Output(Delete, "-m", "addrtype", "--dst-type", "LOCAL", "-j", c.Name) // Created in versions <= 0.1.6
 
-		c.Prerouting(Delete)
+		c.Prerouting(c.Table, Delete)
 		c.Output(Delete)
+	case Mangle:
+		c.Prerouting(Mangle, Delete, "-m", "addrtype", "--dst-type", "LOCAL", "-j", c.Name, "!", "-d", "127.0.0.0/8")
+		Raw("-t", string(Mangle), "-F", c.Name)
+		Raw("-t", string(Mangle), "-X", c.Name)
 	}
 	Raw("-t", string(c.Table), "-F", c.Name)
 	Raw("-t", string(c.Table), "-X", c.Name)
