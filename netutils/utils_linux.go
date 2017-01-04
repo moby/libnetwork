@@ -21,6 +21,8 @@ var (
 )
 
 // CheckRouteOverlaps checks whether the passed network overlaps with any existing routes
+// on the system. It does not take into account routes with prefix length less than 3,
+// like the VPN gateway redirect routes.
 func CheckRouteOverlaps(toCheck *net.IPNet) error {
 	if networkGetRoutesFct == nil {
 		networkGetRoutesFct = ns.NlHandle().RouteList
@@ -30,7 +32,13 @@ func CheckRouteOverlaps(toCheck *net.IPNet) error {
 		return err
 	}
 	for _, network := range networks {
-		if network.Dst != nil && NetworkOverlaps(toCheck, network.Dst) {
+		if network.Dst == nil {
+			continue
+		}
+		if ones, _ := network.Dst.Mask.Size(); ones < 3 {
+			continue
+		}
+		if NetworkOverlaps(toCheck, network.Dst) {
 			return ErrNetworkOverlaps
 		}
 	}
