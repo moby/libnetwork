@@ -34,12 +34,12 @@ func init() {
 func (n *network) connectedLoadbalancers() []*loadBalancer {
 	c := n.getController()
 
-	c.Lock()
+	c.RLock()
 	serviceBindings := make([]*service, 0, len(c.serviceBindings))
 	for _, s := range c.serviceBindings {
 		serviceBindings = append(serviceBindings, s)
 	}
-	c.Unlock()
+	c.RUnlock()
 
 	var lbs []*loadBalancer
 	for _, s := range serviceBindings {

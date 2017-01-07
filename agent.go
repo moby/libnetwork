@@ -241,8 +241,8 @@ func (c *controller) agentSetup(clusterProvider cluster.Provider) error {
 // For a given subsystem getKeys sorts the keys by lamport time and returns
 // slice of keys and lamport time which can used as a unique tag for the keys
 func (c *controller) getKeys(subsys string) ([][]byte, []uint64) {
-	c.Lock()
-	defer c.Unlock()
+	c.RLock()
+	defer c.RUnlock()
 
 	sort.Sort(ByTime(c.keys))
 
@@ -263,8 +263,8 @@ func (c *controller) getKeys(subsys string) ([][]byte, []uint64) {
 // getPrimaryKeyTag returns the primary key for a given subsystem from the
 // list of sorted key and the associated tag
 func (c *controller) getPrimaryKeyTag(subsys string) ([]byte, uint64, error) {
-	c.Lock()
-	defer c.Unlock()
+	c.RLock()
+	defer c.RUnlock()
 	sort.Sort(ByTime(c.keys))
 	keys := []*types.EncryptionKey{}
 	for _, key := range c.keys {

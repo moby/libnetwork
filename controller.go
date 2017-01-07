@@ -167,7 +167,7 @@ type controller struct {
 	agentStopDone          chan struct{}
 	keys                   []*types.EncryptionKey
 	clusterConfigAvailable bool
-	sync.Mutex
+	sync.RWMutex
 }
 
 type initializer struct {
@@ -352,9 +352,9 @@ func (c *controller) clusterAgentInit() {
 
 // AgentInitWait waits for agent initialization to be completed in the controller.
 func (c *controller) AgentInitWait() {
-	c.Lock()
+	c.RLock()
 	agentInitDone := c.agentInitDone
-	c.Unlock()
+	c.RUnlock()
 
 	if agentInitDone != nil {
 		<-agentInitDone
@@ -553,8 +553,8 @@ func (c *controller) validateHostDiscoveryConfig() bool {
 }
 
 func (c *controller) clusterHostID() string {
-	c.Lock()
-	defer c.Unlock()
+	c.RLock()
+	defer c.RUnlock()
 	if c.cfg == nil || c.cfg.Cluster.Address == "" {
 		return ""
 	}
@@ -640,8 +640,8 @@ func (c *controller) pushNodeDiscovery(d driverapi.Driver, cap driverapi.Capabil
 }
 
 func (c *controller) Config() config.Config {
-	c.Lock()
-	defer c.Unlock()
+	c.RLock()
+	defer c.RUnlock()
 	if c.cfg == nil {
 		return config.Config{}
 	}
@@ -649,8 +649,8 @@ func (c *controller) Config() config.Config {
 }
 
 func (c *controller) isManager() bool {
-	c.Lock()
-	defer c.Unlock()
+	c.RLock()
+	defer c.RUnlock()
 	if c.cfg == nil || c.cfg.Daemon.ClusterProvider == nil {
 		return false
 	}
@@ -658,8 +658,8 @@ func (c *controller) isManager() bool {
 }
 
 func (c *controller) isAgent() bool {
-	c.Lock()
-	defer c.Unlock()
+	c.RLock()
+	defer c.RUnlock()
 	if c.cfg == nil || c.cfg.Daemon.ClusterProvider == nil {
 		return false
 	}
@@ -675,9 +675,9 @@ func (c *controller) GetPluginGetter() plugingetter.PluginGetter {
 }
 
 func (c *controller) RegisterDriver(networkType string, driver driverapi.Driver, capability driverapi.Capability) error {
-	c.Lock()
+	c.RLock()
 	hd := c.discovery
-	c.Unlock()
+	c.RUnlock()
 
 	if hd != nil {
 		c.pushNodeDiscovery(driver, capability, hd.Fetch(), true)
@@ -1020,13 +1020,13 @@ func (c *controller) NewSandbox(containerID string, options ...SandboxOption) (S
 	}
 
 	var sb *sandbox
-	c.Lock()
+	c.RLock()
 	for _, s := range c.sandboxes {
 		if s.containerID == containerID {
 			// If not a stub, then we already have a complete sandbox.
 			if !s.isStub {
 				sbID := s.ID()
-				c.Unlock()
+				c.RUnlock()
 				return nil, types.ForbiddenErrorf("container %s is already present in sandbox %s", containerID, sbID)
 			}
 
@@ -1039,7 +1039,7 @@ func (c *controller) NewSandbox(containerID string, options ...SandboxOption) (S
 			break
 		}
 	}
-	c.Unlock()
+	c.RUnlock()
 
 	// Create sandbox and process options first. Key generation depends on an option
 	if sb == nil {
@@ -1076,11 +1076,11 @@ func (c *controller) NewSandbox(containerID string, options ...SandboxOption) (S
 	var err error
 	defer func() {
 		if err != nil {
-			c.Lock()
 			if sb.ingress {
+				c.Lock()
 				c.ingressSandbox = nil
+				c.Unlock()
 			}
-			c.Unlock()
 		}
 	}()
 
@@ -1127,8 +1127,8 @@ func (c *controller) NewSandbox(containerID string, options ...SandboxOption) (S
 }
 
 func (c *controller) Sandboxes() []Sandbox {
-	c.Lock()
-	defer c.Unlock()
+	c.RLock()
+	defer c.RUnlock()
 
 	list := make([]Sandbox, 0, len(c.sandboxes))
 	for _, s := range c.sandboxes {
@@ -1155,9 +1155,9 @@ func (c *controller) SandboxByID(id string) (Sandbox, error) {
 	if id == "" {
 		return nil, ErrInvalidID(id)
 	}
-	c.Lock()
+	c.RLock()
 	s, ok := c.sandboxes[id]
-	c.Unlock()
+	c.RUnlock()
 	if !ok {
 		return nil, types.NotFoundErrorf("sandbox %s not found", id)
 	}
@@ -1167,14 +1167,14 @@ func (c *controller) SandboxByID(id string) (Sandbox, error) {
 // SandboxDestroy destroys a sandbox given a container ID
 func (c *controller) SandboxDestroy(id string) error {
 	var sb *sandbox
-	c.Lock()
+	c.RLock()
 	for _, s := range c.sandboxes {
 		if s.containerID == id {
 			sb = s
 			break
 		}
 	}
-	c.Unlock()
+	c.RUnlock()
 
 	// It is not an error if sandbox is not available
 	if sb == nil {

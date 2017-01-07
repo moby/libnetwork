@@ -85,7 +85,7 @@ type sandbox struct {
 	inDelete           bool
 	ingress            bool
 	ndotsSet           bool
-	sync.Mutex
+	sync.RWMutex
 	// This mutex is used to serialize service related operation for an endpoint
 	// The lock is here because the endpoint is saved into the store so is not unique
 	Service sync.Mutex
@@ -152,8 +152,8 @@ func (sb *sandbox) Key() string {
 }
 
 func (sb *sandbox) Labels() map[string]interface{} {
-	sb.Lock()
-	defer sb.Unlock()
+	sb.RLock()
+	defer sb.RUnlock()
 	opts := make(map[string]interface{}, len(sb.config.generic))
 	for k, v := range sb.config.generic {
 		opts[k] = v
@@ -164,9 +164,9 @@ func (sb *sandbox) Labels() map[string]interface{} {
 func (sb *sandbox) Statistics() (map[string]*types.InterfaceStatistics, error) {
 	m := make(map[string]*types.InterfaceStatistics)
 
-	sb.Lock()
+	sb.RLock()
 	osb := sb.osSbox
-	sb.Unlock()
+	sb.RUnlock()
 	if osb == nil {
 		return m, nil
 	}
@@ -318,8 +318,8 @@ func (sb *sandbox) Refresh(options ...SandboxOption) error {
 }
 
 func (sb *sandbox) MarshalJSON() ([]byte, error) {
-	sb.Lock()
-	defer sb.Unlock()
+	sb.RLock()
+	defer sb.RUnlock()
 
 	// We are just interested in the container ID. This can be expanded to include all of containerInfo if there is a need
 	return json.Marshal(sb.id)
@@ -338,8 +338,8 @@ func (sb *sandbox) UnmarshalJSON(b []byte) (err error) {
 }
 
 func (sb *sandbox) Endpoints() []Endpoint {
-	sb.Lock()
-	defer sb.Unlock()
+	sb.RLock()
+	defer sb.RUnlock()
 
 	endpoints := make([]Endpoint, len(sb.endpoints))
 	for i, ep := range sb.endpoints {
@@ -349,8 +349,8 @@ func (sb *sandbox) Endpoints() []Endpoint {
 }
 
 func (sb *sandbox) getConnectedEndpoints() []*endpoint {
-	sb.Lock()
-	defer sb.Unlock()
+	sb.RLock()
+	defer sb.RUnlock()
 
 	eps := make([]*endpoint, len(sb.endpoints))
 	for i, ep := range sb.endpoints {
@@ -361,8 +361,8 @@ func (sb *sandbox) getConnectedEndpoints() []*endpoint {
 }
 
 func (sb *sandbox) removeEndpoint(ep *endpoint) {
-	sb.Lock()
-	defer sb.Unlock()
+	sb.RLock()
+	defer sb.RUnlock()
 
 	for i, e := range sb.endpoints {
 		if e == ep {
@@ -373,8 +373,8 @@ func (sb *sandbox) removeEndpoint(ep *endpoint) {
 }
 
 func (sb *sandbox) getEndpoint(id string) *endpoint {
-	sb.Lock()
-	defer sb.Unlock()
+	sb.RLock()
+	defer sb.RUnlock()
 
 	for _, ep := range sb.endpoints {
 		if ep.id == id {
@@ -386,9 +386,9 @@ func (sb *sandbox) getEndpoint(id string) *endpoint {
 }
 
 func (sb *sandbox) updateGateway(ep *endpoint) error {
-	sb.Lock()
+	sb.RLock()
 	osSbox := sb.osSbox
-	sb.Unlock()
+	sb.RUnlock()
 	if osSbox == nil {
 		return nil
 	}
@@ -437,9 +437,9 @@ func (sb *sandbox) ResolveIP(ip string) string {
 }
 
 func (sb *sandbox) ExecFunc(f func()) error {
-	sb.Lock()
+	sb.RLock()
 	osSbox := sb.osSbox
-	sb.Unlock()
+	sb.RUnlock()
 	if osSbox != nil {
 		return osSbox.InvokeFunc(f)
 	}
@@ -598,11 +598,11 @@ func (sb *sandbox) resolveName(req string, networkName string, epList []*endpoin
 			// If it is a regular lookup and if the requested name is an alias
 			// don't perform a svc lookup for this endpoint.
 			ep.Lock()
-			if _, ok := ep.aliases[req]; ok {
-				ep.Unlock()
+			_, ok := ep.aliases[req]
+			ep.Unlock()
+			if ok {
 				continue
 			}
-			ep.Unlock()
 		}
 
 		ip, miss := n.ResolveName(name, ipType)
@@ -628,13 +628,13 @@ func (sb *sandbox) SetKey(basePath string) error {
 		return types.BadRequestErrorf("invalid sandbox key")
 	}
 
-	sb.Lock()
+	sb.RLock()
 	if sb.inDelete {
-		sb.Unlock()
+		sb.RUnlock()
 		return types.ForbiddenErrorf("failed to SetKey: sandbox %q delete in progress", sb.id)
 	}
 	oldosSbox := sb.osSbox
-	sb.Unlock()
+	sb.RUnlock()
 
 	if oldosSbox != nil {
 		// If we already have an OS sandbox, release the network resources from that
@@ -794,13 +794,13 @@ func (sb *sandbox) restoreOslSandbox() error {
 }
 
 func (sb *sandbox) populateNetworkResources(ep *endpoint) error {
-	sb.Lock()
+	sb.RLock()
 	if sb.osSbox == nil {
-		sb.Unlock()
+		sb.RUnlock()
 		return nil
 	}
 	inDelete := sb.inDelete
-	sb.Unlock()
+	sb.RUnlock()
 
 	ep.Lock()
 	joinInfo := ep.joinInfo
@@ -882,10 +882,10 @@ func (sb *sandbox) clearNetworkResources(origEp *endpoint) error {
 			origEp.id)
 	}
 
-	sb.Lock()
+	sb.RLock()
 	osSbox := sb.osSbox
 	inDelete := sb.inDelete
-	sb.Unlock()
+	sb.RUnlock()
 	if osSbox != nil {
 		releaseOSSboxResources(osSbox, ep)
 	}
@@ -942,9 +942,9 @@ func (sb *sandbox) clearNetworkResources(origEp *endpoint) error {
 }
 
 func (sb *sandbox) isEndpointPopulated(ep *endpoint) bool {
-	sb.Lock()
+	sb.RLock()
 	_, ok := sb.populatedEndpoints[ep.ID()]
-	sb.Unlock()
+	sb.RUnlock()
 	return ok
 }
 

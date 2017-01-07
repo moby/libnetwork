@@ -165,12 +165,12 @@ func (c *controller) cleanupServiceBindings(cleanupNID string) {
 	var cleanupFuncs []func()
 
 	logrus.Debugf("cleanupServiceBindings for %s", cleanupNID)
-	c.Lock()
+	c.RLock()
 	services := make([]*service, 0, len(c.serviceBindings))
 	for _, s := range c.serviceBindings {
 		services = append(services, s)
 	}
-	c.Unlock()
+	c.RUnlock()
 
 	for _, s := range services {
 		s.Lock()
@@ -312,9 +312,9 @@ func (c *controller) rmServiceBinding(svcName, svcID, nID, eID, containerName st
 		ports: portConfigs(ingressPorts).String(),
 	}
 
-	c.Lock()
+	c.RLock()
 	s, ok := c.serviceBindings[skey]
-	c.Unlock()
+	c.RUnlock()
 	if !ok {
 		logrus.Warnf("rmServiceBinding %s %s %s aborted c.serviceBindings[skey] !ok", method, svcName, eID)
 		return nil

@@ -886,9 +886,9 @@ func (ep *endpoint) getSandbox() (*sandbox, bool) {
 	sid := ep.sandboxID
 	ep.Unlock()
 
-	c.Lock()
+	c.RLock()
 	ps, ok := c.sandboxes[sid]
-	c.Unlock()
+	c.RUnlock()
 
 	return ps, ok
 }
@@ -1019,9 +1019,9 @@ func JoinOptionPriority(ep Endpoint, prio int) EndpointOption {
 	return func(ep *endpoint) {
 		// ep lock already acquired
 		c := ep.network.getController()
-		c.Lock()
+		c.RLock()
 		sb, ok := c.sandboxes[ep.sandboxID]
-		c.Unlock()
+		c.RUnlock()
 		if !ok {
 			logrus.Errorf("Could not set endpoint priority value during Join to endpoint %s: No sandbox id present in endpoint", ep.id)
 			return
