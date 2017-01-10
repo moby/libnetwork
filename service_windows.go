@@ -1,11 +1,15 @@
 package libnetwork
 
-import "net"
+import (
+	"net"
 
-func (n *network) addLBBackend(ip, vip net.IP, fwMark uint32, ingressPorts []*PortConfig, addService bool) {
+	"github.com/docker/libnetwork/types"
+)
+
+func (n *network) addLBBackend(ip, vip net.IP, fwMark uint32, ingressPorts []*types.PortConfig, addService bool) {
 }
 
-func (n *network) rmLBBackend(ip, vip net.IP, fwMark uint32, ingressPorts []*PortConfig, rmService bool) {
+func (n *network) rmLBBackend(ip, vip net.IP, fwMark uint32, ingressPorts []*types.PortConfig, rmService bool) {
 }
 
 func (sb *sandbox) populateLoadbalancers(ep *endpoint) {

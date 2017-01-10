@@ -12,7 +12,7 @@
 		EndpointRecord
 		PortConfig
 */
-package libnetwork
+package types
 
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"

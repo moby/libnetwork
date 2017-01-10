@@ -6,9 +6,10 @@ import (
 	"net"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/docker/libnetwork/types"
 )
 
-func newService(name string, id string, ingressPorts []*PortConfig, aliases []string) *service {
+func newService(name string, id string, ingressPorts []*types.PortConfig, aliases []string) *service {
 	return &service{
 		name:          name,
 		id:            id,
@@ -60,7 +61,7 @@ func (c *controller) cleanupServiceBindings(cleanupNID string) {
 
 }
 
-func (c *controller) addServiceBinding(name, sid, nid, eid string, vip net.IP, ingressPorts []*PortConfig, aliases []string, ip net.IP) error {
+func (c *controller) addServiceBinding(name, sid, nid, eid string, vip net.IP, ingressPorts []*types.PortConfig, aliases []string, ip net.IP) error {
 	var (
 		s          *service
 		addService bool
@@ -141,7 +142,7 @@ func (c *controller) addServiceBinding(name, sid, nid, eid string, vip net.IP, i
 	return nil
 }
 
-func (c *controller) rmServiceBinding(name, sid, nid, eid string, vip net.IP, ingressPorts []*PortConfig, aliases []string, ip net.IP) error {
+func (c *controller) rmServiceBinding(name, sid, nid, eid string, vip net.IP, ingressPorts []*types.PortConfig, aliases []string, ip net.IP) error {
 	var rmService bool
 
 	n, err := c.NetworkByID(nid)

@@ -2,7 +2,7 @@ syntax = "proto3";
 
 import "gogoproto/gogo.proto";
 
-package libnetwork;
+package types;
 
 option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
