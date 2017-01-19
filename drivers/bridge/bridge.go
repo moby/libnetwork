@@ -95,7 +95,7 @@ type containerConfiguration struct {
 	ChildEndpoints  []string
 }
 
-// cnnectivityConfiguration represents the user specified configuration regarding the external connectivity
+// connectivityConfiguration represents the user specified configuration regarding the external connectivity
 type connectivityConfiguration struct {
 	PortBindings []types.PortBinding
 	ExposedPorts []types.TransportPort
@@ -674,7 +674,7 @@ func (d *driver) createNetwork(config *networkConfiguration) error {
 	// Verify the network configuration does not conflict with previously installed
 	// networks. This step is needed now because driver might have now set the bridge
 	// name on this config struct. And because we need to check for possible address
-	// conflicts, so we need to check against operationa lnetworks.
+	// conflicts, so we need to check against operational networks.
 	if err = config.conflictsWithNetworks(config.ID, networkList); err != nil {
 		return err
 	}
@@ -726,13 +726,13 @@ func (d *driver) createNetwork(config *networkConfiguration) error {
 		// Enable IPv6 Forwarding
 		{enableIPv6Forwarding, setupIPv6Forwarding},
 
-		// Setup Loopback Adresses Routing
-		{!d.config.EnableUserlandProxy, setupLoopbackAdressesRouting},
+		// Setup Loopback Addresses Routing
+		{!d.config.EnableUserlandProxy, setupLoopbackAddressesRouting},
 
 		// Setup IPTables.
 		{d.config.EnableIPTables, network.setupIPTables},
 
-		//We want to track firewalld configuration so that
+		//We want to track firewall configuration so that
 		//if it is started/reloaded, the rules can be applied correctly
 		{d.config.EnableIPTables, network.setupFirewalld},
 
@@ -780,7 +780,7 @@ func (d *driver) DeleteNetwork(nid string) error {
 	config := n.config
 	n.Unlock()
 
-	// delele endpoints belong to this network
+	// delete endpoints belong to this network
 	for _, ep := range n.endpoints {
 		if err := n.releasePorts(ep); err != nil {
 			logrus.Warn(err)
