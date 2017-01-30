@@ -1,45 +1,13 @@
 package bitseq
 
 import (
-	"fmt"
-	"io/ioutil"
 	"math/rand"
 	"testing"
 	"time"
 
-	"github.com/docker/libkv/store"
-	"github.com/docker/libkv/store/boltdb"
-	"github.com/docker/libnetwork/datastore"
-	_ "github.com/docker/libnetwork/testutils"
+	"github.com/Sirupsen/logrus"
+	"github.com/docker/libnetwork/testutils"
 )
-
-const (
-	defaultPrefix = "/tmp/libnetwork/test/bitseq"
-)
-
-func init() {
-	boltdb.Register()
-}
-
-func randomLocalStore() (datastore.DataStore, error) {
-	tmp, err := ioutil.TempFile("", "libnetwork-")
-	if err != nil {
-		return nil, fmt.Errorf("Error creating temp file: %v", err)
-	}
-	if err := tmp.Close(); err != nil {
-		return nil, fmt.Errorf("Error closing temp file: %v", err)
-	}
-	return datastore.NewDataStore(datastore.LocalScope, &datastore.ScopeCfg{
-		Client: datastore.ScopeClientCfg{
-			Provider: "boltdb",
-			Address:  defaultPrefix + tmp.Name(),
-			Config: &store.Config{
-				Bucket:            "libnetwork",
-				ConnectionTimeout: 3 * time.Second,
-			},
-		},
-	})
-}
 
 func TestSequenceGetAvailableBit(t *testing.T) {
 	input := []struct {
@@ -446,7 +414,7 @@ func TestPushReservation(t *testing.T) {
 	}
 
 	for n, i := range input {
-		mask := pushReservation(i.bytePos, i.bitPos, i.mask, false)
+		mask, _ := pushReservation(i.bytePos, i.bitPos, i.mask, false)
 		if !mask.equal(i.newMask) {
 			t.Fatalf("Error in (%d) pushReservation():\n%s + (%d,%d):\nExp: %s\nGot: %s,",
 				n, i.mask.toString(), i.bytePos, i.bitPos, i.newMask.toString(), mask.toString())
@@ -834,7 +802,7 @@ func TestMethods(t *testing.T) {
 }
 
 func TestRandomAllocateDeallocate(t *testing.T) {
-	ds, err := randomLocalStore()
+	ds, err := testutils.RandomLocalStore("bitseq")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -885,7 +853,7 @@ func TestRandomAllocateDeallocate(t *testing.T) {
 }
 
 func TestAllocateRandomDeallocate(t *testing.T) {
-	ds, err := randomLocalStore()
+	ds, err := testutils.RandomLocalStore("bitseq")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -949,8 +917,47 @@ func TestAllocateRandomDeallocate(t *testing.T) {
 	}
 }
 
+func TestRedundantDeallocations(t *testing.T) {
+	var (
+		i        = 0
+		size     = uint64(512)
+		num      = 256 // number of bits to be reserved
+		maxTries = 10 * num
+	)
+
+	// Silence this test generated warnings
+	logrus.SetLevel(logrus.ErrorLevel)
+	defer logrus.SetLevel(logrus.InfoLevel)
+
+	hnd, err := NewHandle("", nil, "", size)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for i := 0; i < num; i++ {
+		if _, err := hnd.SetAny(); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Until all the bits are not deallocated, deallocate a random one
+	seed := time.Now().Unix()
+	rand.Seed(seed)
+	for ; hnd.unselected < uint64(size) && i < maxTries; i++ {
+		if err := hnd.Unset(uint64(rand.Intn(num))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if i == maxTries {
+		t.Fatalf("Random deallocation failed after too many attempts. Seed: %d", seed)
+	}
+	if hnd.head.block != 0 || hnd.head.count != getNumBlocks(size) {
+		t.Fatalf("Failed to handle redundant release (seed: %d): %s", seed, hnd)
+	}
+}
+
 func TestRetrieveFromStore(t *testing.T) {
-	ds, err := randomLocalStore()
+	ds, err := testutils.RandomLocalStore("bitseq")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -988,7 +995,7 @@ func TestRetrieveFromStore(t *testing.T) {
 }
 
 func TestIsCorrupted(t *testing.T) {
-	ds, err := randomLocalStore()
+	ds, err := testutils.RandomLocalStore("bitseq")
 	if err != nil {
 		t.Fatal(err)
 	}

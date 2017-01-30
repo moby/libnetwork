@@ -42,6 +42,7 @@ type Handle struct {
 	dbIndex    uint64
 	dbExists   bool
 	store      datastore.DataStore
+	serial     chan struct{}
 	sync.Mutex
 }
 
@@ -57,6 +58,7 @@ func NewHandle(app string, ds datastore.DataStore, id string, numElements uint64
 			block: 0x0,
 			count: getNumBlocks(numElements),
 		},
+		serial: make(chan (struct{}), 1),
 	}
 
 	if h.store == nil {
@@ -64,7 +66,7 @@ func NewHandle(app string, ds datastore.DataStore, id string, numElements uint64
 	}
 
 	// Get the initial status from the ds if present.
-	if err := h.store.GetObject(datastore.Key(h.Key()...), h); err != nil && err != datastore.ErrKeyNotFound {
+	if err := h.Refresh(); err != nil {
 		return nil, err
 	}
 
@@ -184,6 +186,8 @@ func (s *sequence) fromByteArray(data []byte) error {
 }
 
 func (h *Handle) getCopy() *Handle {
+	h.Lock()
+	defer h.Unlock()
 	return &Handle{
 		bits:       h.bits,
 		unselected: h.unselected,
@@ -239,6 +243,9 @@ func (h *Handle) IsSet(ordinal uint64) bool {
 	if err := h.validateOrdinal(ordinal); err != nil {
 		return false
 	}
+	if err := h.Refresh(); err != nil {
+		logrus.Warnf("Failed to retrieve latest store view during IsSet(): %v", err)
+	}
 	h.Lock()
 	_, _, err := checkIfAvailable(h.head, ordinal)
 	h.Unlock()
@@ -262,19 +269,11 @@ func (h *Handle) runConsistencyCheck() bool {
 // It looks for a corruption signature that may happen in docker 1.9.0 and 1.9.1.
 func (h *Handle) CheckConsistency() error {
 	for {
-		h.Lock()
-		store := h.store
-		h.Unlock()
-
-		if store != nil {
-			if err := store.GetObject(datastore.Key(h.Key()...), h); err != nil && err != datastore.ErrKeyNotFound {
-				return err
-			}
+		if err := h.Refresh(); err != nil {
+			return err
 		}
 
-		h.Lock()
 		nh := h.getCopy()
-		h.Unlock()
 
 		if !nh.runConsistencyCheck() {
 			return nil
@@ -297,6 +296,16 @@ func (h *Handle) CheckConsistency() error {
 	}
 }
 
+// Refresh updates current datastore view to latest
+func (h *Handle) Refresh() error {
+	if h.store != nil {
+		if err := h.store.GetObject(datastore.Key(h.Key()...), h); err != nil && err != datastore.ErrKeyNotFound {
+			return err
+		}
+	}
+	return nil
+}
+
 // set/reset the bit
 func (h *Handle) set(ordinal, start, end uint64, any bool, release bool) (uint64, error) {
 	var (
@@ -304,68 +313,75 @@ func (h *Handle) set(ordinal, start, end uint64, any bool, release bool) (uint64
 		bytePos uint64
 		ret     uint64
 		err     error
+		mod     bool
 	)
 
-	for {
-		var store datastore.DataStore
-		h.Lock()
-		store = h.store
-		h.Unlock()
-		if store != nil {
-			if err := store.GetObject(datastore.Key(h.Key()...), h); err != nil && err != datastore.ErrKeyNotFound {
-				return ret, err
-			}
-		}
+	if h.store == nil {
+		h.serial <- struct{}{}
+		defer func() { <-h.serial }()
+	}
 
-		h.Lock()
-		// Get position if available
-		if release {
-			bytePos, bitPos = ordinalToPos(ordinal)
-		} else {
-			if any {
-				bytePos, bitPos, err = getFirstAvailable(h.head, start)
-				ret = posToOrdinal(bytePos, bitPos)
-				if end < ret {
-					err = ErrNoBitAvailable
-				}
-			} else {
-				bytePos, bitPos, err = checkIfAvailable(h.head, ordinal)
-				ret = ordinal
-			}
-		}
-		if err != nil {
-			h.Unlock()
-			return ret, err
+	for {
+		if err := h.Refresh(); err != nil {
+			return invalidPos, err
 		}
 
 		// Create a private copy of h and work on it
 		nh := h.getCopy()
-		h.Unlock()
 
-		nh.head = pushReservation(bytePos, bitPos, nh.head, release)
-		if release {
-			nh.unselected++
+		// Get position if available
+		if release || !any {
+			bytePos, bitPos = ordinalToPos(ordinal)
+			ret = ordinal
 		} else {
-			nh.unselected--
+			bytePos, bitPos, err = getFirstAvailable(nh.head, start)
+			if err != nil {
+				return invalidPos, err
+			}
+			ret = posToOrdinal(bytePos, bitPos)
+			if ret > end {
+				return invalidPos, ErrNoBitAvailable
+			}
+		}
+
+		if nh.head, mod = pushReservation(bytePos, bitPos, nh.head, release); mod {
+			if release {
+				nh.unselected++
+			} else {
+				nh.unselected--
+			}
+		} else {
+			if !release && !any {
+				return invalidPos, ErrBitAllocated
+			} else if release {
+				logrus.Warnf("Redundant release on %q during (release: %t, any: %t), (ordinal: %d, ret: %d)",
+					nh.id, release, any, ordinal, ret)
+				return ret, nil
+			} else {
+				// This should not happen, we should panic
+				return invalidPos, fmt.Errorf("Unexpected redundant reserve on %q during (release: %t, any: %t), (ordinal: %d, ret: %d)",
+					nh.id, release, any, ordinal, ret)
+			}
 		}
 
 		// Attempt to write private copy to store
-		if err := nh.writeToStore(); err != nil {
-			if _, ok := err.(types.RetryError); !ok {
-				return ret, fmt.Errorf("internal failure while setting the bit: %v", err)
-			}
-			// Retry
-			continue
-		}
-
-		// Previous atomic push was succesfull. Save private copy to local copy
 		h.Lock()
-		defer h.Unlock()
-		h.unselected = nh.unselected
-		h.head = nh.head
-		h.dbExists = nh.dbExists
-		h.dbIndex = nh.dbIndex
-		return ret, nil
+		if err = nh.writeToStore(); err == nil {
+			h.unselected = nh.unselected
+			h.head = nh.head
+			h.dbExists = nh.dbExists
+			h.dbIndex = nh.dbIndex
+			h.Unlock()
+			return ret, nil
+		}
+		h.Unlock()
+		if _, ok := err.(types.RetryError); !ok {
+			return invalidPos, fmt.Errorf("internal failure while setting the bit: %v", err)
+		}
+		// Retry
+		logrus.Warnf("Retry set on %q during (release: %t, any: %t), (ordinal: %d, ret: %d)",
+			nh.id, release, any, ordinal, ret)
+		continue
 	}
 }
 
@@ -557,7 +573,8 @@ func findSequence(head *sequence, bytePos uint64) (*sequence, *sequence, uint64,
 	return current, previous, precBlocks, inBlockBytePos
 }
 
-// PushReservation pushes the bit reservation inside the bitmask.
+// PushReservation pushes the bit reservation inside the bitmask. It returns the new sequence and a bool
+// to indicate if the reservation has actually changed any bit value (false for redundant reservation).
 // Given byte and bit positions, identify the sequence (current) which holds the block containing the affected bit.
 // Create a new block with the modified bit according to the operation (allocate/release).
 // Create a new sequence containing the new block and insert it in the proper position.
@@ -574,14 +591,14 @@ func findSequence(head *sequence, bytePos uint64) (*sequence, *sequence, uint64,
 // A) block is first in current:         [prev seq] [new] [modified current seq] [next seq]
 // B) block is last in current:          [prev seq] [modified current seq] [new] [next seq]
 // C) block is in the middle of current: [prev seq] [curr pre] [new] [curr post] [next seq]
-func pushReservation(bytePos, bitPos uint64, head *sequence, release bool) *sequence {
+func pushReservation(bytePos, bitPos uint64, head *sequence, release bool) (*sequence, bool) {
 	// Store list's head
 	newHead := head
 
 	// Find the sequence containing this byte
 	current, previous, precBlocks, inBlockBytePos := findSequence(head, bytePos)
 	if current == nil {
-		return newHead
+		return newHead, false
 	}
 
 	// Construct updated block
@@ -595,7 +612,7 @@ func pushReservation(bytePos, bitPos uint64, head *sequence, release bool) *sequ
 
 	// Quit if it was a redundant request
 	if current.block == newBlock {
-		return newHead
+		return newHead, false
 	}
 
 	// Current sequence inevitably looses one block, upadate count
@@ -632,7 +649,7 @@ func pushReservation(bytePos, bitPos uint64, head *sequence, release bool) *sequ
 		// No merging or empty current possible here
 	}
 
-	return newHead
+	return newHead, true
 }
 
 // Removes the current sequence from the list if empty, adjusting the head pointer if needed

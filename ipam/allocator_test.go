@@ -4,55 +4,22 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"math/rand"
 	"net"
 	"strconv"
 	"testing"
 	"time"
 
-	"github.com/docker/libkv/store"
-	"github.com/docker/libkv/store/boltdb"
 	"github.com/docker/libnetwork/bitseq"
-	"github.com/docker/libnetwork/datastore"
 	"github.com/docker/libnetwork/ipamapi"
 	"github.com/docker/libnetwork/ipamutils"
-	_ "github.com/docker/libnetwork/testutils"
+	"github.com/docker/libnetwork/testutils"
 	"github.com/docker/libnetwork/types"
 )
 
-const (
-	defaultPrefix = "/tmp/libnetwork/test/ipam"
-)
-
-func init() {
-	boltdb.Register()
-}
-
-// OptionBoltdbWithRandomDBFile function returns a random dir for local store backend
-func randomLocalStore() (datastore.DataStore, error) {
-	tmp, err := ioutil.TempFile("", "libnetwork-")
-	if err != nil {
-		return nil, fmt.Errorf("Error creating temp file: %v", err)
-	}
-	if err := tmp.Close(); err != nil {
-		return nil, fmt.Errorf("Error closing temp file: %v", err)
-	}
-	return datastore.NewDataStore(datastore.LocalScope, &datastore.ScopeCfg{
-		Client: datastore.ScopeClientCfg{
-			Provider: "boltdb",
-			Address:  defaultPrefix + tmp.Name(),
-			Config: &store.Config{
-				Bucket:            "libnetwork",
-				ConnectionTimeout: 3 * time.Second,
-			},
-		},
-	})
-}
-
 func getAllocator() (*Allocator, error) {
 	ipamutils.InitNetworks()
-	ds, err := randomLocalStore()
+	ds, err := testutils.RandomLocalStore("ipam")
 	if err != nil {
 		return nil, err
 	}
@@ -982,7 +949,7 @@ func TestAllocateRandomDeallocate(t *testing.T) {
 }
 
 func testAllocateRandomDeallocate(t *testing.T, pool, subPool string, num int) {
-	ds, err := randomLocalStore()
+	ds, err := testutils.RandomLocalStore("ipam")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1051,7 +1018,7 @@ func testAllocateRandomDeallocate(t *testing.T, pool, subPool string, num int) {
 
 func TestRetrieveFromStore(t *testing.T) {
 	num := 200
-	ds, err := randomLocalStore()
+	ds, err := testutils.RandomLocalStore("ipam")
 	if err != nil {
 		t.Fatal(err)
 	}
