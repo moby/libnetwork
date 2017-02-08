@@ -111,13 +111,14 @@ func (n *networkNamespace) programGateway(gw net.IP, isAdd bool) error {
 }
 
 // Program a route in to the namespace routing table.
-func (n *networkNamespace) programRoute(path string, dest *net.IPNet, nh net.IP) error {
+func (n *networkNamespace) programRoute(table int, dest *net.IPNet, nh net.IP) error {
 	gwRoutes, err := n.nlHandle.RouteGet(nh)
 	if err != nil {
 		return fmt.Errorf("route for the next hop %s could not be found: %v", nh, err)
 	}
 
 	return n.nlHandle.RouteAdd(&netlink.Route{
+		Table:     table,
 		Scope:     netlink.SCOPE_UNIVERSE,
 		LinkIndex: gwRoutes[0].LinkIndex,
 		Gw:        nh,
@@ -126,13 +127,14 @@ func (n *networkNamespace) programRoute(path string, dest *net.IPNet, nh net.IP)
 }
 
 // Delete a route from the namespace routing table.
-func (n *networkNamespace) removeRoute(path string, dest *net.IPNet, nh net.IP) error {
+func (n *networkNamespace) removeRoute(table int, dest *net.IPNet, nh net.IP) error {
 	gwRoutes, err := n.nlHandle.RouteGet(nh)
 	if err != nil {
 		return fmt.Errorf("route for the next hop could not be found: %v", err)
 	}
 
 	return n.nlHandle.RouteDel(&netlink.Route{
+		Table:     table,
 		Scope:     netlink.SCOPE_UNIVERSE,
 		LinkIndex: gwRoutes[0].LinkIndex,
 		Gw:        nh,
@@ -173,7 +175,7 @@ func (n *networkNamespace) UnsetGatewayIPv6() error {
 }
 
 func (n *networkNamespace) AddStaticRoute(r *types.StaticRoute) error {
-	err := n.programRoute(n.nsPath(), r.Destination, r.NextHop)
+	err := n.programRoute(r.Table, r.Destination, r.NextHop)
 	if err == nil {
 		n.Lock()
 		n.staticRoutes = append(n.staticRoutes, r)
@@ -183,8 +185,7 @@ func (n *networkNamespace) AddStaticRoute(r *types.StaticRoute) error {
 }
 
 func (n *networkNamespace) RemoveStaticRoute(r *types.StaticRoute) error {
-
-	err := n.removeRoute(n.nsPath(), r.Destination, r.NextHop)
+	err := n.removeRoute(r.Table, r.Destination, r.NextHop)
 	if err == nil {
 		n.Lock()
 		lastIndex := len(n.staticRoutes) - 1
@@ -200,4 +201,20 @@ func (n *networkNamespace) RemoveStaticRoute(r *types.StaticRoute) error {
 		n.Unlock()
 	}
 	return err
+}
+
+func (n *networkNamespace) AddPolicyRoutingRule(table int, src, dst *net.IPNet) error {
+	r := netlink.NewRule()
+	r.Table = table
+	r.Src = src
+	r.Dst = dst
+	return n.nlHandle.RuleAdd(r)
+}
+
+func (n *networkNamespace) RemovePolicyRoutingRule(table int, src, dst *net.IPNet) error {
+	r := netlink.NewRule()
+	r.Table = table
+	r.Src = src
+	r.Dst = dst
+	return n.nlHandle.RuleDel(r)
 }

@@ -422,10 +422,9 @@ const (
 
 // StaticRoute is a statically-provisioned IP route.
 type StaticRoute struct {
+	Table       int
 	Destination *net.IPNet
-
-	RouteType int // NEXT_HOP or CONNECTED
-
+	RouteType   int // NEXT_HOP or CONNECTED
 	// NextHop will be resolved by the kernel (i.e. as a loose hop).
 	NextHop net.IP
 }
@@ -434,9 +433,11 @@ type StaticRoute struct {
 func (r *StaticRoute) GetCopy() *StaticRoute {
 	d := GetIPNetCopy(r.Destination)
 	nh := GetIPCopy(r.NextHop)
-	return &StaticRoute{Destination: d,
-		RouteType: r.RouteType,
-		NextHop:   nh,
+	return &StaticRoute{
+		Table:       r.Table,
+		Destination: d,
+		RouteType:   r.RouteType,
+		NextHop:     nh,
 	}
 }
 

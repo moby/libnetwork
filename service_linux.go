@@ -19,6 +19,7 @@ import (
 	"github.com/docker/libnetwork/iptables"
 	"github.com/docker/libnetwork/ipvs"
 	"github.com/docker/libnetwork/ns"
+	"github.com/docker/libnetwork/types"
 	"github.com/gogo/protobuf/proto"
 	"github.com/vishvananda/netlink/nl"
 	"github.com/vishvananda/netns"
@@ -67,6 +68,12 @@ func (sb *sandbox) populateLoadbalancers(ep *endpoint) {
 	eIP := ep.Iface().Address()
 
 	if n.ingress {
+		if !sb.ingress {
+			if err := sb.AddReturnRoute(n, eIP); err != nil {
+				logrus.Errorf("Failed to program return route for ep %s (%s): %v", ep.Name(), ep.ID()[0:7], err)
+			}
+		}
+
 		if err := addRedirectRules(sb.Key(), eIP, ep.ingressPorts); err != nil {
 			logrus.Errorf("Failed to add redirect rules for ep %s (%s): %v", ep.Name(), ep.ID()[0:7], err)
 		}
@@ -628,22 +635,10 @@ func fwMarker() {
 	}
 
 	if addDelOpt == "-A" {
-		eIP, subnet, err := net.ParseCIDR(os.Args[6])
+		err := ioutil.WriteFile("/proc/sys/net/ipv4/vs/conntrack", []byte{'1', '\n'}, 0644)
 		if err != nil {
-			logrus.Errorf("Failed to parse endpoint IP %s: %v", os.Args[6], err)
-			os.Exit(9)
-		}
-
-		ruleParams := strings.Fields(fmt.Sprintf("-m ipvs --ipvs -d %s -j SNAT --to-source %s", subnet, eIP))
-		if !iptables.Exists("nat", "POSTROUTING", ruleParams...) {
-			rule := append(strings.Fields("-t nat -A POSTROUTING"), ruleParams...)
-			rules = append(rules, rule)
-
-			err := ioutil.WriteFile("/proc/sys/net/ipv4/vs/conntrack", []byte{'1', '\n'}, 0644)
-			if err != nil {
-				logrus.Errorf("Failed to write to /proc/sys/net/ipv4/vs/conntrack: %v", err)
-				os.Exit(8)
-			}
+			logrus.Errorf("Failed to write to /proc/sys/net/ipv4/vs/conntrack: %v", err)
+			os.Exit(8)
 		}
 	}
 
@@ -770,4 +765,52 @@ func redirecter() {
 			}
 		}
 	}
+}
+
+func (sb *sandbox) AddReturnRoute(n *network, from *net.IPNet) error {
+	c := n.getController()
+
+	c.Lock()
+	iSb := c.ingressSandbox
+	c.Unlock()
+
+	if iSb == nil {
+		return fmt.Errorf("gave up because ingress sandbox is nil")
+	}
+
+	var to *net.IPNet
+	for _, ep := range iSb.Endpoints() {
+		if ep.Network() == "ingress" {
+			to = ep.Info().Iface().Address()
+			break
+		}
+	}
+	if to == nil {
+		return fmt.Errorf("failed to retrieve ingress sandbox IP address on ingress network")
+	}
+
+	sb.Lock()
+	osSbox := sb.osSbox
+	sb.Unlock()
+	if osSbox == nil {
+		return fmt.Errorf("gave up because os sandbox is nil")
+	}
+
+	if err := osSbox.AddPolicyRoutingRule(127, from, nil); err != nil {
+		return fmt.Errorf("failed to add source routing policy rule: %v", err)
+	}
+
+	r := &types.StaticRoute{
+		Table: 127,
+		Destination: &net.IPNet{
+			IP:   net.IP{0, 0, 0, 0},
+			Mask: net.IPMask{0, 0, 0, 0},
+		},
+		NextHop: to.IP,
+	}
+	if err := osSbox.AddStaticRoute(r); err != nil {
+		return fmt.Errorf("failed to add static route %v: %v", r, err)
+	}
+
+	return nil
 }
