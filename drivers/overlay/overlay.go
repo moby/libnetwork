@@ -63,7 +63,6 @@ func Init(dc driverapi.DriverCallback, config map[string]interface{}) error {
 		peerDb: peerNetworkMap{
 			mp: map[string]*peerMap{},
 		},
-		secMap: &encrMap{nodes: map[string][]*spi{}},
 		config: config,
 	}
 

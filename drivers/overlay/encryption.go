@@ -1,7 +1,8 @@
 package overlay
 
 import (
-	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
@@ -33,6 +34,7 @@ const (
 
 var spMark = netlink.XfrmMark{Value: uint32(r), Mask: 0xffffffff}
 
+// key is the master datapath key
 type key struct {
 	value []byte
 	tag   uint32
@@ -45,42 +47,35 @@ func (k *key) String() string {
 	return ""
 }
 
-type spi struct {
-	forward int
-	reverse int
+// encrElem contains the encryption info needed to
+// program the ipsec tunnel between a pair of nodes.
+type encrElem struct {
+	forwardSPI int
+	reverseSPI int
+	forwardKey []byte
+	reverseKey []byte
 }
 
-func (s *spi) String() string {
-	return fmt.Sprintf("SPI(FWD: 0x%x, REV: 0x%x)", uint32(s.forward), uint32(s.reverse))
+func newEncrElem(src, dst net.IP, k *key) *encrElem {
+	return &encrElem{
+		forwardSPI: buildSPI(src, dst, k.tag),
+		reverseSPI: buildSPI(dst, src, k.tag),
+		forwardKey: buildKey(src, dst, k.tag, k.value),
+		reverseKey: buildKey(dst, src, k.tag, k.value),
+	}
 }
 
+// encrMap contains the encryption info for each ipsec
+// tunnel connecting this node to the other nodes.
 type encrMap struct {
-	nodes map[string][]*spi
+	nodes map[string][]*encrElem
 	sync.Mutex
 }
 
-func (e *encrMap) String() string {
-	e.Lock()
-	defer e.Unlock()
-	b := new(bytes.Buffer)
-	for k, v := range e.nodes {
-		b.WriteString("\n")
-		b.WriteString(k)
-		b.WriteString(":")
-		b.WriteString("[")
-		for _, s := range v {
-			b.WriteString(s.String())
-			b.WriteString(",")
-		}
-		b.WriteString("]")
-
-	}
-	return b.String()
-}
-
+// checkEncryption is called on each container join/leave event.
+// It makes sure the datapath encryption is programmed between
+// this node and the remote nodes when needed.
 func (d *driver) checkEncryption(nid string, rIP net.IP, vxlanID uint32, isLocal, add bool) error {
-	logrus.Debugf("checkEncryption(%s, %v, %d, %t)", nid[0:7], rIP, vxlanID, isLocal)
-
 	n := d.network(nid)
 	if n == nil || !n.secure {
 		return nil
@@ -110,8 +105,6 @@ func (d *driver) checkEncryption(nid string, rIP net.IP, vxlanID uint32, isLocal
 		}
 	}
 
-	logrus.Debugf("List of nodes: %s", nodes)
-
 	if add {
 		for _, rIP := range nodes {
 			if err := setupEncryption(lIP, aIP, rIP, vxlanID, d.secMap, d.keys); err != nil {
@@ -129,11 +122,9 @@ func (d *driver) checkEncryption(nid string, rIP net.IP, vxlanID uint32, isLocal
 	return nil
 }
 
+// Turns on ipsec between this and the remote node for the specified overlay network
 func setupEncryption(localIP, advIP, remoteIP net.IP, vni uint32, em *encrMap, keys []*key) error {
 	logrus.Debugf("Programming encryption for vxlan %d between %s and %s", vni, localIP, remoteIP)
-	rIPs := remoteIP.String()
-
-	indices := make([]*spi, 0, len(keys))
 
 	err := programMangle(vni, true)
 	if err != nil {
@@ -145,17 +136,19 @@ func setupEncryption(localIP, advIP, remoteIP net.IP, vni uint32, em *encrMap, k
 		logrus.Warn(err)
 	}
 
+	var eel []*encrElem
+
 	for i, k := range keys {
-		spis := &spi{buildSPI(advIP, remoteIP, k.tag), buildSPI(remoteIP, advIP, k.tag)}
+		ee := newEncrElem(advIP, remoteIP, k)
 		dir := reverse
 		if i == 0 {
 			dir = bidir
 		}
-		fSA, rSA, err := programSA(localIP, remoteIP, spis, k, dir, true)
+		fSA, rSA, err := programSA(localIP, remoteIP, ee, dir, true)
 		if err != nil {
 			logrus.Warn(err)
 		}
-		indices = append(indices, spis)
+		eel = append(eel, ee)
 		if i != 0 {
 			continue
 		}
@@ -166,7 +159,7 @@ func setupEncryption(localIP, advIP, remoteIP net.IP, vni uint32, em *encrMap, k
 	}
 
 	em.Lock()
-	em.nodes[rIPs] = indices
+	em.nodes[remoteIP.String()] = eel
 	em.Unlock()
 
 	return nil
@@ -174,17 +167,17 @@ func setupEncryption(localIP, advIP, remoteIP net.IP, vni uint32, em *encrMap, k
 
 func removeEncryption(localIP, remoteIP net.IP, em *encrMap) error {
 	em.Lock()
-	indices, ok := em.nodes[remoteIP.String()]
+	eel, ok := em.nodes[remoteIP.String()]
 	em.Unlock()
 	if !ok {
 		return nil
 	}
-	for i, idxs := range indices {
+	for i, ee := range eel {
 		dir := reverse
 		if i == 0 {
 			dir = bidir
 		}
-		fSA, rSA, err := programSA(localIP, remoteIP, idxs, nil, dir, false)
+		fSA, rSA, err := programSA(localIP, remoteIP, ee, dir, false)
 		if err != nil {
 			logrus.Warn(err)
 		}
@@ -255,7 +248,7 @@ func programInput(vni uint32, add bool) (err error) {
 	return
 }
 
-func programSA(localIP, remoteIP net.IP, spi *spi, k *key, dir int, add bool) (fSA *netlink.XfrmState, rSA *netlink.XfrmState, err error) {
+func programSA(localIP, remoteIP net.IP, ee *encrElem, dir int, add bool) (fSA *netlink.XfrmState, rSA *netlink.XfrmState, err error) {
 	var (
 		action      = "Removing"
 		xfrmProgram = ns.NlHandle().XfrmStateDel
@@ -271,12 +264,12 @@ func programSA(localIP, remoteIP net.IP, spi *spi, k *key, dir int, add bool) (f
 			Src:   remoteIP,
 			Dst:   localIP,
 			Proto: netlink.XFRM_PROTO_ESP,
-			Spi:   spi.reverse,
+			Spi:   ee.reverseSPI,
 			Mode:  netlink.XFRM_MODE_TRANSPORT,
 			Reqid: r,
 		}
 		if add {
-			rSA.Aead = buildAeadAlgo(k, spi.reverse)
+			rSA.Aead = buildAeadAlgo(ee.reverseKey, ee.reverseSPI)
 		}
 
 		exists, err := saExists(rSA)
@@ -285,7 +278,6 @@ func programSA(localIP, remoteIP net.IP, spi *spi, k *key, dir int, add bool) (f
 		}
 
 		if add != exists {
-			logrus.Debugf("%s: rSA{%s}", action, rSA)
 			if err := xfrmProgram(rSA); err != nil {
 				logrus.Warnf("Failed %s rSA{%s}: %v", action, rSA, err)
 			}
@@ -297,12 +289,12 @@ func programSA(localIP, remoteIP net.IP, spi *spi, k *key, dir int, add bool) (f
 			Src:   localIP,
 			Dst:   remoteIP,
 			Proto: netlink.XFRM_PROTO_ESP,
-			Spi:   spi.forward,
+			Spi:   ee.forwardSPI,
 			Mode:  netlink.XFRM_MODE_TRANSPORT,
 			Reqid: r,
 		}
 		if add {
-			fSA.Aead = buildAeadAlgo(k, spi.forward)
+			fSA.Aead = buildAeadAlgo(ee.forwardKey, ee.forwardSPI)
 		}
 
 		exists, err := saExists(fSA)
@@ -311,7 +303,6 @@ func programSA(localIP, remoteIP net.IP, spi *spi, k *key, dir int, add bool) (f
 		}
 
 		if add != exists {
-			logrus.Debugf("%s fSA{%s}", action, fSA)
 			if err := xfrmProgram(fSA); err != nil {
 				logrus.Warnf("Failed %s fSA{%s}: %v.", action, fSA, err)
 			}
@@ -359,9 +350,8 @@ func programSP(fSA *netlink.XfrmState, rSA *netlink.XfrmState, add bool) error {
 	}
 
 	if add != exists {
-		logrus.Debugf("%s fSP{%s}", action, fPol)
 		if err := xfrmProgram(fPol); err != nil {
-			logrus.Warnf("%s fSP{%s}: %v", action, fPol, err)
+			logrus.Warnf("Failed %s fSP{%s}: %v", action, fPol, err)
 		}
 	}
 
@@ -406,22 +396,32 @@ func buildSPI(src, dst net.IP, st uint32) int {
 	return int(binary.BigEndian.Uint32(h.Sum(nil)))
 }
 
-func buildAeadAlgo(k *key, s int) *netlink.XfrmStateAlgo {
+func buildKey(src, dst net.IP, st uint32, master []byte) []byte {
+	b := make([]byte, 4)
+	binary.BigEndian.PutUint32(b, st)
+	m := hmac.New(sha256.New, master)
+	m.Write(src)
+	m.Write(dst)
+	m.Write(b)
+	return m.Sum(nil)[:len(master)]
+}
+
+func buildAeadAlgo(k []byte, s int) *netlink.XfrmStateAlgo {
 	salt := make([]byte, 4)
 	binary.BigEndian.PutUint32(salt, uint32(s))
 	return &netlink.XfrmStateAlgo{
 		Name:   "rfc4106(gcm(aes))",
-		Key:    append(k.value, salt...),
+		Key:    append(k, salt...),
 		ICVLen: 64,
 	}
 }
 
-func (d *driver) secMapWalk(f func(string, []*spi) ([]*spi, bool)) error {
+func (d *driver) secMapWalk(f func(string, []*encrElem) ([]*encrElem, bool)) error {
 	d.secMap.Lock()
-	for node, indices := range d.secMap.nodes {
-		idxs, stop := f(node, indices)
-		if idxs != nil {
-			d.secMap.nodes[node] = idxs
+	for node, eel := range d.secMap.nodes {
+		ueel, stop := f(node, eel)
+		if ueel != nil {
+			d.secMap.nodes[node] = ueel
 		}
 		if stop {
 			break
@@ -437,19 +437,14 @@ func (d *driver) setKeys(keys []*key) error {
 	// Accept the encryption keys and clear any stale encryption map
 	d.Lock()
 	d.keys = keys
-	d.secMap = &encrMap{nodes: map[string][]*spi{}}
+	d.secMap = &encrMap{nodes: map[string][]*encrElem{}}
 	d.Unlock()
-	logrus.Debugf("Initial encryption keys: %v", d.keys)
 	return nil
 }
 
 // updateKeys allows to add a new key and/or change the primary key and/or prune an existing key
 // The primary key is the key used in transmission and will go in first position in the list.
 func (d *driver) updateKeys(newKey, primary, pruneKey *key) error {
-	logrus.Debugf("Updating Keys. New: %v, Primary: %v, Pruned: %v", newKey, primary, pruneKey)
-
-	logrus.Debugf("Current: %v", d.keys)
-
 	var (
 		newIdx = -1
 		priIdx = -1
@@ -481,17 +476,15 @@ func (d *driver) updateKeys(newKey, primary, pruneKey *key) error {
 			"(newIdx,priIdx,delIdx):(%d, %d, %d)", newIdx, priIdx, delIdx)
 	}
 
-	d.secMapWalk(func(rIPs string, spis []*spi) ([]*spi, bool) {
+	d.secMapWalk(func(rIPs string, eel []*encrElem) ([]*encrElem, bool) {
 		rIP := net.ParseIP(rIPs)
-		return updateNodeKey(lIP, aIP, rIP, spis, d.keys, newIdx, priIdx, delIdx), false
+		return updateNodeKey(lIP, aIP, rIP, eel, d.keys, newIdx, priIdx, delIdx), false
 	})
 
 	d.Lock()
 	// swap primary
 	if priIdx != -1 {
-		swp := d.keys[0]
-		d.keys[0] = d.keys[priIdx]
-		d.keys[priIdx] = swp
+		d.keys[0], d.keys[priIdx] = d.keys[priIdx], d.keys[0]
 	}
 	// prune
 	if delIdx != -1 {
@@ -501,8 +494,6 @@ func (d *driver) updateKeys(newKey, primary, pruneKey *key) error {
 		d.keys = append(d.keys[:delIdx], d.keys[delIdx+1:]...)
 	}
 	d.Unlock()
-
-	logrus.Debugf("Updated: %v", d.keys)
 
 	return nil
 }
@@ -514,33 +505,27 @@ func (d *driver) updateKeys(newKey, primary, pruneKey *key) error {
  *********************************************************/
 
 // Spis and keys are sorted in such away the one in position 0 is the primary
-func updateNodeKey(lIP, aIP, rIP net.IP, idxs []*spi, curKeys []*key, newIdx, priIdx, delIdx int) []*spi {
-	logrus.Debugf("Updating keys for node: %s (%d,%d,%d)", rIP, newIdx, priIdx, delIdx)
-
-	spis := idxs
-	logrus.Debugf("Current: %v", spis)
+func updateNodeKey(lIP, aIP, rIP net.IP, eel []*encrElem, curKeys []*key, newIdx, priIdx, delIdx int) []*encrElem {
+	logrus.Debugf("Updating keys for remote node: %s (%d,%d,%d)", rIP, newIdx, priIdx, delIdx)
 
 	// add new
 	if newIdx != -1 {
-		spis = append(spis, &spi{
-			forward: buildSPI(aIP, rIP, curKeys[newIdx].tag),
-			reverse: buildSPI(rIP, aIP, curKeys[newIdx].tag),
-		})
+		eel = append(eel, newEncrElem(aIP, rIP, curKeys[newIdx]))
 	}
 
 	if delIdx != -1 {
 		// -rSA0
-		programSA(lIP, rIP, spis[delIdx], nil, reverse, false)
+		programSA(lIP, rIP, eel[delIdx], reverse, false)
 	}
 
 	if newIdx > -1 {
 		// +rSA2
-		programSA(lIP, rIP, spis[newIdx], curKeys[newIdx], reverse, true)
+		programSA(lIP, rIP, eel[newIdx], reverse, true)
 	}
 
 	if priIdx > 0 {
 		// +fSA2
-		fSA2, _, _ := programSA(lIP, rIP, spis[priIdx], curKeys[priIdx], forward, true)
+		fSA2, _, _ := programSA(lIP, rIP, eel[priIdx], forward, true)
 
 		// +fSP2, -fSP1
 		s := types.GetMinimalIP(fSA2.Src)
@@ -565,32 +550,29 @@ func updateNodeKey(lIP, aIP, rIP net.IP, idxs []*spi, curKeys []*key, newIdx, pr
 				},
 			},
 		}
-		logrus.Debugf("Updating fSP{%s}", fSP1)
 		if err := ns.NlHandle().XfrmPolicyUpdate(fSP1); err != nil {
 			logrus.Warnf("Failed to update fSP{%s}: %v", fSP1, err)
 		}
 
 		// -fSA1
-		programSA(lIP, rIP, spis[0], nil, forward, false)
+		programSA(lIP, rIP, eel[0], forward, false)
 	}
 
 	// swap
 	if priIdx > 0 {
-		swp := spis[0]
-		spis[0] = spis[priIdx]
-		spis[priIdx] = swp
+		eel[0], eel[priIdx] = eel[priIdx], eel[0]
 	}
 	// prune
 	if delIdx != -1 {
 		if delIdx == 0 {
 			delIdx = priIdx
 		}
-		spis = append(spis[:delIdx], spis[delIdx+1:]...)
+		eel = append(eel[:delIdx], eel[delIdx+1:]...)
 	}
 
-	logrus.Debugf("Updated: %v", spis)
+	logrus.Debugf("Keys updated for remote node (%s)", rIP)
 
-	return spis
+	return eel
 }
 
 func (n *network) maxMTU() int {
