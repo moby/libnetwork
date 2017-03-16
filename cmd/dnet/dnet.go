@@ -23,6 +23,7 @@ import (
 	"github.com/docker/docker/pkg/reexec"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/pkg/term"
 	"github.com/docker/libnetwork"
 	"github.com/docker/libnetwork/api"
@@ -34,6 +35,7 @@ import (
 	"github.com/docker/libnetwork/options"
 	"github.com/docker/libnetwork/types"
 	"github.com/gorilla/mux"
+	"golang.org/x/net/context"
 )
 
 const (
@@ -132,7 +134,7 @@ func processConfig(cfg *config.Config) []config.Option {
 
 func startDiscovery(cfg *config.ClusterCfg) ([]config.Option, error) {
 	if cfg == nil {
-		return nil, fmt.Errorf("discovery requires a valid configuration")
+		return nil, errors.New("discovery requires a valid configuration")
 	}
 
 	hb := time.Duration(cfg.Heartbeat) * time.Second
@@ -245,7 +247,7 @@ type NetworkOrchestration struct {
 
 func (d *dnetConnection) dnetDaemon(cfgFile string) error {
 	if err := startTestDriver(); err != nil {
-		return fmt.Errorf("failed to start test driver: %v\n", err)
+		return fmt.Errorf("failed to start test driver: %v", err)
 	}
 
 	cfg, err := d.parseConfig(cfgFile)
@@ -314,6 +316,10 @@ func (d *dnetConnection) GetLocalAddress() string {
 	return d.Orchestration.Bind
 }
 
+func (d *dnetConnection) GetListenAddress() string {
+	return d.Orchestration.Bind
+}
+
 func (d *dnetConnection) GetRemoteAddress() string {
 	return d.Orchestration.Peer
 }
@@ -327,6 +333,22 @@ func (d *dnetConnection) SetNetworkKeys([]*types.EncryptionKey) {
 
 func (d *dnetConnection) ListenClusterEvents() <-chan struct{} {
 	return d.configEvent
+}
+
+func (d *dnetConnection) AttachNetwork(string, string, []string) (*network.NetworkingConfig, error) {
+	return nil, nil
+}
+
+func (d *dnetConnection) DetachNetwork(string, string) error {
+	return nil
+}
+
+func (d *dnetConnection) UpdateAttachment(string, string, *network.NetworkingConfig) error {
+	return nil
+}
+
+func (d *dnetConnection) WaitForDetachment(context.Context, string, string, string, string) error {
+	return nil
 }
 
 func handleSignals(controller libnetwork.NetworkController) {
@@ -345,7 +367,7 @@ func startTestDriver() error {
 	mux := http.NewServeMux()
 	server := httptest.NewServer(mux)
 	if server == nil {
-		return fmt.Errorf("Failed to start a HTTP Server")
+		return errors.New("Failed to start an HTTP Server")
 	}
 
 	mux.HandleFunc("/Plugin.Activate", func(w http.ResponseWriter, r *http.Request) {
@@ -355,37 +377,37 @@ func startTestDriver() error {
 
 	mux.HandleFunc(fmt.Sprintf("/%s.GetCapabilities", driverapi.NetworkPluginEndpointType), func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/vnd.docker.plugins.v1+json")
-		fmt.Fprintf(w, `{"Scope":"global"}`)
+		fmt.Fprint(w, `{"Scope":"global"}`)
 	})
 
 	mux.HandleFunc(fmt.Sprintf("/%s.CreateNetwork", driverapi.NetworkPluginEndpointType), func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/vnd.docker.plugins.v1+json")
-		fmt.Fprintf(w, "null")
+		fmt.Fprint(w, "null")
 	})
 
 	mux.HandleFunc(fmt.Sprintf("/%s.DeleteNetwork", driverapi.NetworkPluginEndpointType), func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/vnd.docker.plugins.v1+json")
-		fmt.Fprintf(w, "null")
+		fmt.Fprint(w, "null")
 	})
 
 	mux.HandleFunc(fmt.Sprintf("/%s.CreateEndpoint", driverapi.NetworkPluginEndpointType), func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/vnd.docker.plugins.v1+json")
-		fmt.Fprintf(w, "null")
+		fmt.Fprint(w, "null")
 	})
 
 	mux.HandleFunc(fmt.Sprintf("/%s.DeleteEndpoint", driverapi.NetworkPluginEndpointType), func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/vnd.docker.plugins.v1+json")
-		fmt.Fprintf(w, "null")
+		fmt.Fprint(w, "null")
 	})
 
 	mux.HandleFunc(fmt.Sprintf("/%s.Join", driverapi.NetworkPluginEndpointType), func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/vnd.docker.plugins.v1+json")
-		fmt.Fprintf(w, "null")
+		fmt.Fprint(w, "null")
 	})
 
 	mux.HandleFunc(fmt.Sprintf("/%s.Leave", driverapi.NetworkPluginEndpointType), func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/vnd.docker.plugins.v1+json")
-		fmt.Fprintf(w, "null")
+		fmt.Fprint(w, "null")
 	})
 
 	if err := os.MkdirAll("/etc/docker/plugins", 0755); err != nil {
@@ -406,10 +428,10 @@ func newDnetConnection(val string) (*dnetConnection, error) {
 	}
 	protoAddrParts := strings.SplitN(url, "://", 2)
 	if len(protoAddrParts) != 2 {
-		return nil, fmt.Errorf("bad format, expected tcp://ADDR")
+		return nil, errors.New("bad format, expected tcp://ADDR")
 	}
 	if strings.ToLower(protoAddrParts[0]) != "tcp" {
-		return nil, fmt.Errorf("dnet currently only supports tcp transport")
+		return nil, errors.New("dnet currently only supports tcp transport")
 	}
 
 	return &dnetConnection{protoAddrParts[0], protoAddrParts[1], &NetworkOrchestration{}, make(chan struct{}, 10)}, nil
@@ -485,11 +507,11 @@ func encodeData(data interface{}) (*bytes.Buffer, error) {
 }
 
 func ipamOption(bridgeName string) libnetwork.NetworkOption {
-	if nw, _, err := netutils.ElectInterfaceAddresses(bridgeName); err == nil {
-		ipamV4Conf := &libnetwork.IpamConf{PreferredPool: nw.String()}
-		hip, _ := types.GetHostPartIP(nw.IP, nw.Mask)
+	if nws, _, err := netutils.ElectInterfaceAddresses(bridgeName); err == nil {
+		ipamV4Conf := &libnetwork.IpamConf{PreferredPool: nws[0].String()}
+		hip, _ := types.GetHostPartIP(nws[0].IP, nws[0].Mask)
 		if hip.IsGlobalUnicast() {
-			ipamV4Conf.Gateway = nw.IP.String()
+			ipamV4Conf.Gateway = nws[0].IP.String()
 		}
 		return libnetwork.NetworkOptionIpam("default", "", []*libnetwork.IpamConf{ipamV4Conf}, nil, nil)
 	}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 )
 
@@ -32,7 +33,7 @@ func (n *networkNamespace) findNeighbor(dstIP net.IP, dstMac net.HardwareAddr) *
 	return nil
 }
 
-func (n *networkNamespace) DeleteNeighbor(dstIP net.IP, dstMac net.HardwareAddr) error {
+func (n *networkNamespace) DeleteNeighbor(dstIP net.IP, dstMac net.HardwareAddr, osDelete bool) error {
 	var (
 		iface netlink.Link
 		err   error
@@ -43,42 +44,47 @@ func (n *networkNamespace) DeleteNeighbor(dstIP net.IP, dstMac net.HardwareAddr)
 		return fmt.Errorf("could not find the neighbor entry to delete")
 	}
 
-	n.Lock()
-	nlh := n.nlHandle
-	n.Unlock()
+	if osDelete {
+		n.Lock()
+		nlh := n.nlHandle
+		n.Unlock()
 
-	if nh.linkDst != "" {
-		iface, err = nlh.LinkByName(nh.linkDst)
-		if err != nil {
-			return fmt.Errorf("could not find interface with destination name %s: %v",
-				nh.linkDst, err)
+		if nh.linkDst != "" {
+			iface, err = nlh.LinkByName(nh.linkDst)
+			if err != nil {
+				return fmt.Errorf("could not find interface with destination name %s: %v",
+					nh.linkDst, err)
+			}
+		}
+
+		nlnh := &netlink.Neigh{
+			IP:     dstIP,
+			State:  netlink.NUD_PERMANENT,
+			Family: nh.family,
+		}
+
+		if nlnh.Family > 0 {
+			nlnh.HardwareAddr = dstMac
+			nlnh.Flags = netlink.NTF_SELF
+		}
+
+		if nh.linkDst != "" {
+			nlnh.LinkIndex = iface.Attrs().Index
+		}
+
+		if err := nlh.NeighDel(nlnh); err != nil {
+			return fmt.Errorf("could not delete neighbor entry: %v", err)
 		}
 	}
 
-	nlnh := &netlink.Neigh{
-		IP:     dstIP,
-		State:  netlink.NUD_PERMANENT,
-		Family: nh.family,
-	}
-
-	if nlnh.Family > 0 {
-		nlnh.HardwareAddr = dstMac
-		nlnh.Flags = netlink.NTF_SELF
-	}
-
-	if nh.linkDst != "" {
-		nlnh.LinkIndex = iface.Attrs().Index
-	}
-
-	if err := nlh.NeighDel(nlnh); err != nil {
-		return fmt.Errorf("could not delete neighbor entry: %v", err)
-	}
-
+	n.Lock()
 	for i, nh := range n.neighbors {
 		if nh.dstIP.Equal(dstIP) && bytes.Equal(nh.dstMac, dstMac) {
 			n.neighbors = append(n.neighbors[:i], n.neighbors[i+1:]...)
+			break
 		}
 	}
+	n.Unlock()
 
 	return nil
 }
@@ -91,6 +97,7 @@ func (n *networkNamespace) AddNeighbor(dstIP net.IP, dstMac net.HardwareAddr, op
 
 	nh := n.findNeighbor(dstIP, dstMac)
 	if nh != nil {
+		logrus.Debugf("Neighbor entry already present for IP %v, mac %v", dstIP, dstMac)
 		// If it exists silently return
 		return nil
 	}
@@ -140,7 +147,9 @@ func (n *networkNamespace) AddNeighbor(dstIP net.IP, dstMac net.HardwareAddr, op
 		return fmt.Errorf("could not add neighbor entry: %v", err)
 	}
 
+	n.Lock()
 	n.neighbors = append(n.neighbors, nh)
+	n.Unlock()
 
 	return nil
 }

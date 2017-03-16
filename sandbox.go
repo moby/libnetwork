@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
+	"github.com/Sirupsen/logrus"
 	"github.com/docker/libnetwork/etchosts"
 	"github.com/docker/libnetwork/netlabel"
 	"github.com/docker/libnetwork/osl"
@@ -37,19 +37,17 @@ type Sandbox interface {
 	Rename(name string) error
 	// Delete destroys this container after detaching it from all connected endpoints.
 	Delete() error
-	// ResolveName resolves a service name to an IPv4 or IPv6 address by searching
-	// the networks the sandbox is connected to. For IPv6 queries, second return
-	// value will be true if the name exists in docker domain but doesn't have an
-	// IPv6 address. Such queries shouldn't be forwarded to external nameservers.
-	ResolveName(name string, iplen int) ([]net.IP, bool)
-	// ResolveIP returns the service name for the passed in IP. IP is in reverse dotted
-	// notation; the format used for DNS PTR records
-	ResolveIP(name string) string
-	// ResolveService returns all the backend details about the containers or hosts
-	// backing a service. Its purpose is to satisfy an SRV query
-	ResolveService(name string) ([]*net.SRV, []net.IP, error)
 	// Endpoints returns all the endpoints connected to the sandbox
 	Endpoints() []Endpoint
+	// ResolveService returns all the backend details about the containers or hosts
+	// backing a service. Its purpose is to satisfy an SRV query
+	ResolveService(name string) ([]*net.SRV, []net.IP)
+	// EnableService  makes a managed container's service available by adding the
+	// endpoint to the service load balancer and service discovery
+	EnableService() error
+	// DisableService removes a managed container's endpoints from the load balancer
+	// and service discovery
+	DisableService() error
 }
 
 // SandboxOption is an option setter function type used to pass various options to
@@ -71,7 +69,7 @@ type sandbox struct {
 	id                 string
 	containerID        string
 	config             containerConfig
-	extDNS             []string
+	extDNS             []extDNSEntry
 	osSbox             osl.Sandbox
 	controller         *controller
 	resolver           Resolver
@@ -86,6 +84,7 @@ type sandbox struct {
 	isStub             bool
 	inDelete           bool
 	ingress            bool
+	ndotsSet           bool
 	sync.Mutex
 }
 
@@ -130,6 +129,10 @@ type containerConfig struct {
 	exposedPorts      []types.TransportPort
 }
 
+const (
+	resolverIPSandbox = "127.0.0.11"
+)
+
 func (sb *sandbox) ID() string {
 	return sb.id
 }
@@ -147,7 +150,7 @@ func (sb *sandbox) Key() string {
 
 func (sb *sandbox) Labels() map[string]interface{} {
 	sb.Lock()
-	sb.Unlock()
+	defer sb.Unlock()
 	opts := make(map[string]interface{}, len(sb.config.generic))
 	for k, v := range sb.config.generic {
 		opts[k] = v
@@ -202,24 +205,26 @@ func (sb *sandbox) delete(force bool) error {
 	retain := false
 	for _, ep := range sb.getConnectedEndpoints() {
 		// gw network endpoint detach and removal are automatic
-		if ep.endpointInGWNetwork() {
+		if ep.endpointInGWNetwork() && !force {
 			continue
 		}
 		// Retain the sanbdox if we can't obtain the network from store.
 		if _, err := c.getNetworkFromStore(ep.getNetwork().ID()); err != nil {
-			retain = true
-			log.Warnf("Failed getting network for ep %s during sandbox %s delete: %v", ep.ID(), sb.ID(), err)
+			if c.isDistributedControl() {
+				retain = true
+			}
+			logrus.Warnf("Failed getting network for ep %s during sandbox %s delete: %v", ep.ID(), sb.ID(), err)
 			continue
 		}
 
 		if !force {
 			if err := ep.Leave(sb); err != nil {
-				log.Warnf("Failed detaching sandbox %s from endpoint %s: %v\n", sb.ID(), ep.ID(), err)
+				logrus.Warnf("Failed detaching sandbox %s from endpoint %s: %v\n", sb.ID(), ep.ID(), err)
 			}
 		}
 
 		if err := ep.Delete(force); err != nil {
-			log.Warnf("Failed deleting endpoint %s: %v\n", ep.ID(), err)
+			logrus.Warnf("Failed deleting endpoint %s: %v\n", ep.ID(), err)
 		}
 	}
 
@@ -242,7 +247,7 @@ func (sb *sandbox) delete(force bool) error {
 	}
 
 	if err := sb.storeDelete(); err != nil {
-		log.Warnf("Failed to delete sandbox %s from store: %v", sb.ID(), err)
+		logrus.Warnf("Failed to delete sandbox %s from store: %v", sb.ID(), err)
 	}
 
 	c.Lock()
@@ -286,7 +291,7 @@ func (sb *sandbox) Refresh(options ...SandboxOption) error {
 	// Detach from all endpoints
 	for _, ep := range epList {
 		if err := ep.Leave(sb); err != nil {
-			log.Warnf("Failed detaching sandbox %s from endpoint %s: %v\n", sb.ID(), ep.ID(), err)
+			logrus.Warnf("Failed detaching sandbox %s from endpoint %s: %v\n", sb.ID(), ep.ID(), err)
 		}
 	}
 
@@ -302,7 +307,7 @@ func (sb *sandbox) Refresh(options ...SandboxOption) error {
 	// Re-connect to all endpoints
 	for _, ep := range epList {
 		if err := ep.Join(sb); err != nil {
-			log.Warnf("Failed attach sandbox %s to endpoint %s: %v\n", sb.ID(), ep.ID(), err)
+			logrus.Warnf("Failed attach sandbox %s to endpoint %s: %v\n", sb.ID(), ep.ID(), err)
 		}
 	}
 
@@ -406,96 +411,93 @@ func (sb *sandbox) updateGateway(ep *endpoint) error {
 	return nil
 }
 
+func (sb *sandbox) HandleQueryResp(name string, ip net.IP) {
+	for _, ep := range sb.getConnectedEndpoints() {
+		n := ep.getNetwork()
+		n.HandleQueryResp(name, ip)
+	}
+}
+
 func (sb *sandbox) ResolveIP(ip string) string {
 	var svc string
-	log.Debugf("IP To resolve %v", ip)
+	logrus.Debugf("IP To resolve %v", ip)
 
 	for _, ep := range sb.getConnectedEndpoints() {
 		n := ep.getNetwork()
-
-		c := n.getController()
-
-		c.Lock()
-		sr, ok := c.svcRecords[n.ID()]
-		c.Unlock()
-
-		if !ok {
-			continue
-		}
-
-		nwName := n.Name()
-		n.Lock()
-		svc, ok = sr.ipMap[ip]
-		n.Unlock()
-		if ok {
-			return svc + "." + nwName
+		svc = n.ResolveIP(ip)
+		if len(svc) != 0 {
+			return svc
 		}
 	}
+
 	return svc
 }
 
-func (sb *sandbox) execFunc(f func()) {
-	sb.osSbox.InvokeFunc(f)
+func (sb *sandbox) ExecFunc(f func()) error {
+	sb.Lock()
+	osSbox := sb.osSbox
+	sb.Unlock()
+	if osSbox != nil {
+		return osSbox.InvokeFunc(f)
+	}
+	return fmt.Errorf("osl sandbox unavailable in ExecFunc for %v", sb.ContainerID())
 }
 
-func (sb *sandbox) ResolveService(name string) ([]*net.SRV, []net.IP, error) {
+func (sb *sandbox) ResolveService(name string) ([]*net.SRV, []net.IP) {
 	srv := []*net.SRV{}
 	ip := []net.IP{}
 
-	log.Debugf("Service name To resolve: %v", name)
+	logrus.Debugf("Service name To resolve: %v", name)
 
+	// There are DNS implementaions that allow SRV queries for names not in
+	// the format defined by RFC 2782. Hence specific validations checks are
+	// not done
 	parts := strings.Split(name, ".")
 	if len(parts) < 3 {
-		return nil, nil, fmt.Errorf("invalid service name, %s", name)
+		return nil, nil
 	}
-
-	portName := parts[0]
-	proto := parts[1]
-	if proto != "_tcp" && proto != "_udp" {
-		return nil, nil, fmt.Errorf("invalid protocol in service, %s", name)
-	}
-	svcName := strings.Join(parts[2:], ".")
 
 	for _, ep := range sb.getConnectedEndpoints() {
 		n := ep.getNetwork()
 
-		c := n.getController()
-
-		c.Lock()
-		sr, ok := c.svcRecords[n.ID()]
-		c.Unlock()
-
-		if !ok {
-			continue
-		}
-
-		svcs, ok := sr.service[svcName]
-		if !ok {
-			continue
-		}
-
-		for _, svc := range svcs {
-			if svc.portName != portName {
-				continue
-			}
-			if svc.proto != proto {
-				continue
-			}
-			for _, t := range svc.target {
-				srv = append(srv,
-					&net.SRV{
-						Target: t.name,
-						Port:   t.port,
-					})
-
-				ip = append(ip, t.ip)
-			}
-		}
+		srv, ip = n.ResolveService(name)
 		if len(srv) > 0 {
 			break
 		}
 	}
-	return srv, ip, nil
+	return srv, ip
+}
+
+func getDynamicNwEndpoints(epList []*endpoint) []*endpoint {
+	eps := []*endpoint{}
+	for _, ep := range epList {
+		n := ep.getNetwork()
+		if n.dynamic && !n.ingress {
+			eps = append(eps, ep)
+		}
+	}
+	return eps
+}
+
+func getIngressNwEndpoint(epList []*endpoint) *endpoint {
+	for _, ep := range epList {
+		n := ep.getNetwork()
+		if n.ingress {
+			return ep
+		}
+	}
+	return nil
+}
+
+func getLocalNwEndpoints(epList []*endpoint) []*endpoint {
+	eps := []*endpoint{}
+	for _, ep := range epList {
+		n := ep.getNetwork()
+		if !n.dynamic && !n.ingress {
+			eps = append(eps, ep)
+		}
+	}
+	return eps
 }
 
 func (sb *sandbox) ResolveName(name string, ipType int) ([]net.IP, bool) {
@@ -508,7 +510,7 @@ func (sb *sandbox) ResolveName(name string, ipType int) ([]net.IP, bool) {
 	// {a.b in network c.d},
 	// {a in network b.c.d},
 
-	log.Debugf("Name To resolve: %v", name)
+	logrus.Debugf("Name To resolve: %v", name)
 	name = strings.TrimSuffix(name, ".")
 	reqName := []string{name}
 	networkName := []string{""}
@@ -528,6 +530,21 @@ func (sb *sandbox) ResolveName(name string, ipType int) ([]net.IP, bool) {
 	}
 
 	epList := sb.getConnectedEndpoints()
+
+	// In swarm mode services with exposed ports are connected to user overlay
+	// network, ingress network and docker_gwbridge network. Name resolution
+	// should prioritize returning the VIP/IPs on user overlay network.
+	newList := []*endpoint{}
+	if !sb.controller.isDistributedControl() {
+		newList = append(newList, getDynamicNwEndpoints(epList)...)
+		ingressEP := getIngressNwEndpoint(epList)
+		if ingressEP != nil {
+			newList = append(newList, ingressEP)
+		}
+		newList = append(newList, getLocalNwEndpoints(epList)...)
+		epList = newList
+	}
+
 	for i := 0; i < len(reqName); i++ {
 
 		// First check for local container alias
@@ -585,32 +602,14 @@ func (sb *sandbox) resolveName(req string, networkName string, epList []*endpoin
 			ep.Unlock()
 		}
 
-		c := n.getController()
-		c.Lock()
-		sr, ok := c.svcRecords[n.ID()]
-		c.Unlock()
+		ip, miss := n.ResolveName(name, ipType)
 
-		if !ok {
-			continue
-		}
-
-		var ip []net.IP
-		n.Lock()
-		ip, ok = sr.svcMap[name]
-
-		if ipType == types.IPv6 {
-			// If the name resolved to v4 address then its a valid name in
-			// the docker network domain. If the network is not v6 enabled
-			// set ipv6Miss to filter the DNS query from going to external
-			// resolvers.
-			if ok && n.enableIPv6 == false {
-				ipv6Miss = true
-			}
-			ip = sr.svcIPv6Map[name]
-		}
-		n.Unlock()
 		if ip != nil {
 			return ip, false
+		}
+
+		if miss {
+			ipv6Miss = miss
 		}
 	}
 	return nil, ipv6Miss
@@ -619,7 +618,7 @@ func (sb *sandbox) resolveName(req string, networkName string, epList []*endpoin
 func (sb *sandbox) SetKey(basePath string) error {
 	start := time.Now()
 	defer func() {
-		log.Debugf("sandbox set key processing took %s for container %s", time.Now().Sub(start), sb.ContainerID())
+		logrus.Debugf("sandbox set key processing took %s for container %s", time.Now().Sub(start), sb.ContainerID())
 	}()
 
 	if basePath == "" {
@@ -658,9 +657,12 @@ func (sb *sandbox) SetKey(basePath string) error {
 	if oldosSbox != nil && sb.resolver != nil {
 		sb.resolver.Stop()
 
-		sb.osSbox.InvokeFunc(sb.resolver.SetupFunc())
-		if err := sb.resolver.Start(); err != nil {
-			log.Errorf("Resolver Setup/Start failed for container %s, %q", sb.ContainerID(), err)
+		if err := sb.osSbox.InvokeFunc(sb.resolver.SetupFunc(0)); err == nil {
+			if err := sb.resolver.Start(); err != nil {
+				logrus.Errorf("Resolver Start failed for container %s, %q", sb.ContainerID(), err)
+			}
+		} else {
+			logrus.Errorf("Resolver Setup Function failed for container %s, %q", sb.ContainerID(), err)
 		}
 	}
 
@@ -672,12 +674,36 @@ func (sb *sandbox) SetKey(basePath string) error {
 	return nil
 }
 
+func (sb *sandbox) EnableService() error {
+	for _, ep := range sb.getConnectedEndpoints() {
+		if ep.enableService(true) {
+			if err := ep.addServiceInfoToCluster(); err != nil {
+				ep.enableService(false)
+				return fmt.Errorf("could not update state for endpoint %s into cluster: %v", ep.Name(), err)
+			}
+		}
+	}
+	return nil
+}
+
+func (sb *sandbox) DisableService() error {
+	for _, ep := range sb.getConnectedEndpoints() {
+		if ep.enableService(false) {
+			if err := ep.deleteServiceInfoFromCluster(); err != nil {
+				ep.enableService(true)
+				return fmt.Errorf("could not delete state for endpoint %s from cluster: %v", ep.Name(), err)
+			}
+		}
+	}
+	return nil
+}
+
 func releaseOSSboxResources(osSbox osl.Sandbox, ep *endpoint) {
 	for _, i := range osSbox.Info().Interfaces() {
 		// Only remove the interfaces owned by this endpoint from the sandbox.
 		if ep.hasInterface(i.SrcName()) {
 			if err := i.Remove(); err != nil {
-				log.Debugf("Remove interface %s failed: %v", i.SrcName(), err)
+				logrus.Debugf("Remove interface %s failed: %v", i.SrcName(), err)
 			}
 		}
 	}
@@ -693,7 +719,7 @@ func releaseOSSboxResources(osSbox osl.Sandbox, ep *endpoint) {
 	// Remove non-interface routes.
 	for _, r := range joinInfo.StaticRoutes {
 		if err := osSbox.RemoveStaticRoute(r); err != nil {
-			log.Debugf("Remove route failed: %v", err)
+			logrus.Debugf("Remove route failed: %v", err)
 		}
 	}
 }
@@ -728,7 +754,7 @@ func (sb *sandbox) restoreOslSandbox() error {
 		ep.Unlock()
 
 		if i == nil {
-			log.Errorf("error restoring endpoint %s for container %s", ep.Name(), sb.ContainerID())
+			logrus.Errorf("error restoring endpoint %s for container %s", ep.Name(), sb.ContainerID())
 			continue
 		}
 
@@ -865,12 +891,13 @@ func (sb *sandbox) clearNetworkResources(origEp *endpoint) error {
 		releaseOSSboxResources(osSbox, ep)
 	}
 
-	delete(sb.populatedEndpoints, ep.ID())
 	sb.Lock()
+	delete(sb.populatedEndpoints, ep.ID())
+
 	if len(sb.endpoints) == 0 {
 		// sb.endpoints should never be empty and this is unexpected error condition
 		// We log an error message to note this down for debugging purposes.
-		log.Errorf("No endpoints in sandbox while trying to remove endpoint %s", ep.Name())
+		logrus.Errorf("No endpoints in sandbox while trying to remove endpoint %s", ep.Name())
 		sb.Unlock()
 		return nil
 	}
@@ -1147,6 +1174,17 @@ func (eh epHeap) Less(i, j int) bool {
 		return true
 	}
 
+	if epi.joinInfo != nil && epj.joinInfo != nil {
+		if (epi.joinInfo.gw != nil && epi.joinInfo.gw6 != nil) &&
+			(epj.joinInfo.gw == nil || epj.joinInfo.gw6 == nil) {
+			return true
+		}
+		if (epj.joinInfo.gw != nil && epj.joinInfo.gw6 != nil) &&
+			(epi.joinInfo.gw == nil || epi.joinInfo.gw6 == nil) {
+			return false
+		}
+	}
+
 	if ci != nil {
 		cip, ok = ci.epPriority[eh[i].ID()]
 		if !ok {
@@ -1180,4 +1218,8 @@ func (eh *epHeap) Pop() interface{} {
 	x := old[n-1]
 	*eh = old[0 : n-1]
 	return x
+}
+
+func (sb *sandbox) NdotsSet() bool {
+	return sb.ndotsSet
 }

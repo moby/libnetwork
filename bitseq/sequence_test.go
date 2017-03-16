@@ -145,10 +145,10 @@ func TestSequenceCopy(t *testing.T) {
 	s := getTestSequence()
 	n := s.getCopy()
 	if !s.equal(n) {
-		t.Fatalf("copy of s failed")
+		t.Fatal("copy of s failed")
 	}
 	if n == s {
-		t.Fatalf("not true copy of s")
+		t.Fatal("not true copy of s")
 	}
 }
 
@@ -556,7 +556,7 @@ func TestSet(t *testing.T) {
 	}
 
 	if err := hnd.Set(0); err == nil {
-		t.Fatalf("Expected failure, but succeeded")
+		t.Fatal("Expected failure, but succeeded")
 	}
 
 	os, err := hnd.SetAny()
@@ -583,7 +583,7 @@ func TestSet(t *testing.T) {
 	}
 
 	if err := hnd.Set(last); err == nil {
-		t.Fatalf("Expected failure, but succeeded")
+		t.Fatal("Expected failure, but succeeded")
 	}
 }
 
@@ -595,10 +595,10 @@ func TestSetUnset(t *testing.T) {
 	}
 
 	if err := hnd.Set(uint64(32 * blockLen)); err == nil {
-		t.Fatalf("Expected failure, but succeeded")
+		t.Fatal("Expected failure, but succeeded")
 	}
 	if err := hnd.Unset(uint64(32 * blockLen)); err == nil {
-		t.Fatalf("Expected failure, but succeeded")
+		t.Fatal("Expected failure, but succeeded")
 	}
 
 	// set and unset all one by one
@@ -608,10 +608,10 @@ func TestSetUnset(t *testing.T) {
 		}
 	}
 	if _, err := hnd.SetAny(); err != ErrNoBitAvailable {
-		t.Fatalf("Expected error. Got success")
+		t.Fatal("Expected error. Got success")
 	}
 	if _, err := hnd.SetAnyInRange(10, 20); err != ErrNoBitAvailable {
-		t.Fatalf("Expected error. Got success")
+		t.Fatal("Expected error. Got success")
 	}
 	if err := hnd.Set(50); err != ErrBitAllocated {
 		t.Fatalf("Expected error. Got %v: %s", err, hnd)
@@ -636,10 +636,6 @@ func TestSetInRange(t *testing.T) {
 	firstAv := uint64(100*blockLen + blockLen - 1)
 
 	if o, err := hnd.SetAnyInRange(4, 3); err == nil {
-		t.Fatalf("Expected failure. Got success with ordinal:%d", o)
-	}
-
-	if o, err := hnd.SetAnyInRange(5, 5); err == nil {
 		t.Fatalf("Expected failure. Got success with ordinal:%d", o)
 	}
 
@@ -690,6 +686,11 @@ func TestSetInRange(t *testing.T) {
 
 	if _, err := hnd.SetAnyInRange(0, numBits-1); err != nil {
 		t.Fatalf("Unexpected failure: %v", err)
+	}
+
+	// set one bit using the set range with 1 bit size range
+	if _, err := hnd.SetAnyInRange(uint64(163*blockLen-1), uint64(163*blockLen-1)); err != nil {
+		t.Fatal(err)
 	}
 
 	// create a non multiple of 32 mask

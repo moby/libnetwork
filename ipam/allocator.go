@@ -6,7 +6,7 @@ import (
 	"sort"
 	"sync"
 
-	log "github.com/Sirupsen/logrus"
+	"github.com/Sirupsen/logrus"
 	"github.com/docker/libnetwork/bitseq"
 	"github.com/docker/libnetwork/datastore"
 	"github.com/docker/libnetwork/discoverapi"
@@ -135,7 +135,7 @@ func (a *Allocator) checkConsistency(as string) {
 		bm := a.addresses[sk]
 		a.Unlock()
 		if err := bm.CheckConsistency(); err != nil {
-			log.Warnf("Error while running consistency check for %s: %v", sk, err)
+			logrus.Warnf("Error while running consistency check for %s: %v", sk, err)
 		}
 	}
 }
@@ -198,11 +198,21 @@ func (a *Allocator) GetDefaultAddressSpaces() (string, string, error) {
 
 // RequestPool returns an address pool along with its unique id.
 func (a *Allocator) RequestPool(addressSpace, pool, subPool string, options map[string]string, v6 bool) (string, *net.IPNet, map[string]string, error) {
-	log.Debugf("RequestPool(%s, %s, %s, %v, %t)", addressSpace, pool, subPool, options, v6)
-retry:
-	k, nw, ipr, pdf, err := a.parsePoolRequest(addressSpace, pool, subPool, v6)
+	logrus.Debugf("RequestPool(%s, %s, %s, %v, %t)", addressSpace, pool, subPool, options, v6)
+
+	k, nw, ipr, err := a.parsePoolRequest(addressSpace, pool, subPool, v6)
 	if err != nil {
 		return "", nil, nil, types.InternalErrorf("failed to parse pool request for address space %q pool %q subpool %q: %v", addressSpace, pool, subPool, err)
+	}
+
+	pdf := k == nil
+
+retry:
+	if pdf {
+		if nw, err = a.getPredefinedPool(addressSpace, v6); err != nil {
+			return "", nil, nil, err
+		}
+		k = &SubnetKey{AddressSpace: addressSpace, Subnet: nw.String()}
 	}
 
 	if err := a.refresh(addressSpace); err != nil {
@@ -217,7 +227,7 @@ retry:
 	insert, err := aSpace.updatePoolDBOnAdd(*k, nw, ipr, pdf)
 	if err != nil {
 		if _, ok := err.(types.MaskableError); ok {
-			log.Debugf("Retrying predefined pool search: %v", err)
+			logrus.Debugf("Retrying predefined pool search: %v", err)
 			goto retry
 		}
 		return "", nil, nil, err
@@ -236,7 +246,7 @@ retry:
 
 // ReleasePool releases the address pool identified by the passed id
 func (a *Allocator) ReleasePool(poolID string) error {
-	log.Debugf("ReleasePool(%s)", poolID)
+	logrus.Debugf("ReleasePool(%s)", poolID)
 	k := SubnetKey{}
 	if err := k.FromString(poolID); err != nil {
 		return types.BadRequestErrorf("invalid pool id: %s", poolID)
@@ -279,43 +289,40 @@ func (a *Allocator) getAddrSpace(as string) (*addrSpace, error) {
 	return aSpace, nil
 }
 
-func (a *Allocator) parsePoolRequest(addressSpace, pool, subPool string, v6 bool) (*SubnetKey, *net.IPNet, *AddressRange, bool, error) {
+func (a *Allocator) parsePoolRequest(addressSpace, pool, subPool string, v6 bool) (*SubnetKey, *net.IPNet, *AddressRange, error) {
 	var (
 		nw  *net.IPNet
 		ipr *AddressRange
 		err error
-		pdf = false
 	)
 
 	if addressSpace == "" {
-		return nil, nil, nil, false, ipamapi.ErrInvalidAddressSpace
+		return nil, nil, nil, ipamapi.ErrInvalidAddressSpace
 	}
 
 	if pool == "" && subPool != "" {
-		return nil, nil, nil, false, ipamapi.ErrInvalidSubPool
+		return nil, nil, nil, ipamapi.ErrInvalidSubPool
 	}
 
-	if pool != "" {
-		if _, nw, err = net.ParseCIDR(pool); err != nil {
-			return nil, nil, nil, false, ipamapi.ErrInvalidPool
-		}
-		if subPool != "" {
-			if ipr, err = getAddressRange(subPool, nw); err != nil {
-				return nil, nil, nil, false, err
-			}
-		}
-	} else {
-		if nw, err = a.getPredefinedPool(addressSpace, v6); err != nil {
-			return nil, nil, nil, false, err
-		}
-		pdf = true
+	if pool == "" {
+		return nil, nil, nil, nil
 	}
 
-	return &SubnetKey{AddressSpace: addressSpace, Subnet: nw.String(), ChildSubnet: subPool}, nw, ipr, pdf, nil
+	if _, nw, err = net.ParseCIDR(pool); err != nil {
+		return nil, nil, nil, ipamapi.ErrInvalidPool
+	}
+
+	if subPool != "" {
+		if ipr, err = getAddressRange(subPool, nw); err != nil {
+			return nil, nil, nil, err
+		}
+	}
+
+	return &SubnetKey{AddressSpace: addressSpace, Subnet: nw.String(), ChildSubnet: subPool}, nw, ipr, nil
 }
 
 func (a *Allocator) insertBitMask(key SubnetKey, pool *net.IPNet) error {
-	//log.Debugf("Inserting bitmask (%s, %s)", key.String(), pool.String())
+	//logrus.Debugf("Inserting bitmask (%s, %s)", key.String(), pool.String())
 
 	store := a.getStore(key.AddressSpace)
 	ipVer := getAddressVersion(pool.IP)
@@ -353,7 +360,7 @@ func (a *Allocator) retrieveBitmask(k SubnetKey, n *net.IPNet) (*bitseq.Handle, 
 	bm, ok := a.addresses[k]
 	a.Unlock()
 	if !ok {
-		log.Debugf("Retrieving bitmask (%s, %s)", k.String(), n.String())
+		logrus.Debugf("Retrieving bitmask (%s, %s)", k.String(), n.String())
 		if err := a.insertBitMask(k, n); err != nil {
 			return nil, types.InternalErrorf("could not find bitmask in datastore for %s", k.String())
 		}
@@ -406,12 +413,12 @@ func (a *Allocator) getPredefinedPool(as string, ipV6 bool) (*net.IPNet, error) 
 		}
 	}
 
-	return nil, types.NotFoundErrorf("could not find an available predefined network")
+	return nil, types.NotFoundErrorf("could not find an available, non-overlapping IPv%d address pool among the defaults to assign to the network", v)
 }
 
 // RequestAddress returns an address from the specified pool ID
 func (a *Allocator) RequestAddress(poolID string, prefAddress net.IP, opts map[string]string) (*net.IPNet, map[string]string, error) {
-	log.Debugf("RequestAddress(%s, %v, %v)", poolID, prefAddress, opts)
+	logrus.Debugf("RequestAddress(%s, %v, %v)", poolID, prefAddress, opts)
 	k := SubnetKey{}
 	if err := k.FromString(poolID); err != nil {
 		return nil, nil, types.BadRequestErrorf("invalid pool id: %s", poolID)
@@ -460,7 +467,7 @@ func (a *Allocator) RequestAddress(poolID string, prefAddress net.IP, opts map[s
 
 // ReleaseAddress releases the address from the specified pool ID
 func (a *Allocator) ReleaseAddress(poolID string, address net.IP) error {
-	log.Debugf("ReleaseAddress(%s, %v)", poolID, address)
+	logrus.Debugf("ReleaseAddress(%s, %v)", poolID, address)
 	k := SubnetKey{}
 	if err := k.FromString(poolID); err != nil {
 		return types.BadRequestErrorf("invalid pool id: %s", poolID)
@@ -586,4 +593,9 @@ func (a *Allocator) DumpDatabase() string {
 	}
 
 	return s
+}
+
+// IsBuiltIn returns true for builtin drivers
+func (a *Allocator) IsBuiltIn() bool {
+	return true
 }

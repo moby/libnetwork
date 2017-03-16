@@ -3,6 +3,7 @@ package networkdb
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"sync/atomic"
@@ -21,6 +22,7 @@ var (
 )
 
 func TestMain(m *testing.M) {
+	ioutil.WriteFile("/proc/sys/net/ipv6/conf/lo/disable_ipv6", []byte{'0', '\n'}, 0644)
 	logrus.SetLevel(logrus.ErrorLevel)
 	os.Exit(m.Run())
 }
@@ -53,7 +55,9 @@ func closeNetworkDBInstances(dbs []*NetworkDB) {
 
 func (db *NetworkDB) verifyNodeExistence(t *testing.T, node string, present bool) {
 	for i := 0; i < 80; i++ {
+		db.RLock()
 		_, ok := db.nodes[node]
+		db.RUnlock()
 		if present && ok {
 			return
 		}
@@ -70,7 +74,10 @@ func (db *NetworkDB) verifyNodeExistence(t *testing.T, node string, present bool
 
 func (db *NetworkDB) verifyNetworkExistence(t *testing.T, node string, id string, present bool) {
 	for i := 0; i < 80; i++ {
-		if nn, nnok := db.networks[node]; nnok {
+		db.RLock()
+		nn, nnok := db.networks[node]
+		db.RUnlock()
+		if nnok {
 			n, ok := nn[id]
 			if present && ok {
 				return
@@ -426,6 +433,6 @@ func TestNetworkDBCRUDMediumCluster(t *testing.T) {
 		dbs[i].verifyEntryExistence(t, "test_table", "network1", "test_key", "", false)
 	}
 
-	log.Printf("Closing DB instances...")
+	log.Print("Closing DB instances...")
 	closeNetworkDBInstances(dbs)
 }

@@ -5,8 +5,10 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"math/big"
 	rnd "math/rand"
+	"net"
 	"strings"
 	"time"
 
@@ -14,21 +16,32 @@ import (
 	"github.com/hashicorp/memberlist"
 )
 
-const reapInterval = 30 * time.Second
+const (
+	reapInterval     = 60 * time.Second
+	reapPeriod       = 5 * time.Second
+	retryInterval    = 1 * time.Second
+	nodeReapInterval = 24 * time.Hour
+	nodeReapPeriod   = 2 * time.Hour
+)
 
 type logWriter struct{}
 
 func (l *logWriter) Write(p []byte) (int, error) {
 	str := string(p)
+	str = strings.TrimSuffix(str, "\n")
 
 	switch {
-	case strings.Contains(str, "[WARN]"):
+	case strings.HasPrefix(str, "[WARN] "):
+		str = strings.TrimPrefix(str, "[WARN] ")
 		logrus.Warn(str)
-	case strings.Contains(str, "[DEBUG]"):
+	case strings.HasPrefix(str, "[DEBUG] "):
+		str = strings.TrimPrefix(str, "[DEBUG] ")
 		logrus.Debug(str)
-	case strings.Contains(str, "[INFO]"):
+	case strings.HasPrefix(str, "[INFO] "):
+		str = strings.TrimPrefix(str, "[INFO] ")
 		logrus.Info(str)
-	case strings.Contains(str, "[ERR]"):
+	case strings.HasPrefix(str, "[ERR] "):
+		str = strings.TrimPrefix(str, "[ERR] ")
 		logrus.Warn(str)
 	}
 
@@ -38,6 +51,8 @@ func (l *logWriter) Write(p []byte) (int, error) {
 // SetKey adds a new key to the key ring
 func (nDB *NetworkDB) SetKey(key []byte) {
 	logrus.Debugf("Adding key %s", hex.EncodeToString(key)[0:5])
+	nDB.Lock()
+	defer nDB.Unlock()
 	for _, dbKey := range nDB.config.Keys {
 		if bytes.Equal(key, dbKey) {
 			return
@@ -53,6 +68,8 @@ func (nDB *NetworkDB) SetKey(key []byte) {
 // been added apriori through SetKey
 func (nDB *NetworkDB) SetPrimaryKey(key []byte) {
 	logrus.Debugf("Primary Key %s", hex.EncodeToString(key)[0:5])
+	nDB.RLock()
+	defer nDB.RUnlock()
 	for _, dbKey := range nDB.config.Keys {
 		if bytes.Equal(key, dbKey) {
 			if nDB.keyring != nil {
@@ -67,6 +84,8 @@ func (nDB *NetworkDB) SetPrimaryKey(key []byte) {
 // can't be the primary key
 func (nDB *NetworkDB) RemoveKey(key []byte) {
 	logrus.Debugf("Remove Key %s", hex.EncodeToString(key)[0:5])
+	nDB.Lock()
+	defer nDB.Unlock()
 	for i, dbKey := range nDB.config.Keys {
 		if bytes.Equal(key, dbKey) {
 			nDB.config.Keys = append(nDB.config.Keys[:i], nDB.config.Keys[i+1:]...)
@@ -81,6 +100,7 @@ func (nDB *NetworkDB) RemoveKey(key []byte) {
 func (nDB *NetworkDB) clusterInit() error {
 	config := memberlist.DefaultLANConfig()
 	config.Name = nDB.config.NodeName
+	config.BindAddr = nDB.config.BindAddr
 	config.AdvertiseAddr = nDB.config.AdvertiseAddr
 
 	if nDB.config.BindPort != 0 {
@@ -90,7 +110,9 @@ func (nDB *NetworkDB) clusterInit() error {
 	config.ProtocolVersion = memberlist.ProtocolVersionMax
 	config.Delegate = &delegate{nDB: nDB}
 	config.Events = &eventDelegate{nDB: nDB}
-	config.LogOutput = &logWriter{}
+	// custom logger that does not add time or date, so they are not
+	// duplicated by logrus
+	config.Logger = log.New(&logWriter{}, "", 0)
 
 	var err error
 	if len(nDB.config.Keys) > 0 {
@@ -106,7 +128,20 @@ func (nDB *NetworkDB) clusterInit() error {
 
 	nDB.networkBroadcasts = &memberlist.TransmitLimitedQueue{
 		NumNodes: func() int {
-			return len(nDB.nodes)
+			nDB.RLock()
+			num := len(nDB.nodes)
+			nDB.RUnlock()
+			return num
+		},
+		RetransmitMult: config.RetransmitMult,
+	}
+
+	nDB.nodeBroadcasts = &memberlist.TransmitLimitedQueue{
+		NumNodes: func() int {
+			nDB.RLock()
+			num := len(nDB.nodes)
+			nDB.RUnlock()
+			return num
 		},
 		RetransmitMult: config.RetransmitMult,
 	}
@@ -118,15 +153,16 @@ func (nDB *NetworkDB) clusterInit() error {
 
 	nDB.stopCh = make(chan struct{})
 	nDB.memberlist = mlist
-	nDB.mConfig = config
 
 	for _, trigger := range []struct {
 		interval time.Duration
 		fn       func()
 	}{
-		{reapInterval, nDB.reapState},
+		{reapPeriod, nDB.reapState},
 		{config.GossipInterval, nDB.gossip},
 		{config.PushPullInterval, nDB.bulkSyncTables},
+		{retryInterval, nDB.reconnectNode},
+		{nodeReapPeriod, nDB.reapDeadNode},
 	} {
 		t := time.NewTicker(trigger.interval)
 		go nDB.triggerFunc(trigger.interval, t.C, nDB.stopCh, trigger.fn)
@@ -136,11 +172,41 @@ func (nDB *NetworkDB) clusterInit() error {
 	return nil
 }
 
+func (nDB *NetworkDB) retryJoin(members []string, stop <-chan struct{}) {
+	t := time.NewTicker(retryInterval)
+	defer t.Stop()
+
+	for {
+		select {
+		case <-t.C:
+			if _, err := nDB.memberlist.Join(members); err != nil {
+				logrus.Errorf("Failed to join memberlist %s on retry: %v", members, err)
+				continue
+			}
+			if err := nDB.sendNodeEvent(NodeEventTypeJoin); err != nil {
+				logrus.Errorf("failed to send node join on retry: %v", err)
+				continue
+			}
+			return
+		case <-stop:
+			return
+		}
+	}
+
+}
+
 func (nDB *NetworkDB) clusterJoin(members []string) error {
 	mlist := nDB.memberlist
 
 	if _, err := mlist.Join(members); err != nil {
+		// Incase of failure, keep retrying join until it succeeds or the cluster is shutdown.
+		go nDB.retryJoin(members, nDB.stopCh)
+
 		return fmt.Errorf("could not join node to memberlist: %v", err)
+	}
+
+	if err := nDB.sendNodeEvent(NodeEventTypeJoin); err != nil {
+		return fmt.Errorf("failed to send node join: %v", err)
 	}
 
 	return nil
@@ -148,6 +214,10 @@ func (nDB *NetworkDB) clusterJoin(members []string) error {
 
 func (nDB *NetworkDB) clusterLeave() error {
 	mlist := nDB.memberlist
+
+	if err := nDB.sendNodeEvent(NodeEventTypeLeave); err != nil {
+		logrus.Errorf("failed to send node leave: %v", err)
+	}
 
 	if err := mlist.Leave(time.Second); err != nil {
 		return err
@@ -180,19 +250,76 @@ func (nDB *NetworkDB) triggerFunc(stagger time.Duration, C <-chan time.Time, sto
 	}
 }
 
+func (nDB *NetworkDB) reapDeadNode() {
+	nDB.Lock()
+	defer nDB.Unlock()
+	for id, n := range nDB.failedNodes {
+		if n.reapTime > 0 {
+			n.reapTime -= nodeReapPeriod
+			continue
+		}
+		logrus.Debugf("Removing failed node %v from gossip cluster", n.Name)
+		delete(nDB.failedNodes, id)
+	}
+}
+
+func (nDB *NetworkDB) reconnectNode() {
+	nDB.RLock()
+	if len(nDB.failedNodes) == 0 {
+		nDB.RUnlock()
+		return
+	}
+
+	nodes := make([]*node, 0, len(nDB.failedNodes))
+	for _, n := range nDB.failedNodes {
+		nodes = append(nodes, n)
+	}
+	nDB.RUnlock()
+
+	node := nodes[randomOffset(len(nodes))]
+	addr := net.UDPAddr{IP: node.Addr, Port: int(node.Port)}
+
+	if _, err := nDB.memberlist.Join([]string{addr.String()}); err != nil {
+		return
+	}
+
+	if err := nDB.sendNodeEvent(NodeEventTypeJoin); err != nil {
+		logrus.Errorf("failed to send node join during reconnect: %v", err)
+		return
+	}
+
+	// Update all the local table state to a new time to
+	// force update on the node we are trying to rejoin, just in
+	// case that node has these in deleting state still. This is
+	// facilitate fast convergence after recovering from a gossip
+	// failure.
+	nDB.updateLocalTableTime()
+
+	logrus.Debugf("Initiating bulk sync with node %s after reconnect", node.Name)
+	nDB.bulkSync([]string{node.Name}, true)
+}
+
+// For timing the entry deletion in the repaer APIs that doesn't use monotonic clock
+// source (time.Now, Sub etc.) should be avoided. Hence we use reapTime in every
+// entry which is set initially to reapInterval and decremented by reapPeriod every time
+// the reaper runs. NOTE nDB.reapTableEntries updates the reapTime with a readlock. This
+// is safe as long as no other concurrent path touches the reapTime field.
 func (nDB *NetworkDB) reapState() {
 	nDB.reapNetworks()
 	nDB.reapTableEntries()
 }
 
 func (nDB *NetworkDB) reapNetworks() {
-	now := time.Now()
 	nDB.Lock()
 	for name, nn := range nDB.networks {
 		for id, n := range nn {
-			if n.leaving && now.Sub(n.leaveTime) > reapInterval {
-				delete(nn, id)
-				nDB.deleteNetworkNode(id, name)
+			if n.leaving {
+				if n.reapTime <= 0 {
+					delete(nn, id)
+					nDB.deleteNetworkNode(id, name)
+					continue
+				}
+				n.reapTime -= reapPeriod
 			}
 		}
 	}
@@ -200,12 +327,7 @@ func (nDB *NetworkDB) reapNetworks() {
 }
 
 func (nDB *NetworkDB) reapTableEntries() {
-	var (
-		paths   []string
-		entries []*entry
-	)
-
-	now := time.Now()
+	var paths []string
 
 	nDB.RLock()
 	nDB.indexes[byTable].Walk(func(path string, v interface{}) bool {
@@ -214,19 +336,20 @@ func (nDB *NetworkDB) reapTableEntries() {
 			return false
 		}
 
-		if !entry.deleting || now.Sub(entry.deleteTime) <= reapInterval {
+		if !entry.deleting {
 			return false
 		}
-
+		if entry.reapTime > 0 {
+			entry.reapTime -= reapPeriod
+			return false
+		}
 		paths = append(paths, path)
-		entries = append(entries, entry)
 		return false
 	})
 	nDB.RUnlock()
 
 	nDB.Lock()
-	for i, path := range paths {
-		entry := entries[i]
+	for _, path := range paths {
 		params := strings.Split(path[1:], "/")
 		tname := params[0]
 		nid := params[1]
@@ -239,8 +362,6 @@ func (nDB *NetworkDB) reapTableEntries() {
 		if _, ok := nDB.indexes[byNetwork].Delete(fmt.Sprintf("/%s/%s/%s", nid, tname, key)); !ok {
 			logrus.Errorf("Could not delete entry in network %s with table name %s and key %s as it does not exist", nid, tname, key)
 		}
-
-		nDB.broadcaster.Write(makeEvent(opDelete, tname, nid, key, entry.value))
 	}
 	nDB.Unlock()
 }
@@ -295,7 +416,7 @@ func (nDB *NetworkDB) gossip() {
 			}
 
 			// Send the compound message
-			if err := nDB.memberlist.SendToUDP(mnode, compound); err != nil {
+			if err := nDB.memberlist.SendToUDP(&mnode.Node, compound); err != nil {
 				logrus.Errorf("Failed to send gossip to %s: %s", mnode.Addr, err)
 			}
 		}
@@ -305,7 +426,10 @@ func (nDB *NetworkDB) gossip() {
 func (nDB *NetworkDB) bulkSyncTables() {
 	var networks []string
 	nDB.RLock()
-	for nid := range nDB.networks[nDB.config.NodeName] {
+	for nid, network := range nDB.networks[nDB.config.NodeName] {
+		if network.leaving {
+			continue
+		}
 		networks = append(networks, nid)
 	}
 	nDB.RUnlock()
@@ -327,7 +451,7 @@ func (nDB *NetworkDB) bulkSyncTables() {
 			continue
 		}
 
-		completed, err := nDB.bulkSync(nid, nodes, false)
+		completed, err := nDB.bulkSync(nodes, false)
 		if err != nil {
 			logrus.Errorf("periodic bulk sync failure for network %s: %v", nid, err)
 			continue
@@ -354,7 +478,7 @@ func (nDB *NetworkDB) bulkSyncTables() {
 	}
 }
 
-func (nDB *NetworkDB) bulkSync(nid string, nodes []string, all bool) ([]string, error) {
+func (nDB *NetworkDB) bulkSync(nodes []string, all bool) ([]string, error) {
 	if !all {
 		// If not all, then just pick one.
 		nodes = nDB.mRandomNodes(1, nodes)
@@ -392,7 +516,12 @@ func (nDB *NetworkDB) bulkSync(nid string, nodes []string, all bool) ([]string, 
 func (nDB *NetworkDB) bulkSyncNode(networks []string, node string, unsolicited bool) error {
 	var msgs [][]byte
 
-	logrus.Debugf("%s: Initiating bulk sync for networks %v with node %s", nDB.config.NodeName, networks, node)
+	var unsolMsg string
+	if unsolicited {
+		unsolMsg = "unsolicited"
+	}
+
+	logrus.Debugf("%s: Initiating %s bulk sync for networks %v with node %s", nDB.config.NodeName, unsolMsg, networks, node)
 
 	nDB.RLock()
 	mnode := nDB.nodes[node]
@@ -408,15 +537,14 @@ func (nDB *NetworkDB) bulkSyncNode(networks []string, node string, unsolicited b
 				return false
 			}
 
-			// Do not bulk sync state which is in the
-			// process of getting deleted.
+			eType := TableEventTypeCreate
 			if entry.deleting {
-				return false
+				eType = TableEventTypeDelete
 			}
 
 			params := strings.Split(path[1:], "/")
 			tEvent := TableEvent{
-				Type:      TableEventTypeCreate,
+				Type:      eType,
 				LTime:     entry.ltime,
 				NodeName:  entry.node,
 				NetworkID: nid,
@@ -458,7 +586,7 @@ func (nDB *NetworkDB) bulkSyncNode(networks []string, node string, unsolicited b
 	nDB.bulkSyncAckTbl[node] = ch
 	nDB.Unlock()
 
-	err = nDB.memberlist.SendToTCP(mnode, buf)
+	err = nDB.memberlist.SendToTCP(&mnode.Node, buf)
 	if err != nil {
 		nDB.Lock()
 		delete(nDB.bulkSyncAckTbl, node)
@@ -475,10 +603,6 @@ func (nDB *NetworkDB) bulkSyncNode(networks []string, node string, unsolicited b
 		case <-t.C:
 			logrus.Errorf("Bulk sync to node %s timed out", node)
 		case <-ch:
-			nDB.Lock()
-			delete(nDB.bulkSyncAckTbl, node)
-			nDB.Unlock()
-
 			logrus.Debugf("%s: Bulk sync to node %s took %s", nDB.config.NodeName, node, time.Now().Sub(startTime))
 		}
 		t.Stop()

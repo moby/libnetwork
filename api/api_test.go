@@ -15,7 +15,6 @@ import (
 	"github.com/docker/docker/pkg/reexec"
 	"github.com/docker/libnetwork"
 	"github.com/docker/libnetwork/datastore"
-	"github.com/docker/libnetwork/drivers/bridge"
 	"github.com/docker/libnetwork/netlabel"
 	"github.com/docker/libnetwork/options"
 	"github.com/docker/libnetwork/testutils"
@@ -148,7 +147,7 @@ func TestSandboxOptionParser(t *testing.T) {
 	}
 
 	if len(sb.parseOptions()) != 9 {
-		t.Fatalf("Failed to generate all libnetwork.SandboxOption methods")
+		t.Fatal("Failed to generate all libnetwork.SandboxOption methods")
 	}
 }
 
@@ -206,7 +205,7 @@ func TestCreateDeleteNetwork(t *testing.T) {
 	vars := make(map[string]string)
 	_, errRsp := procCreateNetwork(c, nil, badBody)
 	if errRsp == &createdResponse {
-		t.Fatalf("Expected to fail but succeeded")
+		t.Fatal("Expected to fail but succeeded")
 	}
 	if errRsp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("Expected StatusBadRequest status code, got: %v", errRsp)
@@ -219,18 +218,14 @@ func TestCreateDeleteNetwork(t *testing.T) {
 
 	_, errRsp = procCreateNetwork(c, vars, incompleteBody)
 	if errRsp == &createdResponse {
-		t.Fatalf("Expected to fail but succeeded")
+		t.Fatal("Expected to fail but succeeded")
 	}
 	if errRsp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("Expected StatusBadRequest status code, got: %v", errRsp)
 	}
 
-	dops := map[string]string{
-		bridge.BridgeName: "abc",
-	}
-	nops := map[string]string{
-		netlabel.EnableIPv6: "true",
-	}
+	dops := GetOpsMap("abc", "")
+	nops := map[string]string{}
 	nc := networkCreate{Name: "network_1", NetworkType: bridgeNetType, DriverOpts: dops, NetworkOpts: nops}
 	goodBody, err := json.Marshal(nc)
 	if err != nil {
@@ -245,13 +240,13 @@ func TestCreateDeleteNetwork(t *testing.T) {
 	vars[urlNwName] = ""
 	_, errRsp = procDeleteNetwork(c, vars, nil)
 	if errRsp == &successResponse {
-		t.Fatalf("Expected to fail but succeeded")
+		t.Fatal("Expected to fail but succeeded")
 	}
 
 	vars[urlNwName] = "abc"
 	_, errRsp = procDeleteNetwork(c, vars, nil)
 	if errRsp == &successResponse {
-		t.Fatalf("Expected to fail but succeeded")
+		t.Fatal("Expected to fail but succeeded")
 	}
 
 	vars[urlNwName] = "network_1"
@@ -273,9 +268,7 @@ func TestGetNetworksAndEndpoints(t *testing.T) {
 	}
 	defer c.Stop()
 
-	ops := map[string]string{
-		bridge.BridgeName: "api_test_nw",
-	}
+	ops := GetOpsMap("api_test_nw", "")
 	nc := networkCreate{Name: "sh", NetworkType: bridgeNetType, DriverOpts: ops}
 	body, err := json.Marshal(nc)
 	if err != nil {
@@ -413,7 +406,7 @@ func TestGetNetworksAndEndpoints(t *testing.T) {
 		t.Fatalf("Did not return the expected number (2) of endpoint resources: %d", len(epList))
 	}
 	if "sh" != epList[0].Network || "sh" != epList[1].Network {
-		t.Fatalf("Did not find expected network name in endpoint resources")
+		t.Fatal("Did not find expected network name in endpoint resources")
 	}
 
 	vars = make(map[string]string)
@@ -465,7 +458,7 @@ func TestGetNetworksAndEndpoints(t *testing.T) {
 	}
 	netList := i2nL(iList)
 	if len(netList) != 1 {
-		t.Fatalf("Did not return the expected number of network resources")
+		t.Fatal("Did not return the expected number of network resources")
 	}
 	if nid != netList[0].ID {
 		t.Fatalf("Did not find expected network %s: %v", nid, netList)
@@ -516,7 +509,7 @@ func TestGetNetworksAndEndpoints(t *testing.T) {
 	}
 	netList = i2nL(iList)
 	if len(netList) != 0 {
-		t.Fatalf("Did not return the expected number of network resources")
+		t.Fatal("Did not return the expected number of network resources")
 	}
 }
 
@@ -544,7 +537,7 @@ func TestProcGetServices(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	netName2 := "work-dev"
+	netName2 := "workdev"
 	netOption = options.Generic{
 		netlabel.GenericData: options.Generic{
 			"BridgeName": netName2,
@@ -707,7 +700,7 @@ func TestProcGetService(t *testing.T) {
 	vars := map[string]string{urlEpID: ""}
 	_, errRsp := procGetService(c, vars, nil)
 	if errRsp.isOK() {
-		t.Fatalf("Expected failure, but succeeded")
+		t.Fatal("Expected failure, but succeeded")
 	}
 	if errRsp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("Expected %d, but got: %d", http.StatusBadRequest, errRsp.StatusCode)
@@ -716,7 +709,7 @@ func TestProcGetService(t *testing.T) {
 	vars[urlEpID] = "unknown-service-id"
 	_, errRsp = procGetService(c, vars, nil)
 	if errRsp.isOK() {
-		t.Fatalf("Expected failure, but succeeded")
+		t.Fatal("Expected failure, but succeeded")
 	}
 	if errRsp.StatusCode != http.StatusNotFound {
 		t.Fatalf("Expected %d, but got: %d. (%v)", http.StatusNotFound, errRsp.StatusCode, errRsp)
@@ -757,7 +750,7 @@ func TestProcPublishUnpublishService(t *testing.T) {
 	}
 	_, errRsp := procPublishService(c, vars, vbad)
 	if errRsp == &createdResponse {
-		t.Fatalf("Expected to fail but succeeded")
+		t.Fatal("Expected to fail but succeeded")
 	}
 	if errRsp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("Expected %d. Got: %v", http.StatusBadRequest, errRsp)
@@ -769,7 +762,7 @@ func TestProcPublishUnpublishService(t *testing.T) {
 	}
 	_, errRsp = procPublishService(c, vars, b)
 	if errRsp == &createdResponse {
-		t.Fatalf("Expected to fail but succeeded")
+		t.Fatal("Expected to fail but succeeded")
 	}
 	if errRsp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("Expected %d. Got: %v", http.StatusBadRequest, errRsp)
@@ -781,7 +774,7 @@ func TestProcPublishUnpublishService(t *testing.T) {
 	}
 	_, errRsp = procPublishService(c, vars, b)
 	if errRsp == &createdResponse {
-		t.Fatalf("Expected to fail but succeeded")
+		t.Fatal("Expected to fail but succeeded")
 	}
 	if errRsp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("Expected %d. Got: %v", http.StatusBadRequest, errRsp)
@@ -793,7 +786,7 @@ func TestProcPublishUnpublishService(t *testing.T) {
 	}
 	_, errRsp = procPublishService(c, vars, b)
 	if errRsp == &createdResponse {
-		t.Fatalf("Expected to fail but succeeded")
+		t.Fatal("Expected to fail but succeeded")
 	}
 	if errRsp.StatusCode != http.StatusNotFound {
 		t.Fatalf("Expected %d. Got: %v", http.StatusNotFound, errRsp)
@@ -805,7 +798,7 @@ func TestProcPublishUnpublishService(t *testing.T) {
 	}
 	_, errRsp = procPublishService(c, vars, b)
 	if errRsp == &createdResponse {
-		t.Fatalf("Expected to fail but succeeded")
+		t.Fatal("Expected to fail but succeeded")
 	}
 	if errRsp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("Expected %d. Got: %v", http.StatusBadRequest, errRsp)
@@ -837,7 +830,7 @@ func TestProcPublishUnpublishService(t *testing.T) {
 	vars[urlEpID] = ""
 	_, errRsp = procUnpublishService(c, vars, nil)
 	if errRsp.isOK() {
-		t.Fatalf("Expected failure but succeeded")
+		t.Fatal("Expected failure but succeeded")
 	}
 	if errRsp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("Expected %d. Got: %v", http.StatusBadRequest, errRsp)
@@ -846,7 +839,7 @@ func TestProcPublishUnpublishService(t *testing.T) {
 	vars[urlEpID] = "unknown-service-id"
 	_, errRsp = procUnpublishService(c, vars, nil)
 	if errRsp.isOK() {
-		t.Fatalf("Expected failure but succeeded")
+		t.Fatal("Expected failure but succeeded")
 	}
 	if errRsp.StatusCode != http.StatusNotFound {
 		t.Fatalf("Expected %d. Got: %v", http.StatusNotFound, errRsp)
@@ -860,7 +853,7 @@ func TestProcPublishUnpublishService(t *testing.T) {
 
 	_, errRsp = procGetService(c, vars, nil)
 	if errRsp.isOK() {
-		t.Fatalf("Expected failure, but succeeded")
+		t.Fatal("Expected failure, but succeeded")
 	}
 	if errRsp.StatusCode != http.StatusNotFound {
 		t.Fatalf("Expected %d, but got: %d. (%v)", http.StatusNotFound, errRsp.StatusCode, errRsp)
@@ -949,7 +942,7 @@ func TestAttachDetachBackend(t *testing.T) {
 
 	_, errRsp = procUnpublishService(c, vars, nil)
 	if errRsp.isOK() {
-		t.Fatalf("Expected failure but succeeded")
+		t.Fatal("Expected failure but succeeded")
 	}
 	if errRsp.StatusCode != http.StatusForbidden {
 		t.Fatalf("Expected %d. Got: %v", http.StatusForbidden, errRsp)
@@ -1053,7 +1046,7 @@ func TestFindNetworkUtil(t *testing.T) {
 
 	_, errRsp := findNetwork(c, "", byName)
 	if errRsp == &successResponse {
-		t.Fatalf("Expected to fail but succeeded")
+		t.Fatal("Expected to fail but succeeded")
 	}
 	if errRsp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("Expected %d, but got: %d", http.StatusBadRequest, errRsp.StatusCode)
@@ -1064,7 +1057,7 @@ func TestFindNetworkUtil(t *testing.T) {
 		t.Fatalf("Unexpected failure: %v", errRsp)
 	}
 	if n == nil {
-		t.Fatalf("Unexpected nil libnetwork.Network")
+		t.Fatal("Unexpected nil libnetwork.Network")
 	}
 	if nid != n.ID() {
 		t.Fatalf("Incorrect libnetwork.Network resource. It has different id: %v", n)
@@ -1078,7 +1071,7 @@ func TestFindNetworkUtil(t *testing.T) {
 		t.Fatalf("Unexpected failure: %v", errRsp)
 	}
 	if n == nil {
-		t.Fatalf("Unexpected nil libnetwork.Network")
+		t.Fatal("Unexpected nil libnetwork.Network")
 	}
 	if nid != n.ID() {
 		t.Fatalf("Incorrect libnetwork.Network resource. It has different id: %v", n)
@@ -1093,7 +1086,7 @@ func TestFindNetworkUtil(t *testing.T) {
 
 	_, errRsp = findNetwork(c, nid, byID)
 	if errRsp == &successResponse {
-		t.Fatalf("Expected to fail but succeeded")
+		t.Fatal("Expected to fail but succeeded")
 	}
 	if errRsp.StatusCode != http.StatusNotFound {
 		t.Fatalf("Expected %d, but got: %d", http.StatusNotFound, errRsp.StatusCode)
@@ -1101,7 +1094,7 @@ func TestFindNetworkUtil(t *testing.T) {
 
 	_, errRsp = findNetwork(c, "network", byName)
 	if errRsp == &successResponse {
-		t.Fatalf("Expected to fail but succeeded")
+		t.Fatal("Expected to fail but succeeded")
 	}
 	if errRsp.StatusCode != http.StatusNotFound {
 		t.Fatalf("Expected %d, but got: %d", http.StatusNotFound, errRsp.StatusCode)
@@ -1141,7 +1134,7 @@ func TestCreateDeleteEndpoints(t *testing.T) {
 	vars[urlNwName] = "firstNet"
 	_, errRsp = procCreateEndpoint(c, vars, vbad)
 	if errRsp == &createdResponse {
-		t.Fatalf("Expected to fail but succeeded")
+		t.Fatal("Expected to fail but succeeded")
 	}
 
 	b, err := json.Marshal(endpointCreate{Name: ""})
@@ -1152,7 +1145,7 @@ func TestCreateDeleteEndpoints(t *testing.T) {
 	vars[urlNwName] = "secondNet"
 	_, errRsp = procCreateEndpoint(c, vars, b)
 	if errRsp == &createdResponse {
-		t.Fatalf("Expected to fail but succeeded")
+		t.Fatal("Expected to fail but succeeded")
 	}
 
 	vars[urlNwName] = "firstNet"
@@ -1325,7 +1318,7 @@ func TestJoinLeave(t *testing.T) {
 
 	keyStr := i2s(key)
 	if keyStr == "" {
-		t.Fatalf("Empty sandbox key")
+		t.Fatal("Empty sandbox key")
 	}
 	_, errRsp = procDeleteEndpoint(c, vars, nil)
 	if errRsp == &successResponse {
@@ -1467,7 +1460,7 @@ func TestFindEndpointUtil(t *testing.T) {
 
 	if ep0.ID() != ep1.ID() || ep0.ID() != ep2.ID() ||
 		ep0.ID() != ep3.ID() || ep0.ID() != ep4.ID() || ep0.ID() != ep5.ID() {
-		t.Fatalf("Diffenrent queries returned different endpoints")
+		t.Fatal("Diffenrent queries returned different endpoints")
 	}
 
 	ep.Delete(false)
@@ -1541,7 +1534,7 @@ func checkPanic(t *testing.T) {
 			panic(r)
 		}
 	} else {
-		t.Fatalf("Expected to panic, but succeeded")
+		t.Fatal("Expected to panic, but succeeded")
 	}
 }
 
@@ -1604,12 +1597,12 @@ func TestResponseStatus(t *testing.T) {
 
 	r := responseStatus{StatusCode: http.StatusOK}
 	if !r.isOK() {
-		t.Fatalf("isOK() failed")
+		t.Fatal("isOK() failed")
 	}
 
 	r = responseStatus{StatusCode: http.StatusCreated}
 	if !r.isOK() {
-		t.Fatalf("isOK() failed")
+		t.Fatal("isOK() failed")
 	}
 }
 
@@ -1630,7 +1623,7 @@ func (l *localReader) Read(p []byte) (n int, err error) {
 		return 0, errors.New("I am a bad reader")
 	}
 	if p == nil {
-		return -1, fmt.Errorf("nil buffer passed")
+		return -1, errors.New("nil buffer passed")
 	}
 	if l.data == nil || len(l.data) == 0 {
 		return 0, io.EOF
@@ -1654,7 +1647,7 @@ func (f *localResponseWriter) Header() http.Header {
 
 func (f *localResponseWriter) Write(data []byte) (int, error) {
 	if data == nil {
-		return -1, fmt.Errorf("nil data passed")
+		return -1, errors.New("nil data passed")
 	}
 
 	f.body = make([]byte, len(data))
@@ -1667,9 +1660,8 @@ func (f *localResponseWriter) WriteHeader(c int) {
 	f.statusCode = c
 }
 
-func TestwriteJSON(t *testing.T) {
-	testCode := 55
-	testData, err := json.Marshal("test data")
+func testWriteJSON(t *testing.T, testCode int, testData interface{}) {
+	testDataMarshalled, err := json.Marshal(testData)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1679,10 +1671,17 @@ func TestwriteJSON(t *testing.T) {
 	if rsp.statusCode != testCode {
 		t.Fatalf("writeJSON() failed to set the status code. Expected %d. Got %d", testCode, rsp.statusCode)
 	}
-	if !bytes.Equal(testData, rsp.body) {
-		t.Fatalf("writeJSON() failed to set the body. Expected %s. Got %s", testData, rsp.body)
+	// writeJSON calls json.Encode and it appends '\n' to the result,
+	// while json.Marshal not
+	expected := append(testDataMarshalled, byte('\n'))
+	if !bytes.Equal(expected, rsp.body) {
+		t.Fatalf("writeJSON() failed to set the body. Expected %q. Got %q", expected, rsp.body)
 	}
+}
 
+func TestWriteJSON(t *testing.T) {
+	testWriteJSON(t, 55, "test data as string")
+	testWriteJSON(t, 55, []byte("test data as bytes"))
 }
 
 func TestHttpHandlerUninit(t *testing.T) {
@@ -1700,7 +1699,7 @@ func TestHttpHandlerUninit(t *testing.T) {
 	h := &httpHandler{c: c}
 	h.initRouter()
 	if h.r == nil {
-		t.Fatalf("initRouter() did not initialize the router")
+		t.Fatal("initRouter() did not initialize the router")
 	}
 
 	rsp := newWriter()
@@ -1746,10 +1745,10 @@ func TestHttpHandlerUninit(t *testing.T) {
 		t.Fatalf("Unexpectded failure: (%d): %s", rsp.statusCode, rsp.body)
 	}
 	if len(rsp.body) == 0 {
-		t.Fatalf("Empty list of networks")
+		t.Fatal("Empty list of networks")
 	}
 	if bytes.Equal(rsp.body, expected) {
-		t.Fatalf("Incorrect list of networks in response's body")
+		t.Fatal("Incorrect list of networks in response's body")
 	}
 }
 
@@ -1805,13 +1804,8 @@ func TestEndToEnd(t *testing.T) {
 
 	handleRequest := NewHTTPHandler(c)
 
-	dops := map[string]string{
-		bridge.BridgeName:  "cdef",
-		netlabel.DriverMTU: "1460",
-	}
-	nops := map[string]string{
-		netlabel.EnableIPv6: "true",
-	}
+	dops := GetOpsMap("cdef", "1460")
+	nops := map[string]string{}
 
 	// Create network
 	nc := networkCreate{Name: "network-fiftyfive", NetworkType: bridgeNetType, DriverOpts: dops, NetworkOpts: nops}
@@ -1829,7 +1823,7 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatalf("Unexpectded status code. Expected (%d). Got (%d): %s.", http.StatusCreated, rsp.statusCode, string(rsp.body))
 	}
 	if len(rsp.body) == 0 {
-		t.Fatalf("Empty response body")
+		t.Fatal("Empty response body")
 	}
 
 	var nid string
@@ -1878,7 +1872,7 @@ func TestEndToEnd(t *testing.T) {
 	}
 
 	if !bytes.Equal(b0, rsp.body) {
-		t.Fatalf("Expected same body from GET /networks and GET /networks?name=<nw> when only network <nw> exist.")
+		t.Fatal("Expected same body from GET /networks and GET /networks?name=<nw> when only network <nw> exist.")
 	}
 
 	// Query network by name
@@ -1913,7 +1907,7 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(list) == 0 {
-		t.Fatalf("Expected non empty list")
+		t.Fatal("Expected non empty list")
 	}
 	if list[0].Name != "network-fiftyfive" || nid != list[0].ID {
 		t.Fatalf("Incongruent resource found: %v", list[0])
@@ -1936,7 +1930,7 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(list) == 0 {
-		t.Fatalf("Expected non empty list")
+		t.Fatal("Expected non empty list")
 	}
 	if list[0].Name != "network-fiftyfive" || nid != list[0].ID {
 		t.Fatalf("Incongruent resource found: %v", list[0])
@@ -1977,7 +1971,7 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatalf("Unexpectded status code. Expected (%d). Got (%d): %s.", http.StatusCreated, rsp.statusCode, string(rsp.body))
 	}
 	if len(rsp.body) == 0 {
-		t.Fatalf("Empty response body")
+		t.Fatal("Empty response body")
 	}
 
 	var eid string
@@ -2028,7 +2022,7 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(epList) == 0 {
-		t.Fatalf("Empty response body")
+		t.Fatal("Empty response body")
 	}
 	if epList[0].Name != "ep-TwentyTwo" || eid != epList[0].ID {
 		t.Fatalf("Incongruent resource found: %v", epList[0])
@@ -2051,7 +2045,7 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(epList) == 0 {
-		t.Fatalf("Empty response body")
+		t.Fatal("Empty response body")
 	}
 	if epList[0].Name != "ep-TwentyTwo" || eid != epList[0].ID {
 		t.Fatalf("Incongruent resource found: %v", epList[0])
@@ -2101,7 +2095,7 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatalf("Unexpectded status code. Expected (%d). Got (%d): %s.", http.StatusCreated, rsp.statusCode, string(rsp.body))
 	}
 	if len(rsp.body) == 0 {
-		t.Fatalf("Empty response body")
+		t.Fatal("Empty response body")
 	}
 	// Get sandbox id and partial id
 	var sid1 string
@@ -2128,7 +2122,7 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatalf("Unexpectded status code. Expected (%d). Got (%d): %s.", http.StatusCreated, rsp.statusCode, string(rsp.body))
 	}
 	if len(rsp.body) == 0 {
-		t.Fatalf("Empty response body")
+		t.Fatal("Empty response body")
 	}
 	// Get sandbox id and partial id
 	var sid2 string
@@ -2192,7 +2186,7 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(sbList) == 0 {
-		t.Fatalf("Empty response body")
+		t.Fatal("Empty response body")
 	}
 	if sbList[0].ID != sid2 {
 		t.Fatalf("Incongruent resource found: %v", sbList[0])
@@ -2213,7 +2207,7 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(sbList) == 0 {
-		t.Fatalf("Empty response body")
+		t.Fatal("Empty response body")
 	}
 	if sbList[0].ContainerID != cid2 {
 		t.Fatalf("Incongruent resource found: %v", sbList[0])
@@ -2234,7 +2228,7 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(sbList) == 0 {
-		t.Fatalf("Empty response body")
+		t.Fatal("Empty response body")
 	}
 	if sbList[0].ContainerID != cid1 {
 		t.Fatalf("Incongruent resource found: %v", sbList[0])
@@ -2265,11 +2259,11 @@ func TestEndToEndErrorMessage(t *testing.T) {
 	handleRequest(rsp, req)
 
 	if len(rsp.body) == 0 {
-		t.Fatalf("Empty response body.")
+		t.Fatal("Empty response body.")
 	}
 	empty := []byte("\"\"")
 	if bytes.Equal(empty, bytes.TrimSpace(rsp.body)) {
-		t.Fatalf("Empty response error message.")
+		t.Fatal("Empty response error message.")
 	}
 }
 
@@ -2304,7 +2298,7 @@ func (nip *notimpl) NotImplemented() {}
 type inter struct{}
 
 func (it *inter) Error() string {
-	return "I am a internal error"
+	return "I am an internal error"
 }
 func (it *inter) Internal() {}
 
@@ -2330,35 +2324,35 @@ func (noc *notclassified) Error() string {
 
 func TestErrorConversion(t *testing.T) {
 	if convertNetworkError(new(bre)).StatusCode != http.StatusBadRequest {
-		t.Fatalf("Failed to recognize BadRequest error")
+		t.Fatal("Failed to recognize BadRequest error")
 	}
 
 	if convertNetworkError(new(nfe)).StatusCode != http.StatusNotFound {
-		t.Fatalf("Failed to recognize NotFound error")
+		t.Fatal("Failed to recognize NotFound error")
 	}
 
 	if convertNetworkError(new(forb)).StatusCode != http.StatusForbidden {
-		t.Fatalf("Failed to recognize Forbidden error")
+		t.Fatal("Failed to recognize Forbidden error")
 	}
 
 	if convertNetworkError(new(notimpl)).StatusCode != http.StatusNotImplemented {
-		t.Fatalf("Failed to recognize NotImplemented error")
+		t.Fatal("Failed to recognize NotImplemented error")
 	}
 
 	if convertNetworkError(new(inter)).StatusCode != http.StatusInternalServerError {
-		t.Fatalf("Failed to recognize Internal error")
+		t.Fatal("Failed to recognize Internal error")
 	}
 
 	if convertNetworkError(new(tout)).StatusCode != http.StatusRequestTimeout {
-		t.Fatalf("Failed to recognize Timeout error")
+		t.Fatal("Failed to recognize Timeout error")
 	}
 
 	if convertNetworkError(new(noserv)).StatusCode != http.StatusServiceUnavailable {
-		t.Fatalf("Failed to recognize No Service error")
+		t.Fatal("Failed to recognize No Service error")
 	}
 
 	if convertNetworkError(new(notclassified)).StatusCode != http.StatusInternalServerError {
-		t.Fatalf("Failed to recognize not classified error as Internal error")
+		t.Fatal("Failed to recognize not classified error as Internal error")
 	}
 }
 
@@ -2367,23 +2361,23 @@ func TestFieldRegex(t *testing.T) {
 	qr := regexp.MustCompile(`^` + qregx + `$`) // mux compiles it like this
 
 	if pr.MatchString("") {
-		t.Fatalf("Unexpected match")
+		t.Fatal("Unexpected match")
 	}
 	if !qr.MatchString("") {
-		t.Fatalf("Unexpected match failure")
+		t.Fatal("Unexpected match failure")
 	}
 
 	if pr.MatchString(":") {
-		t.Fatalf("Unexpected match")
+		t.Fatal("Unexpected match")
 	}
 	if qr.MatchString(":") {
-		t.Fatalf("Unexpected match")
+		t.Fatal("Unexpected match")
 	}
 
 	if pr.MatchString(".") {
-		t.Fatalf("Unexpected match")
+		t.Fatal("Unexpected match")
 	}
 	if qr.MatchString(".") {
-		t.Fatalf("Unexpected match")
+		t.Fatal("Unexpected match")
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/docker/libkv"
 	"github.com/docker/libkv/store"
@@ -39,6 +40,8 @@ type DataStore interface {
 	// key. The caller must pass a KVObject of the same type as
 	// the objects that need to be listed
 	List(string, KVObject) ([]KVObject, error)
+	// Map returns a Map of KVObjects
+	Map(key string, kvObject KVObject) (map[string]KVObject, error)
 	// Scope returns the scope of the store
 	Scope() string
 	// KVStore returns access to the KV Store
@@ -63,13 +66,13 @@ type datastore struct {
 	sync.Mutex
 }
 
-// KVObject is  Key/Value interface used by objects to be part of the DataStore
+// KVObject is Key/Value interface used by objects to be part of the DataStore
 type KVObject interface {
-	// Key method lets an object to provide the Key to be used in KV Store
+	// Key method lets an object provide the Key to be used in KV Store
 	Key() []string
-	// KeyPrefix method lets an object to return immediate parent key that can be used for tree walk
+	// KeyPrefix method lets an object return immediate parent key that can be used for tree walk
 	KeyPrefix() []string
-	// Value method lets an object to marshal its content to be stored in the KV store
+	// Value method lets an object marshal its content to be stored in the KV store
 	Value() []byte
 	// SetValue is used by the datastore to set the object's value when loaded from the data store.
 	SetValue([]byte) error
@@ -134,7 +137,8 @@ func makeDefaultScopes() map[string]*ScopeCfg {
 			Provider: string(store.BOLTDB),
 			Address:  defaultPrefix + "/local-kv.db",
 			Config: &store.Config{
-				Bucket: "libnetwork",
+				Bucket:            "libnetwork",
+				ConnectionTimeout: time.Minute,
 			},
 		},
 	}
@@ -145,7 +149,7 @@ func makeDefaultScopes() map[string]*ScopeCfg {
 var defaultRootChain = []string{"docker", "network", "v1.0"}
 var rootChain = defaultRootChain
 
-// DefaultScopes returns a map of default scopes and it's config for clients to use.
+// DefaultScopes returns a map of default scopes and its config for clients to use.
 func DefaultScopes(dataDir string) map[string]*ScopeCfg {
 	if dataDir != "" {
 		defaultScopes[LocalScope].Client.Address = dataDir + "/network/files/local-kv.db"
@@ -510,23 +514,34 @@ func (ds *datastore) List(key string, kvObject KVObject) ([]KVObject, error) {
 		return ds.cache.list(kvObject)
 	}
 
+	var kvol []KVObject
+	cb := func(key string, val KVObject) {
+		kvol = append(kvol, val)
+	}
+	err := ds.iterateKVPairsFromStore(key, kvObject, cb)
+	if err != nil {
+		return nil, err
+	}
+	return kvol, nil
+}
+
+func (ds *datastore) iterateKVPairsFromStore(key string, kvObject KVObject, callback func(string, KVObject)) error {
 	// Bail out right away if the kvObject does not implement KVConstructor
 	ctor, ok := kvObject.(KVConstructor)
 	if !ok {
-		return nil, fmt.Errorf("error listing objects, object does not implement KVConstructor interface")
+		return fmt.Errorf("error listing objects, object does not implement KVConstructor interface")
 	}
 
 	// Make sure the parent key exists
 	if err := ds.ensureParent(key); err != nil {
-		return nil, err
+		return err
 	}
 
 	kvList, err := ds.store.List(key)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	var kvol []KVObject
 	for _, kvPair := range kvList {
 		if len(kvPair.Value) == 0 {
 			continue
@@ -534,16 +549,33 @@ func (ds *datastore) List(key string, kvObject KVObject) ([]KVObject, error) {
 
 		dstO := ctor.New()
 		if err := dstO.SetValue(kvPair.Value); err != nil {
-			return nil, err
+			return err
 		}
 
 		// Make sure the object has a correct view of the DB index in
 		// case we need to modify it and update the DB.
 		dstO.SetIndex(kvPair.LastIndex)
-
-		kvol = append(kvol, dstO)
+		callback(kvPair.Key, dstO)
 	}
 
+	return nil
+}
+
+func (ds *datastore) Map(key string, kvObject KVObject) (map[string]KVObject, error) {
+	if ds.sequential {
+		ds.Lock()
+		defer ds.Unlock()
+	}
+
+	kvol := make(map[string]KVObject)
+	cb := func(key string, val KVObject) {
+		// Trim the leading & trailing "/" to make it consistent across all stores
+		kvol[strings.Trim(key, "/")] = val
+	}
+	err := ds.iterateKVPairsFromStore(key, kvObject, cb)
+	if err != nil {
+		return nil, err
+	}
 	return kvol, nil
 }
 

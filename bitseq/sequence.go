@@ -1,15 +1,16 @@
 // Package bitseq provides a structure and utilities for representing long bitmask
-// as sequence of run-lenght encoded blocks. It operates direclty on the encoded
+// as sequence of run-length encoded blocks. It operates directly on the encoded
 // representation, it does not decode/encode.
 package bitseq
 
 import (
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 
-	log "github.com/Sirupsen/logrus"
+	"github.com/Sirupsen/logrus"
 	"github.com/docker/libnetwork/datastore"
 	"github.com/docker/libnetwork/types"
 )
@@ -26,9 +27,9 @@ const (
 
 var (
 	// ErrNoBitAvailable is returned when no more bits are available to set
-	ErrNoBitAvailable = fmt.Errorf("no bit available")
+	ErrNoBitAvailable = errors.New("no bit available")
 	// ErrBitAllocated is returned when the specific bit requested is already set
-	ErrBitAllocated = fmt.Errorf("requested bit is already allocated")
+	ErrBitAllocated = errors.New("requested bit is already allocated")
 )
 
 // Handle contains the sequece representing the bitmask and its identifier
@@ -197,7 +198,7 @@ func (h *Handle) getCopy() *Handle {
 
 // SetAnyInRange atomically sets the first unset bit in the specified range in the sequence and returns the corresponding ordinal
 func (h *Handle) SetAnyInRange(start, end uint64) (uint64, error) {
-	if end-start <= 0 || end >= h.bits {
+	if end < start || end >= h.bits {
 		return invalidPos, fmt.Errorf("invalid bit range [%d, %d]", start, end)
 	}
 	if h.Unselected() == 0 {
@@ -286,7 +287,7 @@ func (h *Handle) CheckConsistency() error {
 			continue
 		}
 
-		log.Infof("Fixed inconsistent bit sequence in datastore:\n%s\n%s", h, nh)
+		logrus.Infof("Fixed inconsistent bit sequence in datastore:\n%s\n%s", h, nh)
 
 		h.Lock()
 		h.head = nh.head
@@ -373,7 +374,7 @@ func (h *Handle) validateOrdinal(ordinal uint64) error {
 	h.Lock()
 	defer h.Unlock()
 	if ordinal >= h.bits {
-		return fmt.Errorf("bit does not belong to the sequence")
+		return errors.New("bit does not belong to the sequence")
 	}
 	return nil
 }
@@ -418,7 +419,7 @@ func (h *Handle) ToByteArray() ([]byte, error) {
 // FromByteArray reads his handle's data from a byte array
 func (h *Handle) FromByteArray(ba []byte) error {
 	if ba == nil {
-		return fmt.Errorf("nil byte array")
+		return errors.New("nil byte array")
 	}
 
 	nh := &sequence{}

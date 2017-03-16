@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"testing"
+	"time"
 
 	"github.com/docker/libnetwork/datastore"
 	"github.com/docker/libnetwork/discoverapi"
@@ -114,6 +115,7 @@ func TestNetworkMarshalling(t *testing.T) {
 			"color":        "blue",
 			"superimposed": "",
 		},
+		created: time.Now(),
 	}
 
 	b, err := json.Marshal(n)
@@ -133,7 +135,8 @@ func TestNetworkMarshalling(t *testing.T) {
 		!compareIpamInfoList(n.ipamV4Info, nn.ipamV4Info) || !compareIpamConfList(n.ipamV6Config, nn.ipamV6Config) ||
 		!compareIpamInfoList(n.ipamV6Info, nn.ipamV6Info) ||
 		!compareStringMaps(n.ipamOptions, nn.ipamOptions) ||
-		!compareStringMaps(n.labels, nn.labels) {
+		!compareStringMaps(n.labels, nn.labels) ||
+		!n.created.Equal(nn.created) {
 		t.Fatalf("JSON marsh/unmarsh failed."+
 			"\nOriginal:\n%#v\nDecoded:\n%#v"+
 			"\nOriginal ipamV4Conf: %#v\n\nDecoded ipamV4Conf: %#v"+
@@ -172,6 +175,12 @@ func TestEndpointMarshalling(t *testing.T) {
 	}
 	nw6.IP = ip
 
+	var lla []*net.IPNet
+	for _, nw := range []string{"169.254.0.1/16", "169.254.1.1/16", "169.254.2.2/16"} {
+		ll, _ := types.ParseCIDR(nw)
+		lla = append(lla, ll)
+	}
+
 	e := &endpoint{
 		name:      "Bau",
 		id:        "efghijklmno",
@@ -188,6 +197,7 @@ func TestEndpointMarshalling(t *testing.T) {
 			dstPrefix: "eth",
 			v4PoolID:  "poolpool",
 			v6PoolID:  "poolv6",
+			llAddrs:   lla,
 		},
 	}
 
@@ -215,7 +225,7 @@ func compareEndpointInterface(a, b *endpointInterface) bool {
 		return false
 	}
 	return a.srcName == b.srcName && a.dstPrefix == b.dstPrefix && a.v4PoolID == b.v4PoolID && a.v6PoolID == b.v6PoolID &&
-		types.CompareIPNet(a.addr, b.addr) && types.CompareIPNet(a.addrv6, b.addrv6)
+		types.CompareIPNet(a.addr, b.addr) && types.CompareIPNet(a.addrv6, b.addrv6) && compareNwLists(a.llAddrs, b.llAddrs)
 }
 
 func compareIpamConfList(listA, listB []*IpamConf) bool {
@@ -277,6 +287,18 @@ func compareAddresses(a, b map[string]*net.IPNet) bool {
 			if !types.CompareIPNet(a[k], b[k]) {
 				return false
 			}
+		}
+	}
+	return true
+}
+
+func compareNwLists(a, b []*net.IPNet) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k := range a {
+		if !types.CompareIPNet(a[k], b[k]) {
+			return false
 		}
 	}
 	return true
@@ -358,7 +380,7 @@ func TestSRVServiceQuery(t *testing.T) {
 	sr := svcInfo{
 		svcMap:     make(map[string][]net.IP),
 		svcIPv6Map: make(map[string][]net.IP),
-		ipMap:      make(map[string]string),
+		ipMap:      make(map[string]*ipInfo),
 		service:    make(map[string][]servicePorts),
 	}
 	// backing container for the service
@@ -389,10 +411,8 @@ func TestSRVServiceQuery(t *testing.T) {
 
 	c.(*controller).svcRecords[n.ID()] = sr
 
-	_, ip, err := ep.Info().Sandbox().ResolveService("_http._tcp.web.swarm")
-	if err != nil {
-		t.Fatal(err)
-	}
+	_, ip := ep.Info().Sandbox().ResolveService("_http._tcp.web.swarm")
+
 	if len(ip) == 0 {
 		t.Fatal(err)
 	}
@@ -400,10 +420,8 @@ func TestSRVServiceQuery(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, ip, err = ep.Info().Sandbox().ResolveService("_host_http._tcp.web.swarm")
-	if err != nil {
-		t.Fatal(err)
-	}
+	_, ip = ep.Info().Sandbox().ResolveService("_host_http._tcp.web.swarm")
+
 	if len(ip) == 0 {
 		t.Fatal(err)
 	}
@@ -411,10 +429,10 @@ func TestSRVServiceQuery(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Try resolving a service name with invalid protocol, should fail..
-	_, _, err = ep.Info().Sandbox().ResolveService("_http._icmp.web.swarm")
-	if err == nil {
-		t.Fatal(err)
+	// Service name with invalid protocol name. Should fail without error
+	_, ip = ep.Info().Sandbox().ResolveService("_http._icmp.web.swarm")
+	if len(ip) != 0 {
+		t.Fatal("Valid response for invalid service name")
 	}
 }
 
@@ -526,6 +544,9 @@ func (b *badDriver) DiscoverDelete(dType discoverapi.DiscoveryType, data interfa
 func (b *badDriver) Type() string {
 	return badDriverName
 }
+func (b *badDriver) IsBuiltIn() bool {
+	return false
+}
 func (b *badDriver) ProgramExternalConnectivity(nid, eid string, options map[string]interface{}) error {
 	return nil
 }
@@ -542,4 +563,8 @@ func (b *badDriver) NetworkFree(id string) error {
 }
 
 func (b *badDriver) EventNotify(etype driverapi.EventType, nid, tableName, key string, value []byte) {
+}
+
+func (b *badDriver) DecodeTableEntry(tablename string, key string, value []byte) (string, map[string]string) {
+	return "", nil
 }

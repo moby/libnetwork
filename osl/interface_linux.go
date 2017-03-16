@@ -8,7 +8,7 @@ import (
 	"syscall"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
+	"github.com/Sirupsen/logrus"
 	"github.com/docker/libnetwork/ns"
 	"github.com/docker/libnetwork/types"
 	"github.com/vishvananda/netlink"
@@ -140,7 +140,7 @@ func (i *nwIface) Remove() error {
 	nlh := n.nlHandle
 	n.Unlock()
 
-	// Find the network inteerface identified by the DstName attribute.
+	// Find the network interface identified by the DstName attribute.
 	iface, err := nlh.LinkByName(i.DstName())
 	if err != nil {
 		return err
@@ -153,7 +153,7 @@ func (i *nwIface) Remove() error {
 
 	err = nlh.LinkSetName(iface, i.SrcName())
 	if err != nil {
-		log.Debugf("LinkSetName failed for interface %s: %v", i.SrcName(), err)
+		logrus.Debugf("LinkSetName failed for interface %s: %v", i.SrcName(), err)
 		return err
 	}
 
@@ -165,7 +165,7 @@ func (i *nwIface) Remove() error {
 	} else if !isDefault {
 		// Move the network interface to caller namespace.
 		if err := nlh.LinkSetNsFd(iface, ns.ParseHandlerInt()); err != nil {
-			log.Debugf("LinkSetNsPid failed for interface %s: %v", i.SrcName(), err)
+			logrus.Debugf("LinkSetNsPid failed for interface %s: %v", i.SrcName(), err)
 			return err
 		}
 	}
@@ -178,6 +178,8 @@ func (i *nwIface) Remove() error {
 		}
 	}
 	n.Unlock()
+
+	n.checkLoV6()
 
 	return nil
 }
@@ -239,8 +241,8 @@ func (n *networkNamespace) AddInterface(srcName, dstPrefix string, options ...If
 	if n.isDefault {
 		i.dstName = i.srcName
 	} else {
-		i.dstName = fmt.Sprintf("%s%d", i.dstName, n.nextIfIndex)
-		n.nextIfIndex++
+		i.dstName = fmt.Sprintf("%s%d", dstPrefix, n.nextIfIndex[dstPrefix])
+		n.nextIfIndex[dstPrefix]++
 	}
 
 	path := n.path
@@ -301,7 +303,7 @@ func (n *networkNamespace) AddInterface(srcName, dstPrefix string, options ...If
 	// Up the interface.
 	cnt := 0
 	for err = nlh.LinkSetUp(iface); err != nil && cnt < 3; cnt++ {
-		log.Debugf("retrying link setup because of: %v", err)
+		logrus.Debugf("retrying link setup because of: %v", err)
 		time.Sleep(10 * time.Millisecond)
 		err = nlh.LinkSetUp(iface)
 	}
@@ -317,6 +319,8 @@ func (n *networkNamespace) AddInterface(srcName, dstPrefix string, options ...If
 	n.Lock()
 	n.iFaces = append(n.iFaces, i)
 	n.Unlock()
+
+	n.checkLoV6()
 
 	return nil
 }
@@ -364,7 +368,9 @@ func setInterfaceIP(nlh *netlink.Handle, iface netlink.Link, i *nwIface) error {
 	if i.Address() == nil {
 		return nil
 	}
-
+	if err := checkRouteConflict(nlh, i.Address(), netlink.FAMILY_V4); err != nil {
+		return err
+	}
 	ipAddr := &netlink.Addr{IPNet: i.Address(), Label: ""}
 	return nlh.AddrAdd(iface, ipAddr)
 }
@@ -372,6 +378,12 @@ func setInterfaceIP(nlh *netlink.Handle, iface netlink.Link, i *nwIface) error {
 func setInterfaceIPv6(nlh *netlink.Handle, iface netlink.Link, i *nwIface) error {
 	if i.AddressIPv6() == nil {
 		return nil
+	}
+	if err := checkRouteConflict(nlh, i.AddressIPv6(), netlink.FAMILY_V6); err != nil {
+		return err
+	}
+	if err := setIPv6(i.ns.path, i.DstName(), true); err != nil {
+		return fmt.Errorf("failed to enable ipv6: %v", err)
 	}
 	ipAddr := &netlink.Addr{IPNet: i.AddressIPv6(), Label: "", Flags: syscall.IFA_F_NODAD}
 	return nlh.AddrAdd(iface, ipAddr)
@@ -438,4 +450,20 @@ func scanInterfaceStats(data, ifName string, i *types.InterfaceStatistics) error
 		&bkt, &i.TxBytes, &i.TxPackets, &i.TxErrors, &i.TxDropped, &bkt, &bkt, &bkt, &bkt)
 
 	return err
+}
+
+func checkRouteConflict(nlh *netlink.Handle, address *net.IPNet, family int) error {
+	routes, err := nlh.RouteList(nil, family)
+	if err != nil {
+		return err
+	}
+	for _, route := range routes {
+		if route.Dst != nil {
+			if route.Dst.Contains(address.IP) || address.Contains(route.Dst.IP) {
+				return fmt.Errorf("cannot program address %v in sandbox interface because it conflicts with existing route %s",
+					address, route)
+			}
+		}
+	}
+	return nil
 }

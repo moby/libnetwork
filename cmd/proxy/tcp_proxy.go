@@ -2,11 +2,9 @@ package main
 
 import (
 	"io"
+	"log"
 	"net"
 	"sync"
-	"syscall"
-
-	"github.com/Sirupsen/logrus"
 )
 
 // TCPProxy is a proxy for TCP connections. It implements the Proxy interface to
@@ -35,21 +33,16 @@ func NewTCPProxy(frontendAddr, backendAddr *net.TCPAddr) (*TCPProxy, error) {
 func (proxy *TCPProxy) clientLoop(client *net.TCPConn, quit chan bool) {
 	backend, err := net.DialTCP("tcp", nil, proxy.backendAddr)
 	if err != nil {
-		logrus.Printf("Can't forward traffic to backend tcp/%v: %s\n", proxy.backendAddr, err)
+		log.Printf("Can't forward traffic to backend tcp/%v: %s\n", proxy.backendAddr, err)
 		client.Close()
 		return
 	}
 
 	var wg sync.WaitGroup
 	var broker = func(to, from *net.TCPConn) {
-		if _, err := io.Copy(to, from); err != nil {
-			// If the socket we are writing to is shutdown with
-			// SHUT_WR, forward it to the other end of the pipe:
-			if err, ok := err.(*net.OpError); ok && err.Err == syscall.EPIPE {
-				from.CloseWrite()
-			}
-		}
-		to.CloseRead()
+		io.Copy(to, from)
+		from.CloseRead()
+		to.CloseWrite()
 		wg.Done()
 	}
 
@@ -79,7 +72,7 @@ func (proxy *TCPProxy) Run() {
 	for {
 		client, err := proxy.listener.Accept()
 		if err != nil {
-			logrus.Printf("Stopping proxy on tcp/%v for tcp/%v (%s)", proxy.frontendAddr, proxy.backendAddr, err)
+			log.Printf("Stopping proxy on tcp/%v for tcp/%v (%s)", proxy.frontendAddr, proxy.backendAddr, err)
 			return
 		}
 		go proxy.clientLoop(client.(*net.TCPConn), quit)

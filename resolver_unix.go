@@ -9,7 +9,7 @@ import (
 	"os/exec"
 	"runtime"
 
-	log "github.com/Sirupsen/logrus"
+	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/pkg/reexec"
 	"github.com/docker/libnetwork/iptables"
 	"github.com/vishvananda/netns"
@@ -31,11 +31,11 @@ func reexecSetupResolver() {
 	defer runtime.UnlockOSThread()
 
 	if len(os.Args) < 4 {
-		log.Error("invalid number of arguments..")
+		logrus.Error("invalid number of arguments..")
 		os.Exit(1)
 	}
 
-	_, ipPort, _ := net.SplitHostPort(os.Args[2])
+	resolverIP, ipPort, _ := net.SplitHostPort(os.Args[2])
 	_, tcpPort, _ := net.SplitHostPort(os.Args[3])
 	rules := [][]string{
 		{"-t", "nat", "-I", outputChain, "-d", resolverIP, "-p", "udp", "--dport", dnsPort, "-j", "DNAT", "--to-destination", os.Args[2]},
@@ -46,14 +46,14 @@ func reexecSetupResolver() {
 
 	f, err := os.OpenFile(os.Args[1], os.O_RDONLY, 0)
 	if err != nil {
-		log.Errorf("failed get network namespace %q: %v", os.Args[1], err)
+		logrus.Errorf("failed get network namespace %q: %v", os.Args[1], err)
 		os.Exit(2)
 	}
 	defer f.Close()
 
 	nsFD := f.Fd()
 	if err = netns.Set(netns.NsHandle(nsFD)); err != nil {
-		log.Errorf("setting into container net ns %v failed, %v", os.Args[1], err)
+		logrus.Errorf("setting into container net ns %v failed, %v", os.Args[1], err)
 		os.Exit(3)
 	}
 
@@ -76,7 +76,7 @@ func reexecSetupResolver() {
 
 	for _, rule := range rules {
 		if iptables.RawCombinedOutputNative(rule...) != nil {
-			log.Errorf("setting up rule failed, %v", rule)
+			logrus.Errorf("setting up rule failed, %v", rule)
 		}
 	}
 }
@@ -90,7 +90,7 @@ func (r *resolver) setupIPTable() error {
 
 	cmd := &exec.Cmd{
 		Path:   reexec.Self(),
-		Args:   append([]string{"setup-resolver"}, r.sb.Key(), laddr, ltcpaddr),
+		Args:   append([]string{"setup-resolver"}, r.resolverKey, laddr, ltcpaddr),
 		Stdout: os.Stdout,
 		Stderr: os.Stderr,
 	}

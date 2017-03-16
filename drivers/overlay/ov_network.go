@@ -154,11 +154,12 @@ func (d *driver) CreateNetwork(id string, option map[string]interface{}, nInfo d
 	if !n.secure {
 		for _, vni := range vnis {
 			programMangle(vni, false)
+			programInput(vni, false)
 		}
 	}
 
 	if nInfo != nil {
-		if err := nInfo.TableEventRegister(ovPeerTable); err != nil {
+		if err := nInfo.TableEventRegister(ovPeerTable, driverapi.EndpointObject); err != nil {
 			return err
 		}
 	}
@@ -182,6 +183,18 @@ func (d *driver) DeleteNetwork(nid string) error {
 		return fmt.Errorf("could not find network with id %s", nid)
 	}
 
+	for _, ep := range n.endpoints {
+		if ep.ifName != "" {
+			if link, err := ns.NlHandle().LinkByName(ep.ifName); err != nil {
+				ns.NlHandle().LinkDel(link)
+			}
+		}
+
+		if err := d.deleteEndpointFromStore(ep); err != nil {
+			logrus.Warnf("Failed to delete overlay endpoint %s from local store: %v", ep.id[0:7], err)
+		}
+
+	}
 	d.deleteNetwork(nid)
 
 	vnis, err := n.releaseVxlanID()
@@ -192,6 +205,7 @@ func (d *driver) DeleteNetwork(nid string) error {
 	if n.secure {
 		for _, vni := range vnis {
 			programMangle(vni, false)
+			programInput(vni, false)
 		}
 	}
 
@@ -308,6 +322,11 @@ func populateVNITbl() {
 			}
 			defer nlh.Delete()
 
+			err = nlh.SetSocketTimeout(soTimeout)
+			if err != nil {
+				logrus.Warnf("Failed to set the timeout on the netlink handle sockets for vni table population: %v", err)
+			}
+
 			links, err := nlh.LinkList()
 			if err != nil {
 				logrus.Errorf("Failed to list interfaces during vni population for ns %s: %v", path, err)
@@ -385,7 +404,7 @@ func (n *network) getBridgeNamePrefix(s *subnet) string {
 	return "ov-" + fmt.Sprintf("%06x", n.vxlanID(s))
 }
 
-func isOverlap(nw *net.IPNet) bool {
+func checkOverlap(nw *net.IPNet) error {
 	var nameservers []string
 
 	if rc, err := resolvconf.Get(); err == nil {
@@ -393,14 +412,14 @@ func isOverlap(nw *net.IPNet) bool {
 	}
 
 	if err := netutils.CheckNameserverOverlaps(nameservers, nw); err != nil {
-		return true
+		return fmt.Errorf("overlay subnet %s failed check with nameserver: %v: %v", nw.String(), nameservers, err)
 	}
 
 	if err := netutils.CheckRouteOverlaps(nw); err != nil {
-		return true
+		return fmt.Errorf("overlay subnet %s failed check with host route table: %v", nw.String(), err)
 	}
 
-	return false
+	return nil
 }
 
 func (n *network) restoreSubnetSandbox(s *subnet, brName, vxlanName string) error {
@@ -439,8 +458,8 @@ func (n *network) setupSubnetSandbox(s *subnet, brName, vxlanName string) error 
 		// Try to delete the vxlan interface by vni if already present
 		deleteVxlanByVNI("", n.vxlanID(s))
 
-		if isOverlap(s.subnetIP) {
-			return fmt.Errorf("overlay subnet %s has conflicts in the host while running in host mode", s.subnetIP.String())
+		if err := checkOverlap(s.subnetIP); err != nil {
+			return err
 		}
 	}
 
@@ -500,9 +519,13 @@ func (n *network) initSubnetSandbox(s *subnet, restore bool) error {
 	vxlanName := n.generateVxlanName(s)
 
 	if restore {
-		n.restoreSubnetSandbox(s, brName, vxlanName)
+		if err := n.restoreSubnetSandbox(s, brName, vxlanName); err != nil {
+			return err
+		}
 	} else {
-		n.setupSubnetSandbox(s, brName, vxlanName)
+		if err := n.setupSubnetSandbox(s, brName, vxlanName); err != nil {
+			return err
+		}
 	}
 
 	n.Lock()
@@ -591,13 +614,13 @@ func (n *network) initSandbox(restore bool) error {
 	var nlSock *nl.NetlinkSocket
 	sbox.InvokeFunc(func() {
 		nlSock, err = nl.Subscribe(syscall.NETLINK_ROUTE, syscall.RTNLGRP_NEIGH)
-		if err != nil {
-			err = fmt.Errorf("failed to subscribe to neighbor group netlink messages")
-		}
 	})
 
-	if nlSock != nil {
+	if err == nil {
 		go n.watchMiss(nlSock)
+	} else {
+		logrus.Errorf("failed to subscribe to neighbor group netlink messages for overlay network %s in sbox %s: %v",
+			n.id, sbox.Key(), err)
 	}
 
 	return nil
@@ -623,6 +646,9 @@ func (n *network) watchMiss(nlSock *nl.NetlinkSocket) {
 			}
 
 			if neigh.IP.To4() == nil {
+				if neigh.HardwareAddr != nil {
+					logrus.Debugf("Miss notification, l2 mac %v", neigh.HardwareAddr)
+				}
 				continue
 			}
 
@@ -634,6 +660,10 @@ func (n *network) watchMiss(nlSock *nl.NetlinkSocket) {
 			logrus.Debugf("miss notification for dest IP, %v", neigh.IP.String())
 
 			if neigh.State&(netlink.NUD_STALE|netlink.NUD_INCOMPLETE) == 0 {
+				continue
+			}
+
+			if !n.driver.isSerfAlive() {
 				continue
 			}
 
@@ -664,17 +694,17 @@ func (d *driver) deleteNetwork(nid string) {
 
 func (d *driver) network(nid string) *network {
 	d.Lock()
-	networks := d.networks
+	n, ok := d.networks[nid]
 	d.Unlock()
-
-	n, ok := networks[nid]
 	if !ok {
 		n = d.getNetworkFromStore(nid)
 		if n != nil {
 			n.driver = d
 			n.endpoints = endpointTable{}
 			n.once = &sync.Once{}
-			networks[nid] = n
+			d.Lock()
+			d.networks[nid] = n
+			d.Unlock()
 		}
 	}
 

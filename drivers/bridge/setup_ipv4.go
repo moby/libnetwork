@@ -1,20 +1,38 @@
 package bridge
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"path/filepath"
 
-	log "github.com/Sirupsen/logrus"
+	"github.com/Sirupsen/logrus"
 	"github.com/docker/libnetwork/types"
 	"github.com/vishvananda/netlink"
 )
 
+func selectIPv4Address(addresses []netlink.Addr, selector *net.IPNet) (netlink.Addr, error) {
+	if len(addresses) == 0 {
+		return netlink.Addr{}, errors.New("unable to select an address as the address pool is empty")
+	}
+	if selector != nil {
+		for _, addr := range addresses {
+			if selector.Contains(addr.IP) {
+				return addr, nil
+			}
+		}
+	}
+	return addresses[0], nil
+}
+
 func setupBridgeIPv4(config *networkConfiguration, i *bridgeInterface) error {
-	addrv4, _, err := i.addresses()
+	addrv4List, _, err := i.addresses()
 	if err != nil {
 		return fmt.Errorf("failed to retrieve bridge interface addresses: %v", err)
 	}
+
+	addrv4, _ := selectIPv4Address(addrv4List, config.AddressIPv4)
 
 	if !types.CompareIPNet(addrv4.IPNet, config.AddressIPv4) {
 		if addrv4.IPNet != nil {
@@ -22,7 +40,7 @@ func setupBridgeIPv4(config *networkConfiguration, i *bridgeInterface) error {
 				return fmt.Errorf("failed to remove current ip address from bridge: %v", err)
 			}
 		}
-		log.Debugf("Assigning address to bridge interface %s: %s", config.BridgeName, config.AddressIPv4)
+		logrus.Debugf("Assigning address to bridge interface %s: %s", config.BridgeName, config.AddressIPv4)
 		if err := i.nlh.AddrAdd(i.Link, &netlink.Addr{IPNet: config.AddressIPv4}); err != nil {
 			return &IPv4AddrAddError{IP: config.AddressIPv4, Err: err}
 		}
