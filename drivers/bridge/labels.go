@@ -7,6 +7,9 @@ const (
 	// EnableIPMasquerade label for bridge driver
 	EnableIPMasquerade = "com.docker.network.bridge.enable_ip_masquerade"
 
+	// NDPProxyInterface label for bridge driver
+	NDPProxyInterface = "com.docker.network.bridge.ndp_proxy_interface"
+
 	// EnableICC label
 	EnableICC = "com.docker.network.bridge.enable_icc"
 
