@@ -644,6 +644,12 @@ func fwMarker() {
 				logrus.Errorf("Failed to write to /proc/sys/net/ipv4/vs/conntrack: %v", err)
 				os.Exit(8)
 			}
+
+			err = ioutil.WriteFile("/proc/sys/net/ipv4/vs/expire_nodest_conn", []byte{'1', '\n'}, 0644)
+			if err != nil {
+				logrus.Errorf("Failed to write to /proc/sys/net/ipv4/vs/expire_nodest_conn: %v", err)
+				os.Exit(10)
+			}
 		}
 	}
 
