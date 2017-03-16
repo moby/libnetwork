@@ -1030,7 +1030,7 @@ func (d *driver) CreateEndpoint(nid, eid string, ifInfo driverapi.InterfaceInfo,
 	if config.NDPProxyInterface != "" && config.EnableIPv6 {
 		link, err := d.nlh.LinkByName(config.NDPProxyInterface)
 		if err != nil {
-			return err
+			return fmt.Errorf("could not find link for ndp proxy interface %q: %v", config.NDPProxyInterface, err)
 		}
 		neighbor := netlink.Neigh{
 			LinkIndex:    link.Attrs().Index,
@@ -1109,7 +1109,9 @@ func (d *driver) DeleteEndpoint(nid, eid string) error {
 	// Also make sure defer does not see this error either.
 	if n.config.NDPProxyInterface != "" && n.config.EnableIPv6 {
 		link, err := d.nlh.LinkByName(n.config.NDPProxyInterface)
-		if err == nil {
+		if err != nil {
+			Logrus.Warnf("could not remove ndp neighbour, because could not find link for ndp proxy interface %q: %v", config.NDPProxyInterface, err)
+		} else {			
 			neighbor := netlink.Neigh{
 				LinkIndex:    link.Attrs().Index,
 				Family:       netlink.FAMILY_V6,
