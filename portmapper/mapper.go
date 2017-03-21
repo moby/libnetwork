@@ -43,18 +43,40 @@ type PortMapper struct {
 	Allocator *portallocator.PortAllocator
 }
 
-// New returns a new instance of PortMapper
-func New(proxyPath string) *PortMapper {
-	return NewWithPortAllocator(portallocator.Get(), proxyPath)
+// CreateOption represents functional options passed to the PortMapper initializer.
+type CreateOption func(*PortMapper)
+
+// WithPortAllocator is a functional option passed to the PortMapper initializer.
+// It allows passing in a custom PortAllocator rather than using the default.
+func WithPortAllocator(pa *portallocator.PortAllocator) CreateOption {
+	return func(pm *PortMapper) {
+		pm.Allocator = pa
+	}
 }
 
-// NewWithPortAllocator returns a new instance of PortMapper which will use the specified PortAllocator
-func NewWithPortAllocator(allocator *portallocator.PortAllocator, proxyPath string) *PortMapper {
-	return &PortMapper{
-		currentMappings: make(map[string]*mapping),
-		Allocator:       allocator,
-		proxyPath:       proxyPath,
+// WithProxyPath is a functional option passed to the PortMapper initializer.
+// It sets the path of the proxy binary.
+func WithProxyPath(s string) CreateOption {
+	return func(pm *PortMapper) {
+		pm.proxyPath = s
 	}
+}
+
+// New returns a new instance of PortMapper
+func New(opts ...CreateOption) *PortMapper {
+	pm := &PortMapper{
+		currentMappings: make(map[string]*mapping),
+	}
+
+	for _, o := range opts {
+		o(pm)
+	}
+
+	if pm.Allocator == nil {
+		pm.Allocator = portallocator.Get()
+	}
+
+	return pm
 }
 
 // SetIptablesChain sets the specified chain into portmapper

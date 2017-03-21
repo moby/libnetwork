@@ -648,7 +648,7 @@ func (d *driver) createNetwork(config *networkConfiguration) error {
 		id:         config.ID,
 		endpoints:  make(map[string]*bridgeEndpoint),
 		config:     config,
-		portMapper: portmapper.New(d.config.UserlandProxyPath),
+		portMapper: portmapper.New(portmapper.WithProxyPath(d.config.UserlandProxyPath)),
 		driver:     d,
 	}
 
