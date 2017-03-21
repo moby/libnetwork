@@ -32,7 +32,7 @@ func TestSetIptablesChain(t *testing.T) {
 }
 
 func TestMapTCPPorts(t *testing.T) {
-	pm := New()
+	pm := New(WithUserlandProxy(true, ""))
 	dstIP1 := net.ParseIP("192.168.0.1")
 	dstIP2 := net.ParseIP("192.168.0.2")
 	dstAddr1 := &net.TCPAddr{IP: dstIP1, Port: 80}
@@ -45,22 +45,22 @@ func TestMapTCPPorts(t *testing.T) {
 		return (addr1.Network() == addr2.Network()) && (addr1.String() == addr2.String())
 	}
 
-	if host, err := pm.Map(srcAddr1, dstIP1, 80, true); err != nil {
+	if host, err := pm.Map(srcAddr1, dstIP1, 80); err != nil {
 		t.Fatalf("Failed to allocate port: %s", err)
 	} else if !addrEqual(dstAddr1, host) {
 		t.Fatalf("Incorrect mapping result: expected %s:%s, got %s:%s",
 			dstAddr1.String(), dstAddr1.Network(), host.String(), host.Network())
 	}
 
-	if _, err := pm.Map(srcAddr1, dstIP1, 80, true); err == nil {
+	if _, err := pm.Map(srcAddr1, dstIP1, 80); err == nil {
 		t.Fatalf("Port is in use - mapping should have failed")
 	}
 
-	if _, err := pm.Map(srcAddr2, dstIP1, 80, true); err == nil {
+	if _, err := pm.Map(srcAddr2, dstIP1, 80); err == nil {
 		t.Fatalf("Port is in use - mapping should have failed")
 	}
 
-	if _, err := pm.Map(srcAddr2, dstIP2, 80, true); err != nil {
+	if _, err := pm.Map(srcAddr2, dstIP2, 80); err != nil {
 		t.Fatalf("Failed to allocate port: %s", err)
 	}
 
@@ -111,7 +111,7 @@ func TestGetUDPIPAndPort(t *testing.T) {
 }
 
 func TestMapUDPPorts(t *testing.T) {
-	pm := New()
+	pm := New(WithUserlandProxy(true, ""))
 	dstIP1 := net.ParseIP("192.168.0.1")
 	dstIP2 := net.ParseIP("192.168.0.2")
 	dstAddr1 := &net.UDPAddr{IP: dstIP1, Port: 80}
@@ -124,22 +124,22 @@ func TestMapUDPPorts(t *testing.T) {
 		return (addr1.Network() == addr2.Network()) && (addr1.String() == addr2.String())
 	}
 
-	if host, err := pm.Map(srcAddr1, dstIP1, 80, true); err != nil {
+	if host, err := pm.Map(srcAddr1, dstIP1, 80); err != nil {
 		t.Fatalf("Failed to allocate port: %s", err)
 	} else if !addrEqual(dstAddr1, host) {
 		t.Fatalf("Incorrect mapping result: expected %s:%s, got %s:%s",
 			dstAddr1.String(), dstAddr1.Network(), host.String(), host.Network())
 	}
 
-	if _, err := pm.Map(srcAddr1, dstIP1, 80, true); err == nil {
+	if _, err := pm.Map(srcAddr1, dstIP1, 80); err == nil {
 		t.Fatalf("Port is in use - mapping should have failed")
 	}
 
-	if _, err := pm.Map(srcAddr2, dstIP1, 80, true); err == nil {
+	if _, err := pm.Map(srcAddr2, dstIP1, 80); err == nil {
 		t.Fatalf("Port is in use - mapping should have failed")
 	}
 
-	if _, err := pm.Map(srcAddr2, dstIP2, 80, true); err != nil {
+	if _, err := pm.Map(srcAddr2, dstIP2, 80); err != nil {
 		t.Fatalf("Failed to allocate port: %s", err)
 	}
 
@@ -174,14 +174,14 @@ func TestMapAllPortsSingleInterface(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		start, end := pm.Allocator.Begin, pm.Allocator.End
 		for i := start; i < end; i++ {
-			if host, err = pm.Map(srcAddr1, dstIP1, 0, true); err != nil {
+			if host, err = pm.Map(srcAddr1, dstIP1, 0); err != nil {
 				t.Fatal(err)
 			}
 
 			hosts = append(hosts, host)
 		}
 
-		if _, err := pm.Map(srcAddr1, dstIP1, start, true); err == nil {
+		if _, err := pm.Map(srcAddr1, dstIP1, start); err == nil {
 			t.Fatalf("Port %d should be bound but is not", start)
 		}
 
@@ -207,7 +207,7 @@ func TestMapTCPDummyListen(t *testing.T) {
 		return (addr1.Network() == addr2.Network()) && (addr1.String() == addr2.String())
 	}
 
-	if host, err := pm.Map(srcAddr, dstIP, 80, false); err != nil {
+	if host, err := pm.Map(srcAddr, dstIP, 80); err != nil {
 		t.Fatalf("Failed to allocate port: %s", err)
 	} else if !addrEqual(dstAddr, host) {
 		t.Fatalf("Incorrect mapping result: expected %s:%s, got %s:%s",
@@ -223,7 +223,7 @@ func TestMapTCPDummyListen(t *testing.T) {
 	if _, err := net.Listen("tcp", "0.0.0.0:81"); err != nil {
 		t.Fatal(err)
 	}
-	if host, err := pm.Map(srcAddr, dstIP, 81, false); err == nil {
+	if host, err := pm.Map(srcAddr, dstIP, 81); err == nil {
 		t.Fatalf("Bound port shouldn't be allocated, but it was on: %v", host)
 	} else {
 		if !strings.Contains(err.Error(), "address already in use") {
@@ -244,7 +244,7 @@ func TestMapUDPDummyListen(t *testing.T) {
 		return (addr1.Network() == addr2.Network()) && (addr1.String() == addr2.String())
 	}
 
-	if host, err := pm.Map(srcAddr, dstIP, 80, false); err != nil {
+	if host, err := pm.Map(srcAddr, dstIP, 80); err != nil {
 		t.Fatalf("Failed to allocate port: %s", err)
 	} else if !addrEqual(dstAddr, host) {
 		t.Fatalf("Incorrect mapping result: expected %s:%s, got %s:%s",
@@ -260,7 +260,7 @@ func TestMapUDPDummyListen(t *testing.T) {
 	if _, err := net.ListenUDP("udp", &net.UDPAddr{IP: dstIP, Port: 81}); err != nil {
 		t.Fatal(err)
 	}
-	if host, err := pm.Map(srcAddr, dstIP, 81, false); err == nil {
+	if host, err := pm.Map(srcAddr, dstIP, 81); err == nil {
 		t.Fatalf("Bound port shouldn't be allocated, but it was on: %v", host)
 	} else {
 		if !strings.Contains(err.Error(), "address already in use") {

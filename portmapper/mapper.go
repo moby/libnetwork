@@ -38,7 +38,8 @@ type PortMapper struct {
 	currentMappings map[string]*mapping
 	lock            sync.Mutex
 
-	proxyPath string
+	proxyPath           string
+	enableUserlandProxy bool
 
 	Allocator *portallocator.PortAllocator
 }
@@ -54,11 +55,13 @@ func WithPortAllocator(pa *portallocator.PortAllocator) CreateOption {
 	}
 }
 
-// WithProxyPath is a functional option passed to the PortMapper initializer.
-// It sets the path of the proxy binary.
-func WithProxyPath(s string) CreateOption {
+// WithUserlandProxy sets if the userland proxy should be enabled.
+// When enabled requested port forwards will be proxied to the backend address.
+// When disabled only a listener will be created on the specified frontend address.
+func WithUserlandProxy(enabled bool, proxyPath string) CreateOption {
 	return func(pm *PortMapper) {
-		pm.proxyPath = s
+		pm.enableUserlandProxy = enabled
+		pm.proxyPath = proxyPath
 	}
 }
 
@@ -86,12 +89,12 @@ func (pm *PortMapper) SetIptablesChain(c *iptables.ChainInfo, bridgeName string)
 }
 
 // Map maps the specified container transport address to the host's network address and transport port
-func (pm *PortMapper) Map(container net.Addr, hostIP net.IP, hostPort int, useProxy bool) (host net.Addr, err error) {
-	return pm.MapRange(container, hostIP, hostPort, hostPort, useProxy)
+func (pm *PortMapper) Map(container net.Addr, hostIP net.IP, hostPort int) (host net.Addr, err error) {
+	return pm.MapRange(container, hostIP, hostPort, hostPort)
 }
 
 // MapRange maps the specified container transport address to the host's network address and transport port range
-func (pm *PortMapper) MapRange(container net.Addr, hostIP net.IP, hostPortStart, hostPortEnd int, useProxy bool) (host net.Addr, err error) {
+func (pm *PortMapper) MapRange(container net.Addr, hostIP net.IP, hostPortStart, hostPortEnd int) (host net.Addr, err error) {
 	pm.lock.Lock()
 	defer pm.lock.Unlock()
 
@@ -114,7 +117,7 @@ func (pm *PortMapper) MapRange(container net.Addr, hostIP net.IP, hostPortStart,
 			container: container,
 		}
 
-		if useProxy {
+		if pm.enableUserlandProxy {
 			m.userlandProxy, err = newProxy(proto, hostIP, allocatedHostPort, container.(*net.TCPAddr).IP, container.(*net.TCPAddr).Port, pm.proxyPath)
 			if err != nil {
 				return nil, err
@@ -134,7 +137,7 @@ func (pm *PortMapper) MapRange(container net.Addr, hostIP net.IP, hostPortStart,
 			container: container,
 		}
 
-		if useProxy {
+		if pm.enableUserlandProxy {
 			m.userlandProxy, err = newProxy(proto, hostIP, allocatedHostPort, container.(*net.UDPAddr).IP, container.(*net.UDPAddr).Port, pm.proxyPath)
 			if err != nil {
 				return nil, err

@@ -648,7 +648,7 @@ func (d *driver) createNetwork(config *networkConfiguration) error {
 		id:         config.ID,
 		endpoints:  make(map[string]*bridgeEndpoint),
 		config:     config,
-		portMapper: portmapper.New(portmapper.WithProxyPath(d.config.UserlandProxyPath)),
+		portMapper: portmapper.New(portmapper.WithUserlandProxy(d.config.EnableUserlandProxy, d.config.UserlandProxyPath)),
 		driver:     d,
 	}
 
@@ -1297,7 +1297,7 @@ func (d *driver) ProgramExternalConnectivity(nid, eid string, options map[string
 	}
 
 	// Program any required port mapping and store them in the endpoint
-	endpoint.portMapping, err = network.allocatePorts(endpoint, network.config.DefaultBindingIP, d.config.EnableUserlandProxy)
+	endpoint.portMapping, err = network.allocatePorts(endpoint, network.config.DefaultBindingIP)
 	if err != nil {
 		return err
 	}

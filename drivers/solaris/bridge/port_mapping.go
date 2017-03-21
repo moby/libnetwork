@@ -76,7 +76,7 @@ func removePFRules(epid string) {
 	}
 }
 
-func (n *bridgeNetwork) allocatePorts(ep *bridgeEndpoint, bindIntf string, reqDefBindIP net.IP, ulPxyEnabled bool) ([]types.PortBinding, error) {
+func (n *bridgeNetwork) allocatePorts(ep *bridgeEndpoint, bindIntf string, reqDefBindIP net.IP) ([]types.PortBinding, error) {
 	if ep.extConnConfig == nil || ep.extConnConfig.PortBindings == nil {
 		return nil, nil
 	}
@@ -86,7 +86,7 @@ func (n *bridgeNetwork) allocatePorts(ep *bridgeEndpoint, bindIntf string, reqDe
 		defHostIP = reqDefBindIP
 	}
 
-	bs, err := n.allocatePortsInternal(ep.extConnConfig.PortBindings, bindIntf, ep.addr.IP, defHostIP, ulPxyEnabled)
+	bs, err := n.allocatePortsInternal(ep.extConnConfig.PortBindings, bindIntf, ep.addr.IP, defHostIP)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +99,7 @@ func (n *bridgeNetwork) allocatePorts(ep *bridgeEndpoint, bindIntf string, reqDe
 	return bs, err
 }
 
-func (n *bridgeNetwork) allocatePortsInternal(bindings []types.PortBinding, bindIntf string, containerIP, defHostIP net.IP, ulPxyEnabled bool) ([]types.PortBinding, error) {
+func (n *bridgeNetwork) allocatePortsInternal(bindings []types.PortBinding, bindIntf string, containerIP, defHostIP net.IP) ([]types.PortBinding, error) {
 	bs := make([]types.PortBinding, 0, len(bindings))
 	for _, c := range bindings {
 		b := c.GetCopy()
@@ -148,7 +148,7 @@ func (n *bridgeNetwork) allocatePort(bnd *types.PortBinding, containerIP, defHos
 	// not already allocated.
 	for i := 0; i < maxAllocatePortAttempts; i++ {
 		if host, err = n.portMapper.MapRange(container, bnd.HostIP,
-			int(bnd.HostPort), int(bnd.HostPortEnd), false); err == nil {
+			int(bnd.HostPort), int(bnd.HostPortEnd)); err == nil {
 			break
 		}
 		// There is no point in immediately retrying to map an
