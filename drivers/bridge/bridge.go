@@ -32,7 +32,6 @@ const (
 	vethPrefix                 = "veth"
 	vethLen                    = 7
 	defaultContainerVethPrefix = "eth"
-	maxAllocatePortAttempts    = 10
 )
 
 const (
