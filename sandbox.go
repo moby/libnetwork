@@ -148,7 +148,7 @@ func (sb *sandbox) Key() string {
 	if sb.config.useDefaultSandBox {
 		return osl.GenerateKey("default")
 	}
-	return osl.GenerateKey(sb.id)
+	return osl.GenerateKey(sb.containerID)
 }
 
 func (sb *sandbox) Labels() map[string]interface{} {
