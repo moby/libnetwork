@@ -65,6 +65,7 @@ type hnsEndpoint struct {
 	nid            string
 	profileID      string
 	Type           string
+	containerID    string
 	macAddress     net.HardwareAddr
 	epOption       *endpointOption       // User specified parameters
 	epConnectivity *endpointConnectivity // User specified parameters
@@ -726,7 +727,15 @@ func (d *driver) Join(nid, eid string, sboxKey string, jinfo driverapi.JoinInfo,
 		return err
 	}
 
-	// This is just a stub for now
+	endpoint.containerID = sboxKey
+
+	err = hcsshim.HotAttachEndpoint(endpoint.containerID, endpoint.profileID)
+	if err != nil {
+		// If container doesn't exists in hcs, do not throw error for hot add/remove
+		if err != hcsshim.ErrComputeSystemDoesNotExist {
+			return err
+		}
+	}
 
 	jinfo.DisableGatewayService()
 	return nil
@@ -740,13 +749,18 @@ func (d *driver) Leave(nid, eid string) error {
 	}
 
 	// Ensure that the endpoint exists
-	_, err = network.getEndpoint(eid)
+	endpoint, err := network.getEndpoint(eid)
 	if err != nil {
 		return err
 	}
 
-	// This is just a stub for now
-
+	err = hcsshim.HotDetachEndpoint(endpoint.containerID, endpoint.profileID)
+	if err != nil {
+		// If container doesn't exists in hcs, do not throw error for hot add/remove
+		if err != hcsshim.ErrComputeSystemDoesNotExist {
+			return err
+		}
+	}
 	return nil
 }
 
