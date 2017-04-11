@@ -32,10 +32,13 @@ The remote IPAM driver must serve the following requests:
 
 - **ReleasePool**
 
-- **Request address**
+- **RequestAddress**
 
-- **Release address**
+- **ReleaseAddress**
 
+- **DiscoverNew**
+
+- **DiscoverDelete**
 
 The following sections explain each of the above requests' semantic, when they are called during network/endpoint lifecycle, and the corresponding payload for remote driver HTTP request/responses.
 
@@ -238,6 +241,69 @@ Where:
 * `PoolID` is the pool identifier
 * `Address` is the IP address to release
 
+
+
+### DiscoverNew
+
+libnetwork listens to inbuilt docker discovery notifications and passes it along to the interested drivers. 
+
+When the proxy receives a DiscoverNew notification, the remote process shall receive a POST to the URL `/IpamDriver.DiscoverNew` of the form
+
+    {
+		"DiscoveryType": int,
+		"DiscoveryData": {
+			...
+		}
+    }
+
+`DiscoveryType` represents the discovery type. Each Discovery Type is represented by a number.
+`DiscoveryData` carries discovery data the structure of which is determined by the DiscoveryType
+
+The response indicating success is empty:
+
+    `{}`
+
+*  Node Discovery
+
+Node Discovery is represented by a `DiscoveryType` value of `1` and the corresponding `DiscoveryData` will carry Node discovery data.
+
+    {
+		"DiscoveryType": int,
+		"DiscoveryData": {
+                    "Address" : string
+                    "self" : bool
+		}
+    }
+
+### DiscoverDelete
+
+When the proxy receives a DiscoverDelete notification, the remote process shall receive a POST to the URL `/IpamDriver.DiscoverDelete` of the form
+
+    {
+		"DiscoveryType": int,
+		"DiscoveryData": {
+			...
+		}
+    }
+
+`DiscoveryType` represents the discovery type. Each Discovery Type is represented by a number.
+`DiscoveryData` carries discovery data the structure of which is determined by the DiscoveryType
+
+The response indicating success is empty:
+
+    `{}`
+
+* Node Discovery
+
+Similar to the DiscoverNew call, Node Discovery is represented by a `DiscoveryType` value of `1` and the corresponding `DiscoveryData` will carry Node discovery data to be delted.
+
+    {
+		"DiscoveryType": int,
+		"DiscoveryData": {
+                    "Address" : string
+                    "self" : bool
+		}
+    }
 
 
 ### GetCapabilities
