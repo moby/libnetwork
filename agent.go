@@ -350,18 +350,12 @@ func (c *controller) agentDriverNotify(d driverapi.Driver) {
 	})
 
 	drvEnc := discoverapi.DriverEncryptionConfig{}
-	keys, tags := c.getKeys(subsysIPSec)
-	drvEnc.Keys = keys
-	drvEnc.Tags = tags
+	drvEnc.Keys, drvEnc.Tags = c.getKeys(subsysIPSec)
 
-	c.drvRegistry.WalkDrivers(func(name string, driver driverapi.Driver, capability driverapi.Capability) bool {
-		err := driver.DiscoverNew(discoverapi.EncryptionKeysConfig, drvEnc)
-		if err != nil {
-			logrus.Warnf("Failed to set datapath keys in driver %s: %v", name, err)
-		}
-		return false
-	})
-
+	err := d.DiscoverNew(discoverapi.EncryptionKeysConfig, drvEnc)
+	if err != nil {
+		logrus.Warnf("Failed to set datapath keys in driver %q: %v", d.Type(), err)
+	}
 }
 
 func (c *controller) agentClose() {
