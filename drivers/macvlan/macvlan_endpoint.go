@@ -20,9 +20,21 @@ func (d *driver) CreateEndpoint(nid, eid string, ifInfo driverapi.InterfaceInfo,
 	if err := validateID(nid, eid); err != nil {
 		return err
 	}
-	n, err := d.getNetwork(nid)
-	if err != nil {
-		return fmt.Errorf("network id %q not found", nid)
+	n := &network{}
+	// lookup globally scoped networks from the global datastore
+	if d.scope == globalScope {
+		n = d.networkStore(nid)
+		if n == nil {
+			return fmt.Errorf("could not find network with id %s", nid)
+		}
+	}
+	// lookup locally scoped networks from local datastore
+	if d.scope == localScope {
+		var err error
+		n, err = d.getNetwork(nid)
+		if err != nil {
+			return err
+		}
 	}
 	ep := &endpoint{
 		id:     eid,

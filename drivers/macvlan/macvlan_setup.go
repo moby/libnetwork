@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/BurntSushi/toml"
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/libnetwork/ns"
 	"github.com/vishvananda/netlink"
@@ -109,7 +110,7 @@ func createVlanLink(parentName string) error {
 		return nil
 	}
 
-	return fmt.Errorf("invalid subinterface vlan name %s, example formatting is eth0.10", parentName)
+	return fmt.Errorf("invalid parent name %s, examples are \"eth0,eth1,eth0.10\"", parentName)
 }
 
 // delVlanLink verifies only sub-interfaces with a vlan id get deleted
@@ -161,7 +162,7 @@ func parseVlan(linkName string) (string, int, error) {
 }
 
 // createDummyLink creates a dummy0 parent link
-func createDummyLink(dummyName, truncNetID string) error {
+func createDummyLink(dummyName string) error {
 	// create a parent interface since one was not specified
 	parent := &netlink.Dummy{
 		LinkAttrs: netlink.LinkAttrs{
@@ -206,4 +207,44 @@ func delDummyLink(linkName string) error {
 // getDummyName returns the name of a dummy parent with truncated net ID and driver prefix
 func getDummyName(netID string) string {
 	return fmt.Sprintf("%s%s", dummyPrefix, netID)
+}
+
+// createVlanLink parses sub-interfaces and vlan id for creation
+func getParent(parents []string) (string, error) {
+	// Lookup a matching valid parent interface
+	for _, parent := range parents {
+		// if the parent exists, return a match
+		if parentExists(parent) {
+			return parent, nil
+		}
+		// if the parent name matches <valid_interface>.<valid_vlan_id> then match (ex. eth0.10)
+		if strings.Contains(parent, ".") {
+			master, vidInt, err := parseVlan(parent)
+			if err == nil {
+				// VLAN identifier or VID is a 12-bit field specifying the VLAN to which the frame belongs
+				if vidInt < 4094 || vidInt > 1 {
+					if parentExists(master) {
+						return parent, nil
+					}
+				}
+			}
+		}
+	}
+
+	return "", fmt.Errorf("No matching parent interface could be found for the host from the parent list: %v", parents)
+}
+
+// getParentFile gets the interface name from the file specified in -o parent-file
+func getParentFile(f string) (string, error) {
+	var config configFile
+	_, err := toml.DecodeFile(f, &config)
+	if err != nil {
+		return "", fmt.Errorf("failed reading the configuration file: %v", err)
+	}
+	parent := stripSpace(config.Macvlan.Parent)
+	if parent == "" {
+		return "", fmt.Errorf("the -o parent-file %s does not contain any text", parent)
+	}
+	logrus.Debugf("Using parent interface %s from the -o parent-file", parent)
+	return parent, nil
 }
