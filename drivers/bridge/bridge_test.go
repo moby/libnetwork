@@ -276,6 +276,7 @@ func TestCreateFullOptionsLabels(t *testing.T) {
 		DefaultBridge:      "true",
 		EnableICC:          "true",
 		EnableIPMasquerade: "true",
+		EnableProxyArp:     "true",
 		DefaultBindingIP:   bndIPs,
 	}
 
@@ -317,6 +318,10 @@ func TestCreateFullOptionsLabels(t *testing.T) {
 
 	if !nw.config.EnableIPMasquerade {
 		t.Fatal("incongruent EnableIPMasquerade in bridge network")
+	}
+
+	if !nw.config.EnableProxyArp {
+		t.Fatal("incongruent EnableProxyArp in bridge network")
 	}
 
 	bndIP := net.ParseIP(bndIPs)
@@ -1069,5 +1074,56 @@ func TestCreateWithExistingBridge(t *testing.T) {
 
 	if _, err := netlink.LinkByName(brName); err != nil {
 		t.Fatal("Deleting bridge network that using existing bridge interface unexpectedly deleted the bridge interface")
+	}
+}
+
+func TestProxyArp(t *testing.T) {
+	if !testutils.IsRunningInContainer() {
+		defer testutils.SetupTestOSContext(t)()
+	}
+	d := newDriver()
+
+	err := d.configure(nil)
+	if err != nil {
+		t.Fatalf("Failed to setup driver config: %v", err)
+	}
+
+	netconfig := &networkConfiguration{BridgeName: DefaultBridgeName, EnableProxyArp: true, DefaultBridge: true}
+	genericOption := make(map[string]interface{})
+	genericOption[netlabel.GenericData] = netconfig
+
+	ipdList := getIPv4Data(t, "")
+
+	err = d.CreateNetwork("ProxyArpTest", genericOption, nil, ipdList, nil)
+	if err != nil {
+		t.Fatalf("Bridge creation failed: %v", err)
+	}
+
+	te := newTestEndpoint(ipdList[0].Pool, 10)
+	err = d.CreateEndpoint("ProxyArpTest", "ep", te.Interface(), nil)
+	if err != nil {
+		t.Fatalf("Failed to create endpoint: %v", err)
+	}
+
+	BridgeIF, err := netlink.LinkByName(DefaultBridgeName)
+	if err != nil {
+		t.Fatalf("Failed to lookup bridge interface: %v", err)
+	}
+
+	dump, err := netlink.NeighList(BridgeIF.Attrs().Index, 0)
+	if err != nil {
+		t.Errorf("Failed to NeighList: %v", err)
+	}
+
+	FoundNeigh := 0
+	for _, v := range dump {
+		if v.State&netlink.NUD_PERMANENT != 0 &&
+			bytes.Equal(te.iface.mac, v.HardwareAddr) &&
+			te.iface.addr.IP.Equal(v.IP) {
+			FoundNeigh++
+		}
+	}
+	if FoundNeigh != 1 {
+		t.Errorf("Expected a single match in the neighbor table got %d matches", FoundNeigh)
 	}
 }
