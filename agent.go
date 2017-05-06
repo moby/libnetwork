@@ -292,6 +292,8 @@ func (c *controller) agentInit(listenAddr, bindAddrOrInterface, advertiseAddr, d
 		NodeName:      nodeName,
 		Keys:          keys,
 	})
+	// Register the diagnose handlers
+	c.DiagnoseServer.RegisterHandler(nDB, networkdb.NetDbPaths2Func)
 
 	if err != nil {
 		return err
