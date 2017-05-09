@@ -312,7 +312,7 @@ func (c *controller) agentInit(listenAddr, bindAddrOrInterface, advertiseAddr, d
 		return err
 	}
 
-	ch, cancel := nDB.Watch(libnetworkEPTable, "", "")
+	ch, _ := nDB.Watch(libnetworkEPTable, "", "")
 	nodeCh, cancel := nDB.Watch(networkdb.NodeTable, "", "")
 
 	c.Lock()
