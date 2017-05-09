@@ -3,7 +3,6 @@ package networkdb
 import (
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"sync/atomic"
@@ -22,7 +21,6 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	ioutil.WriteFile("/proc/sys/net/ipv6/conf/lo/disable_ipv6", []byte{'0', '\n'}, 0644)
 	logrus.SetLevel(logrus.ErrorLevel)
 	os.Exit(m.Run())
 }
