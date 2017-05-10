@@ -1027,10 +1027,6 @@ func (c *networkConfiguration) fromLabels(labels map[string]string) error {
 		switch label {
 		case BridgeName:
 			c.BridgeName = value
-		case netlabel.DriverMTU:
-			if c.Mtu, err = strconv.Atoi(value); err != nil {
-				return parseErr(label, value, err.Error())
-			}
 		case netlabel.EnableIPv6:
 			if c.EnableIPv6, err = strconv.ParseBool(value); err != nil {
 				return parseErr(label, value, err.Error())
@@ -1102,6 +1098,11 @@ func parseNetworkOptions(d *driver, id string, option options.Generic) (*network
 	}
 
 	// Process well-known labels next
+	if val, ok := option[netlabel.DriverMTU]; ok {
+		if config.Mtu, err = strconv.Atoi(val.(string)); err != nil {
+			return nil, parseErr(netlabel.DriverMTU, val.(string), err.Error())
+		}
+	}
 	if val, ok := option[netlabel.EnableIPv6]; ok {
 		config.EnableIPv6 = val.(bool)
 	}

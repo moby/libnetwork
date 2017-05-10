@@ -116,6 +116,7 @@ func TestNetworkMarshalling(t *testing.T) {
 			"superimposed": "",
 		},
 		created: time.Now(),
+		mtu:     9000,
 	}
 
 	b, err := json.Marshal(n)
@@ -136,7 +137,8 @@ func TestNetworkMarshalling(t *testing.T) {
 		!compareIpamInfoList(n.ipamV6Info, nn.ipamV6Info) ||
 		!compareStringMaps(n.ipamOptions, nn.ipamOptions) ||
 		!compareStringMaps(n.labels, nn.labels) ||
-		!n.created.Equal(nn.created) {
+		!n.created.Equal(nn.created) ||
+		n.mtu != nn.mtu {
 		t.Fatalf("JSON marsh/unmarsh failed."+
 			"\nOriginal:\n%#v\nDecoded:\n%#v"+
 			"\nOriginal ipamV4Conf: %#v\n\nDecoded ipamV4Conf: %#v"+

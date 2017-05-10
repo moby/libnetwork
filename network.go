@@ -219,6 +219,7 @@ type network struct {
 	ingress      bool
 	driverTables []networkDBTable
 	dynamic      bool
+	mtu          int
 	sync.Mutex
 }
 
@@ -370,6 +371,7 @@ func (n *network) CopyTo(o datastore.KVObject) error {
 	dstN.attachable = n.attachable
 	dstN.inDelete = n.inDelete
 	dstN.ingress = n.ingress
+	dstN.mtu = n.mtu
 
 	// copy labels
 	if dstN.labels == nil {
@@ -479,6 +481,7 @@ func (n *network) MarshalJSON() ([]byte, error) {
 	netMap["attachable"] = n.attachable
 	netMap["inDelete"] = n.inDelete
 	netMap["ingress"] = n.ingress
+	netMap["mtu"] = n.mtu
 	return json.Marshal(netMap)
 }
 
@@ -582,6 +585,9 @@ func (n *network) UnmarshalJSON(b []byte) (err error) {
 	}
 	if v, ok := netMap["ingress"]; ok {
 		n.ingress = v.(bool)
+	}
+	if v, ok := netMap["mtu"]; ok {
+		n.mtu = int(v.(float64))
 	}
 	// Reconcile old networks with the recently added `--ipv6` flag
 	if !n.enableIPv6 {
@@ -710,6 +716,17 @@ func NetworkOptionDynamic() NetworkOption {
 func NetworkOptionDeferIPv6Alloc(enable bool) NetworkOption {
 	return func(n *network) {
 		n.postIPv6 = enable
+	}
+}
+
+// NetworkOptionMtu returns an option setter to config the network MTU
+func NetworkOptionMtu(mtu int) NetworkOption {
+	return func(n *network) {
+		if n.generic == nil {
+			n.generic = make(map[string]interface{})
+		}
+		n.mtu = mtu
+		n.generic[netlabel.DriverMTU] = mtu
 	}
 }
 

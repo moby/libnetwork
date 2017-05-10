@@ -2,6 +2,7 @@ package macvlan
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/pkg/parsers/kernel"
@@ -188,6 +189,11 @@ func parseNetworkOptions(id string, option options.Generic) (*configuration, err
 		config.Internal = true
 		// empty --parent= and --internal are handled the same.
 		config.Parent = ""
+	}
+	if val, ok := option[netlabel.DriverMTU]; ok {
+		if config.Mtu, err = strconv.Atoi(val.(string)); err != nil {
+			return nil, fmt.Errorf("failed to parse %v: %v", val, err)
+		}
 	}
 
 	return config, nil
