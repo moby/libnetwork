@@ -812,6 +812,7 @@ func (sb *sandbox) populateNetworkResources(ep *endpoint) error {
 		var ifaceOptions []osl.IfaceOption
 
 		ifaceOptions = append(ifaceOptions, sb.osSbox.InterfaceOptions().Address(i.addr), sb.osSbox.InterfaceOptions().Routes(i.routes))
+		ifaceOptions = append(ifaceOptions, sb.osSbox.InterfaceOptions().EnableIPv6(ep.getNetwork().enableIPv6))
 		if i.addrv6 != nil && i.addrv6.IP.To16() != nil {
 			ifaceOptions = append(ifaceOptions, sb.osSbox.InterfaceOptions().AddressIPv6(i.addrv6))
 		}

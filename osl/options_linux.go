@@ -60,6 +60,12 @@ func (n *networkNamespace) AddressIPv6(addr *net.IPNet) IfaceOption {
 	}
 }
 
+func (n *networkNamespace) EnableIPv6(val bool) IfaceOption {
+	return func(i *nwIface) {
+		i.v6Enabled = val
+	}
+}
+
 func (n *networkNamespace) LinkLocalAddresses(list []*net.IPNet) IfaceOption {
 	return func(i *nwIface) {
 		i.llAddrs = list

@@ -88,6 +88,9 @@ type IfaceOptionSetter interface {
 	// Address returns an option setter to set IPv6 address.
 	AddressIPv6(*net.IPNet) IfaceOption
 
+	// EnableIPv6 returns an option setter to enable/disable IPv6 (may not have an IPv6 routable address)
+	EnableIPv6(bool) IfaceOption
+
 	// LinkLocalAddresses returns an option setter to set the link-local IP addresses.
 	LinkLocalAddresses([]*net.IPNet) IfaceOption
 

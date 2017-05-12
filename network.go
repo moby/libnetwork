@@ -1526,6 +1526,14 @@ func (n *network) ipamAllocateVersion(ipVer int, ipam ipamapi.Ipam) error {
 		d.AddressSpace = n.addrSpace
 		d.PoolID, d.Pool, d.Meta, err = n.requestPoolHelper(ipam, n.addrSpace, cfg.PreferredPool, cfg.SubPool, n.ipamOptions, ipVer == 6)
 		if err != nil {
+			// If the IPAM driver does not support auto-allocation for this IP family, skip it
+			// and adjust the network ipam datastructures (IPv4 support is still mandatory).
+			if err == ipamapi.ErrNotSupported && cfg.PreferredPool == "" && ipVer == 6 {
+				*cfgList = nil
+				*infoList = nil
+				logrus.Infof("IPAM driver does not support auto-allocation for IPv%d", ipVer)
+				return nil
+			}
 			return err
 		}
 
