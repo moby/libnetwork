@@ -221,11 +221,17 @@ func NewSandbox(key string, osCreate, isRestore bool) (Sandbox, error) {
 		logrus.Warnf("Failed to set the timeout on the sandbox netlink handle sockets: %v", err)
 	}
 
-	// As starting point, disable IPv6 on all interfaces
 	if !n.isDefault {
+		// As starting point, disable IPv6 on all interfaces, besides the loopback.
+		// Preserve it on the loopback for backward compatibility because some
+		// applications expect this behavior.
 		err = setIPv6(n.path, "all", false)
 		if err != nil {
 			logrus.Warnf("Failed to disable IPv6 on all interfaces on network namespace %q: %v", n.path, err)
+		}
+		err = setIPv6(n.path, "lo", true)
+		if err != nil {
+			logrus.Warnf("Failed to enable IPv6 on `lo` interface on network namespace %q: %v", n.path, err)
 		}
 	}
 
@@ -276,10 +282,16 @@ func GetSandboxForExternalKey(basePath string, key string) (Sandbox, error) {
 		logrus.Warnf("Failed to set the timeout on the sandbox netlink handle sockets: %v", err)
 	}
 
-	// As starting point, disable IPv6 on all interfaces
+	// As starting point, disable IPv6 on all interfaces, besides the loopback.
+	// Preserve it on the loopback for backward compatibility because some
+	// applications expect this behavior.
 	err = setIPv6(n.path, "all", false)
 	if err != nil {
 		logrus.Warnf("Failed to disable IPv6 on all interfaces on network namespace %q: %v", n.path, err)
+	}
+	err = setIPv6(n.path, "lo", true)
+	if err != nil {
+		logrus.Warnf("Failed to enable IPv6 on `lo` interface on network namespace %q: %v", n.path, err)
 	}
 
 	if err = n.loopbackUp(); err != nil {

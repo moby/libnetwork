@@ -179,8 +179,6 @@ func (i *nwIface) Remove() error {
 	}
 	n.Unlock()
 
-	n.checkLoV6()
-
 	return nil
 }
 
@@ -319,8 +317,6 @@ func (n *networkNamespace) AddInterface(srcName, dstPrefix string, options ...If
 	n.Lock()
 	n.iFaces = append(n.iFaces, i)
 	n.Unlock()
-
-	n.checkLoV6()
 
 	return nil
 }
