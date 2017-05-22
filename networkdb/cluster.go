@@ -236,7 +236,7 @@ func (nDB *NetworkDB) clusterLeave() error {
 }
 
 func (nDB *NetworkDB) triggerFunc(stagger time.Duration, C <-chan time.Time, stop <-chan struct{}, f func()) {
-	// Use a random stagger to avoid syncronizing
+	// Use a random stagger to avoid synchronizing
 	randStagger := time.Duration(uint64(rnd.Int63()) % uint64(stagger))
 	select {
 	case <-time.After(randStagger):
@@ -294,7 +294,7 @@ func (nDB *NetworkDB) reconnectNode() {
 	nDB.bulkSync([]string{node.Name}, true)
 }
 
-// For timing the entry deletion in the repaer APIs that doesn't use monotonic clock
+// For timing the entry deletion in the reaper APIs that doesn't use monotonic clock
 // source (time.Now, Sub etc.) should be avoided. Hence we use reapTime in every
 // entry which is set initially to reapInterval and decremented by reapPeriod every time
 // the reaper runs. NOTE nDB.reapTableEntries updates the reapTime with a readlock. This

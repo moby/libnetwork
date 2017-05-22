@@ -32,7 +32,7 @@ var (
 	ErrBitAllocated = errors.New("requested bit is already allocated")
 )
 
-// Handle contains the sequece representing the bitmask and its identifier
+// Handle contains the sequence representing the bitmask and its identifier
 type Handle struct {
 	bits       uint64
 	unselected uint64
@@ -358,7 +358,7 @@ func (h *Handle) set(ordinal, start, end uint64, any bool, release bool) (uint64
 			continue
 		}
 
-		// Previous atomic push was succesfull. Save private copy to local copy
+		// Previous atomic push was succesful. Save private copy to local copy
 		h.Lock()
 		defer h.Unlock()
 		h.unselected = nh.unselected
@@ -602,7 +602,7 @@ func pushReservation(bytePos, bitPos uint64, head *sequence, release bool) *sequ
 		return newHead
 	}
 
-	// Current sequence inevitably looses one block, upadate count
+	// Current sequence inevitably loses one block, update count
 	current.count--
 
 	// Create new sequence

@@ -489,7 +489,7 @@ func (d *delegate) MergeRemoteState(buf []byte, isJoin bool) {
 	var gMsg GossipMessage
 	err := proto.Unmarshal(buf, &gMsg)
 	if err != nil {
-		logrus.Errorf("Error unmarshalling push pull messsage: %v", err)
+		logrus.Errorf("Error unmarshalling push pull message: %v", err)
 		return
 	}
 
