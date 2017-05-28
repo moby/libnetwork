@@ -77,3 +77,9 @@ func (n *networkNamespace) Routes(routes []*net.IPNet) IfaceOption {
 		i.routes = routes
 	}
 }
+
+func (n *networkNamespace) DisableLearning() IfaceOption {
+	return func(i *nwIface) {
+		i.disableLearning = true
+	}
+}

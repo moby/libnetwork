@@ -19,18 +19,19 @@ import (
 type IfaceOption func(i *nwIface)
 
 type nwIface struct {
-	srcName     string
-	dstName     string
-	master      string
-	dstMaster   string
-	mac         net.HardwareAddr
-	address     *net.IPNet
-	addressIPv6 *net.IPNet
-	ipAliases   []*net.IPNet
-	llAddrs     []*net.IPNet
-	routes      []*net.IPNet
-	bridge      bool
-	ns          *networkNamespace
+	srcName         string
+	dstName         string
+	master          string
+	dstMaster       string
+	mac             net.HardwareAddr
+	address         *net.IPNet
+	addressIPv6     *net.IPNet
+	ipAliases       []*net.IPNet
+	llAddrs         []*net.IPNet
+	routes          []*net.IPNet
+	bridge          bool
+	ns              *networkNamespace
+	disableLearning bool
 	sync.Mutex
 }
 
@@ -128,6 +129,13 @@ func (n *networkNamespace) Interfaces() []Interface {
 	}
 
 	return ifaces
+}
+
+func (i *nwIface) DisableLearning() bool {
+	i.Lock()
+	i.Unlock()
+
+	return i.disableLearning
 }
 
 func (i *nwIface) Remove() error {
@@ -338,6 +346,7 @@ func configureInterface(nlh *netlink.Handle, iface netlink.Link, i *nwIface) err
 		{setInterfaceMaster, fmt.Sprintf("error setting interface %q master to %q", ifaceName, i.DstMaster())},
 		{setInterfaceLinkLocalIPs, fmt.Sprintf("error setting interface %q link local IPs to %v", ifaceName, i.LinkLocalAddresses())},
 		{setInterfaceIPAliases, fmt.Sprintf("error setting interface %q IP Aliases to %v", ifaceName, i.IPAliases())},
+		{disableLearning, fmt.Sprintf("disabling mac learning failed for interface %q", ifaceName)},
 	}
 
 	for _, config := range ifaceConfigurators {
@@ -407,6 +416,17 @@ func setInterfaceIPAliases(nlh *netlink.Handle, iface netlink.Link, i *nwIface) 
 		}
 	}
 	return nil
+}
+
+func disableLearning(nlh *netlink.Handle, iface netlink.Link, i *nwIface) error {
+	if !i.DisableLearning() {
+		return nil
+	}
+	if i.DstMaster() == "" {
+		return fmt.Errorf("mac learning can be disabled only for slave interfaces")
+	}
+
+	return nlh.LinkSetLearning(iface, false)
 }
 
 func setInterfaceName(nlh *netlink.Handle, iface netlink.Link, i *nwIface) error {
