@@ -39,7 +39,7 @@ type agent struct {
 	networkDB         *networkdb.NetworkDB
 	bindAddr          string
 	advertiseAddr     string
-	epTblCancel       func()
+	coreCancelFuncs   []func()
 	driverCancelFuncs map[string][]func()
 	sync.Mutex
 }
@@ -285,15 +285,18 @@ func (c *controller) agentInit(listenAddr, bindAddrOrInterface, advertiseAddr st
 		return err
 	}
 
+	var cancelList []func()
 	ch, cancel := nDB.Watch("endpoint_table", "", "")
+	cancelList = append(cancelList, cancel)
 	nodeCh, cancel := nDB.Watch(networkdb.NodeTable, "", "")
+	cancelList = append(cancelList, cancel)
 
 	c.Lock()
 	c.agent = &agent{
 		networkDB:         nDB,
 		bindAddr:          bindAddr,
 		advertiseAddr:     advertiseAddr,
-		epTblCancel:       cancel,
+		coreCancelFuncs:   cancelList,
 		driverCancelFuncs: make(map[string][]func()),
 	}
 	c.Unlock()
@@ -374,13 +377,16 @@ func (c *controller) agentClose() {
 			cancelList = append(cancelList, cancel)
 		}
 	}
+
+	// Add also the cancel functions for the network db
+	for _, cancel := range agent.coreCancelFuncs {
+		cancelList = append(cancelList, cancel)
+	}
 	agent.Unlock()
 
 	for _, cancel := range cancelList {
 		cancel()
 	}
-
-	agent.epTblCancel()
 
 	agent.networkDB.Close()
 }
