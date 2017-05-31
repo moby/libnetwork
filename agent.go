@@ -595,15 +595,13 @@ func (n *network) cancelDriverWatches() {
 	}
 }
 
-func (c *controller) handleTableEvents(ch chan events.Event, fn func(events.Event)) {
+func (c *controller) handleTableEvents(ch *events.Channel, fn func(events.Event)) {
 	for {
 		select {
-		case ev, ok := <-ch:
-			if !ok {
-				return
-			}
-
+		case ev := <-ch.C:
 			fn(ev)
+		case <-ch.Done():
+			return
 		}
 	}
 }
