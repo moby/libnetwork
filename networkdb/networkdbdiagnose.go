@@ -21,6 +21,7 @@ var NetDbPaths2Func = map[string]diagnose.HTTPHandlerFunc{
 	"/leavenetwork": dbLeaveNetwork,
 	"/createentry":  dbCreateEntry,
 	"/updateentry":  dbUpdateEntry,
+	"/deleteentry":  dbDeleteEntry,
 	"/getentry":     dbGetEntry,
 	"/gettable":     dbGetTable,
 }
@@ -119,6 +120,31 @@ func dbUpdateEntry(ctx interface{}, w http.ResponseWriter, r *http.Request) {
 	nDB, ok := ctx.(*NetworkDB)
 	if ok {
 		if err := nDB.UpdateEntry(tname, nid, key, []byte(value)); err != nil {
+			diagnose.HTTPReplyError(w, err.Error(), "")
+			return
+		}
+		fmt.Fprintf(w, "OK\n")
+	}
+}
+
+func dbDeleteEntry(ctx interface{}, w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+	diagnose.DebugHTTPForm(r)
+	if len(r.Form["tname"]) < 1 ||
+		len(r.Form["nid"]) < 1 ||
+		len(r.Form["key"]) < 1 {
+		diagnose.HTTPReplyError(w, missingParameter, fmt.Sprintf("%s?tname=table_name&nid=network_id&key=k", r.URL.Path))
+		return
+	}
+
+	tname := r.Form["tname"][0]
+	nid := r.Form["nid"][0]
+	key := r.Form["key"][0]
+
+	nDB, ok := ctx.(*NetworkDB)
+	if ok {
+		err := nDB.DeleteEntry(tname, nid, key)
+		if err != nil {
 			diagnose.HTTPReplyError(w, err.Error(), "")
 			return
 		}

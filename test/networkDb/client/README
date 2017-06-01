@@ -1,0 +1,15 @@
+SERVER
+
+cd test/networkdb/server
+env GOOS=linux go build -v server/ndbTester.go
+docker build -t fcrisciani/networkdb-test -f server/Dockerfile
+./spawn_cluster.sh
+
+CLIENT
+
+cd test/networkdb
+
+write-delete test: go run ndbClient.go write-delete 32770,32769,32768
+write-propagate: go run ndbClient.go write-propagate 32770,32769,32768 key
+
+check table: curl "localhost:32768/gettable?nid=test&tname=table_name"
