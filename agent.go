@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"sort"
+	"strconv"
 	"sync"
 
 	"github.com/Sirupsen/logrus"
@@ -17,6 +18,7 @@ import (
 	"github.com/docker/libnetwork/datastore"
 	"github.com/docker/libnetwork/discoverapi"
 	"github.com/docker/libnetwork/driverapi"
+	"github.com/docker/libnetwork/netlabel"
 	"github.com/docker/libnetwork/networkdb"
 	"github.com/docker/libnetwork/types"
 	"github.com/gogo/protobuf/proto"
@@ -26,6 +28,8 @@ const (
 	subsysGossip = "networking:gossip"
 	subsysIPSec  = "networking:ipsec"
 	keyringSize  = 3
+
+	defaultGossipAdvertisePort = 7946
 )
 
 // ByTime implements sort.Interface for []*types.EncryptionKey based on
@@ -213,11 +217,12 @@ func (c *controller) agentSetup(clusterProvider cluster.Provider) error {
 
 	listen := clusterProvider.GetListenAddress()
 	listenAddr, _, _ := net.SplitHostPort(listen)
+	bindPort := c.GetBindPort()
 
 	logrus.Infof("Initializing Libnetwork Agent Listen-Addr=%s Local-addr=%s Adv-addr=%s Data-addr=%s Remote-addr-list=%v",
 		listenAddr, bindAddr, advAddr, dataAddr, remoteAddrList)
 	if advAddr != "" && agent == nil {
-		if err := c.agentInit(listenAddr, bindAddr, advAddr, dataAddr); err != nil {
+		if err := c.agentInit(listenAddr, bindAddr, advAddr, dataAddr, bindPort); err != nil {
 			logrus.Errorf("error in agentInit: %v", err)
 			return err
 		}
@@ -275,7 +280,7 @@ func (c *controller) getPrimaryKeyTag(subsys string) ([]byte, uint64, error) {
 	return keys[1].Key, keys[1].LamportTime, nil
 }
 
-func (c *controller) agentInit(listenAddr, bindAddrOrInterface, advertiseAddr, dataPathAddr string) error {
+func (c *controller) agentInit(listenAddr, bindAddrOrInterface, advertiseAddr, dataPathAddr string, bindPort int) error {
 	bindAddr, err := resolveAddr(bindAddrOrInterface)
 	if err != nil {
 		return err
@@ -291,6 +296,7 @@ func (c *controller) agentInit(listenAddr, bindAddrOrInterface, advertiseAddr, d
 		AdvertiseAddr: advertiseAddr,
 		NodeName:      nodeName,
 		Keys:          keys,
+		BindPort:      bindPort,
 	})
 
 	if err != nil {
@@ -870,4 +876,19 @@ func (c *controller) handleEpTableEvent(ev events.Event) {
 			n.deleteSvcRecords(alias, ip, nil, true)
 		}
 	}
+}
+
+func (c *controller) GetBindPort() int {
+	gossipAdvertisePort := defaultGossipAdvertisePort
+	for _, label := range c.Config().Daemon.Labels {
+		if netlabel.Key(label) != netlabel.GossipAdvertisePort {
+			continue
+		}
+		value, err := strconv.Atoi(netlabel.Value(label))
+		if err == nil {
+			gossipAdvertisePort = value
+			return gossipAdvertisePort
+		}
+	}
+	return gossipAdvertisePort
 }
