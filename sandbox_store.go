@@ -210,6 +210,14 @@ func (c *controller) sandboxCleanup(activeSandboxes map[string]interface{}) {
 		return
 	}
 
+	// Get all the endpoints
+	endpoints_from_networks := []*endpoint{}
+	for _, n := range c.Networks() {
+		for _, ep := range n.Endpoints() {
+			endpoints_from_networks = append(endpoints_from_networks, ep.(*endpoint))
+		}
+	}
+
 	for _, kvo := range kvol {
 		sbs := kvo.(*sbState)
 
@@ -255,6 +263,8 @@ func (c *controller) sandboxCleanup(activeSandboxes map[string]interface{}) {
 		c.Lock()
 		c.sandboxes[sb.id] = sb
 		c.Unlock()
+		// To store the endpoints already stored in sanbox
+		epMap := make(map[string]int8)
 
 		for _, eps := range sbs.Eps {
 			n, err := c.getNetworkFromStore(eps.Nid)
@@ -275,6 +285,16 @@ func (c *controller) sandboxCleanup(activeSandboxes map[string]interface{}) {
 				continue
 			}
 			heap.Push(&sb.endpoints, ep)
+			eMap[ep.id] = 1
+		}
+		// If endpoint has sb id, but not in sb eps, push it
+		for _, ep := range endpoints_from_networks {
+			if ep.sanboxID != sb.id {
+				continue
+			}
+			if _, ok := epMap[ep.id]; !ok {
+				heap.Push(&sb.endpoints, ep)
+			}
 		}
 
 		if _, ok := activeSandboxes[sb.ID()]; !ok {
