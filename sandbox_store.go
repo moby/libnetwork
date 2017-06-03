@@ -285,7 +285,7 @@ func (c *controller) sandboxCleanup(activeSandboxes map[string]interface{}) {
 				continue
 			}
 			heap.Push(&sb.endpoints, ep)
-			eMap[ep.id] = 1
+			epMap[ep.id] = 1
 		}
 		// If endpoint has sb id, but not in sb eps, push it
 		for _, ep := range endpoints_from_networks {
