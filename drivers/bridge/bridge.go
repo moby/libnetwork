@@ -60,6 +60,7 @@ type networkConfiguration struct {
 	EnableIPv6           bool
 	EnableIPMasquerade   bool
 	EnableICC            bool
+	EnableBrProxyArp     bool
 	Mtu                  int
 	DefaultBindingIP     net.IP
 	DefaultBridge        bool
@@ -240,6 +241,10 @@ func (c *networkConfiguration) fromLabels(labels map[string]string) error {
 		case DefaultBindingIP:
 			if c.DefaultBindingIP = net.ParseIP(value); c.DefaultBindingIP == nil {
 				return parseErr(label, value, "nil ip")
+			}
+		case EnableBrProxyArp:
+			if c.EnableBrProxyArp, err = strconv.ParseBool(value); err != nil {
+				return parseErr(label, value, err.Error())
 			}
 		case netlabel.ContainerIfacePrefix:
 			c.ContainerIfacePrefix = value
@@ -450,6 +455,7 @@ func parseNetworkGenericOptions(data interface{}) (*networkConfiguration, error)
 		config = &networkConfiguration{
 			EnableICC:          true,
 			EnableIPMasquerade: true,
+			EnableBrProxyArp:   false,
 		}
 		err = config.fromLabels(opt)
 	case options.Generic:
@@ -1042,6 +1048,54 @@ func (d *driver) CreateEndpoint(nid, eid string, ifInfo driverapi.InterfaceInfo,
 		if err = ifInfo.SetMacAddress(endpoint.macAddress); err != nil {
 			return err
 		}
+	}
+
+	// The bridge proxy arp feature requires three things to happen:
+	// 1) Set the proxyarpwifi flag on the container side bridge port to disable ARP packet flooding.
+	// 2) Generate an arp entry in the host's ARP table mapping the containers IP address to its MAC.
+	// 3) Generate a static FDB entry for the containers MAC address.
+
+	if config.EnableBrProxyArp {
+
+		BridgeIF, err := d.nlh.LinkByName(config.BridgeName)
+		if err != nil {
+			return fmt.Errorf("could not find interface with destination name %s: %v", config.BridgeName, err)
+		}
+
+		HostIF, err := d.nlh.LinkByName(hostIfName)
+		if err != nil {
+			return fmt.Errorf("could not find interface with destination name %s: %v", hostIfName, err)
+		}
+
+		err = d.nlh.LinkSetBrProxyArpWiFi(host, true)
+		if err != nil {
+			return fmt.Errorf("unable to set BridgeProxyArp mode on %s: %v", hostIfName, err)
+		}
+
+		nlnh := &netlink.Neigh{
+			IP:           endpoint.addr.IP,
+			HardwareAddr: endpoint.macAddress,
+		}
+
+		// Generate the permanent arp entry.
+		nlnh.State = netlink.NUD_PERMANENT
+		nlnh.LinkIndex = BridgeIF.Attrs().Index
+
+		if err := d.nlh.NeighSet(nlnh); err != nil {
+			return fmt.Errorf("Failed to add neighbor entry: %v", err)
+		}
+		logrus.Debugf("An arp entry has been created: Interface=%s Ip=%s MAC=%s", config.BridgeName, nlnh.IP, nlnh.HardwareAddr)
+
+		// Generate the static fdb entry.
+		nlnh.State = netlink.NUD_NOARP
+		nlnh.Flags = netlink.NTF_MASTER
+		nlnh.Family = syscall.AF_BRIDGE
+		nlnh.LinkIndex = HostIF.Attrs().Index
+
+		if err := d.nlh.NeighSet(nlnh); err != nil {
+			return fmt.Errorf("Failed to add fdb entry: %v", err)
+		}
+		logrus.Debugf("An fdb entry has been created: Interface=%s  MAC=%s", hostIfName, nlnh.HardwareAddr)
 	}
 
 	// Up the host interface after finishing all netlink configuration

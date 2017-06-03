@@ -137,6 +137,7 @@ func (ncfg *networkConfiguration) MarshalJSON() ([]byte, error) {
 	nMap["EnableIPv6"] = ncfg.EnableIPv6
 	nMap["EnableIPMasquerade"] = ncfg.EnableIPMasquerade
 	nMap["EnableICC"] = ncfg.EnableICC
+	nMap["EnableBrProxyArp"] = ncfg.EnableBrProxyArp
 	nMap["Mtu"] = ncfg.Mtu
 	nMap["Internal"] = ncfg.Internal
 	nMap["DefaultBridge"] = ncfg.DefaultBridge
@@ -199,6 +200,10 @@ func (ncfg *networkConfiguration) UnmarshalJSON(b []byte) error {
 
 	if v, ok := nMap["BridgeIfaceCreator"]; ok {
 		ncfg.BridgeIfaceCreator = ifaceCreator(v.(float64))
+	}
+
+	if v, ok := nMap["EnableBrProxyArp"]; ok {
+		ncfg.EnableBrProxyArp = v.(bool)
 	}
 
 	return nil

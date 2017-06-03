@@ -15,4 +15,7 @@ const (
 
 	// DefaultBridge label
 	DefaultBridge = "com.docker.network.bridge.default_bridge"
+
+	// EnableBrProxyArp label
+	EnableBrProxyArp = "com.docker.network.bridge.proxyarp"
 )
