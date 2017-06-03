@@ -217,6 +217,8 @@ func (c *controller) sandboxCleanup(activeSandboxes map[string]interface{}) {
 			endpoints_from_networks = append(endpoints_from_networks, ep.(*endpoint))
 		}
 	}
+	// To store the endpoints already stored in sanbox
+	epMap := make(map[string]int8)
 
 	for _, kvo := range kvol {
 		sbs := kvo.(*sbState)
@@ -263,8 +265,6 @@ func (c *controller) sandboxCleanup(activeSandboxes map[string]interface{}) {
 		c.Lock()
 		c.sandboxes[sb.id] = sb
 		c.Unlock()
-		// To store the endpoints already stored in sanbox
-		epMap := make(map[string]int8)
 
 		for _, eps := range sbs.Eps {
 			n, err := c.getNetworkFromStore(eps.Nid)
@@ -289,7 +289,7 @@ func (c *controller) sandboxCleanup(activeSandboxes map[string]interface{}) {
 		}
 		// If endpoint has sb id, but not in sb eps, push it
 		for _, ep := range endpoints_from_networks {
-			if ep.sanboxID != sb.id {
+			if ep.sandboxID != sb.id {
 				continue
 			}
 			if _, ok := epMap[ep.id]; !ok {
