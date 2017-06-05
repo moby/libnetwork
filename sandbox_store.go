@@ -210,7 +210,7 @@ func (c *controller) sandboxCleanup(activeSandboxes map[string]interface{}) {
 		return
 	}
 
-	// Get all the endpoints
+	// Get all the endpoints, build timeout, don't know why
 	endpointsFromNetworks := []*endpoint{}
 	for _, n := range c.Networks() {
 		for _, ep := range n.Endpoints() {
