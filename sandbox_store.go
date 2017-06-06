@@ -207,8 +207,35 @@ func (c *controller) sandboxCleanup(activeSandboxes map[string]interface{}) {
 
 	// It's normal for no sandboxes to be found. Just bail out.
 	if err == datastore.ErrKeyNotFound {
+
 		return
 	}
+	// Get all the endpoints
+	endpoints_from_networks := []*endpoint{}
+	nl, err := c.getNetworksForScope(datastore.LocalScope)
+	if err != nil {
+		logrus.Warnf("Could not get list of networks during sandbox cleanup: %v", err)
+		return
+	}
+
+	for _, n := range nl {
+		epl, err := n.getEndpointsFromStore()
+		if err != nil {
+			logrus.Warnf("Could not get list of endpoints in network %s during sandbox cleanup: %v", n.name, err)
+			continue
+		}
+		for _, ep := range epl {
+			ep, err = n.getEndpointFromStore(ep.id)
+			if err != nil {
+				logrus.Warnf("Could not get endpoint in network %s during sandbox cleanup: %v", n.name, err)
+				continue
+			}
+			endpoints_from_networks = append(endpoints_from_networks, ep)
+		}
+	}
+
+	// To store the endpoints already stored in sanbox
+	epMap := make(map[string]int8)
 
 	for _, kvo := range kvol {
 		sbs := kvo.(*sbState)
@@ -275,6 +302,17 @@ func (c *controller) sandboxCleanup(activeSandboxes map[string]interface{}) {
 				continue
 			}
 			heap.Push(&sb.endpoints, ep)
+			epMap[ep.id] = 1
+		}
+
+		// If endpoint has sb id, but not in sb eps, push it
+		for _, ep := range endpoints_from_networks {
+			if ep.sandboxID != sb.id {
+				continue
+			}
+			if _, ok := epMap[ep.id]; !ok {
+				heap.Push(&sb.endpoints, ep)
+			}
 		}
 
 		if _, ok := activeSandboxes[sb.ID()]; !ok {
