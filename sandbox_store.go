@@ -211,7 +211,7 @@ func (c *controller) sandboxCleanup(activeSandboxes map[string]interface{}) {
 		return
 	}
 	// Get all the endpoints
-	endpoints_from_networks := []*endpoint{}
+	endpointsFromNetworks := []*endpoint{}
 	nl, err := c.getNetworksForScope(datastore.LocalScope)
 	if err != nil {
 		logrus.Warnf("Could not get list of networks during sandbox cleanup: %v", err)
@@ -230,7 +230,7 @@ func (c *controller) sandboxCleanup(activeSandboxes map[string]interface{}) {
 				logrus.Warnf("Could not get endpoint in network %s during sandbox cleanup: %v", n.name, err)
 				continue
 			}
-			endpoints_from_networks = append(endpoints_from_networks, ep)
+			endpointsFromNetworks = append(endpointsFromNetworks, ep)
 		}
 	}
 
@@ -306,7 +306,7 @@ func (c *controller) sandboxCleanup(activeSandboxes map[string]interface{}) {
 		}
 
 		// If endpoint has sb id, but not in sb eps, push it
-		for _, ep := range endpoints_from_networks {
+		for _, ep := range endpointsFromNetworks {
 			if ep.sandboxID != sb.id {
 				continue
 			}
