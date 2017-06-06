@@ -590,6 +590,12 @@ func (ep *endpoint) rename(name string) error {
 		return fmt.Errorf("watch null for network %q", n.Name())
 	}
 
+	_, ok = ep.getSandbox()
+	if !ok {
+		logrus.Warnf("rename for %s aborted, sandbox %s is not anymore present", ep.ID(), ep.sandboxID)
+		return nil
+	}
+
 	n.updateSvcRecord(ep, n.getController().getLocalEps(netWatch), false)
 
 	oldName := ep.name
@@ -713,7 +719,7 @@ func (ep *endpoint) sbLeave(sb *sandbox, force bool, options ...EndpointOption) 
 		return err
 	}
 
-	if e := ep.deleteServiceInfoFromCluster(); e != nil {
+	if e := ep.deleteServiceInfoFromCluster(sb, "sbLeave"); e != nil {
 		logrus.Errorf("Could not delete service state for endpoint %s from cluster: %v", ep.Name(), e)
 	}
 
