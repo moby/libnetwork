@@ -158,7 +158,7 @@ func (d *driver) DecodeTableEntry(tablename string, key string, value []byte) (s
 	}
 
 	return key, map[string]string{
-		"Host IP": peer.TunnelEndpointIP,
+		"HostIP": peer.TunnelEndpointIP,
 	}
 }
 
