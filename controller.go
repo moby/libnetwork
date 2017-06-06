@@ -1165,22 +1165,16 @@ func (c *controller) SandboxByID(id string) (Sandbox, error) {
 
 // SandboxDestroy destroys a sandbox given a container ID
 func (c *controller) SandboxDestroy(id string) error {
-	var sb *sandbox
-	c.Lock()
-	for _, s := range c.sandboxes {
-		if s.containerID == id {
-			sb = s
-			break
-		}
-	}
-	c.Unlock()
-
-	// It is not an error if sandbox is not available
-	if sb == nil {
+	if id == "" {
 		return nil
 	}
-
-	return sb.Delete()
+	c.Lock()
+	sb, ok := c.sandboxes[id]
+	c.Unlock()
+	if ok {
+		return sb.Delete()
+	}
+	return nil
 }
 
 // SandboxContainerWalker returns a Sandbox Walker function which looks for an existing Sandbox with the passed containerID
