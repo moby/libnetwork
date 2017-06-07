@@ -497,7 +497,7 @@ func (n *network) restoreSubnetSandbox(s *subnet, brName, vxlanName string) erro
 
 	Ifaces = make(map[string][]osl.IfaceOption)
 	vxlanIfaceOption := make([]osl.IfaceOption, 1)
-	vxlanIfaceOption = append(vxlanIfaceOption, sbox.InterfaceOptions().Master(brName))
+	vxlanIfaceOption = append(vxlanIfaceOption, sbox.InterfaceOptions().Master(brName), sbox.InterfaceOptions().DisableLearning())
 	Ifaces[fmt.Sprintf("%s+%s", vxlanName, "vxlan")] = vxlanIfaceOption
 	err = sbox.Restore(Ifaces, nil, nil, nil)
 	if err != nil {

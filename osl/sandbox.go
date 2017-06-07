@@ -101,6 +101,10 @@ type IfaceOptionSetter interface {
 
 	// Address returns an option setter to set interface routes.
 	Routes([]*net.IPNet) IfaceOption
+
+	// DisableLearning returns an option setter to disable mac learning on a bridge
+	// interface
+	DisableLearning() IfaceOption
 }
 
 // Info represents all possible information that
