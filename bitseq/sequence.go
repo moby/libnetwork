@@ -365,8 +365,8 @@ func (h *Handle) set(ordinal, start, end uint64, any bool, release bool) (uint64
 		}
 
 		// Attempt to write private copy to store
-		h.Lock()
 		if err = nh.writeToStore(); err == nil {
+			h.Lock()
 			h.unselected = nh.unselected
 			h.head = nh.head
 			h.dbExists = nh.dbExists
@@ -374,7 +374,6 @@ func (h *Handle) set(ordinal, start, end uint64, any bool, release bool) (uint64
 			h.Unlock()
 			return ret, nil
 		}
-		h.Unlock()
 		if _, ok := err.(types.RetryError); !ok {
 			return invalidPos, fmt.Errorf("internal failure while setting the bit: %v", err)
 		}
