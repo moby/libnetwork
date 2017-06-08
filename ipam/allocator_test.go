@@ -1,6 +1,7 @@
 package ipam
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -692,6 +693,62 @@ func TestRequestReleaseAddressFromSubPool(t *testing.T) {
 	}
 	if !types.CompareIPNet(tre, treExp) {
 		t.Fatalf("Unexpected address: %v", tre)
+	}
+}
+
+func TestDuplicateIP(t *testing.T) {
+	a, err := getAllocator()
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.addrSpaces["dup"] = &addrSpace{
+		id:      dsConfigKey + "/" + "dup",
+		ds:      a.addrSpaces[localAddressSpace].ds,
+		alloc:   a.addrSpaces[localAddressSpace].alloc,
+		scope:   a.addrSpaces[localAddressSpace].scope,
+		subnets: map[SubnetKey]*PoolData{},
+	}
+
+	poolID, _, _, err := a.RequestPool("dup", "55.1.0.0/16", "55.1.1.0/24", nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan []*net.IPNet)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	for i := 0; i < 3; i++ {
+		go func(ctx context.Context, poolID string, i int) {
+			ipList := []*net.IPNet{}
+			var err error
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+					if err != nil {
+						done <- ipList
+					}
+					var c *net.IPNet
+					if c, _, err = a.RequestAddress(poolID, nil, nil); err == nil {
+						ipList = append(ipList, c)
+					}
+				}
+			}
+		}(ctx, poolID, i)
+	}
+	ipList := []*net.IPNet{}
+	for i := 0; i < 3; i++ {
+		ipList = append(ipList, <-done...)
+	}
+
+	//Verify duplicate IP
+	ipMap := make(map[string]bool)
+	for _, ip := range ipList {
+		if _, ok := ipMap[ip.String()]; ok {
+			t.Fatalf("duplicate ip -----> %s", ip.String())
+		}
 	}
 }
 
