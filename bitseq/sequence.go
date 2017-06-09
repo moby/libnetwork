@@ -42,7 +42,7 @@ type Handle struct {
 	dbIndex    uint64
 	dbExists   bool
 	store      datastore.DataStore
-	sync.Mutex
+	sync.RWMutex
 }
 
 // NewHandle returns a thread-safe instance of the bitmask handler
@@ -184,6 +184,8 @@ func (s *sequence) fromByteArray(data []byte) error {
 }
 
 func (h *Handle) getCopy() *Handle {
+	h.RLock()
+	defer h.RUnlock()
 	return &Handle{
 		bits:       h.bits,
 		unselected: h.unselected,
@@ -262,9 +264,9 @@ func (h *Handle) runConsistencyCheck() bool {
 // It looks for a corruption signature that may happen in docker 1.9.0 and 1.9.1.
 func (h *Handle) CheckConsistency() error {
 	for {
-		h.Lock()
+		h.RLock()
 		store := h.store
-		h.Unlock()
+		h.RUnlock()
 
 		if store != nil {
 			if err := store.GetObject(datastore.Key(h.Key()...), h); err != nil && err != datastore.ErrKeyNotFound {
@@ -272,9 +274,7 @@ func (h *Handle) CheckConsistency() error {
 			}
 		}
 
-		h.Lock()
 		nh := h.getCopy()
-		h.Unlock()
 
 		if !nh.runConsistencyCheck() {
 			return nil
@@ -308,11 +308,12 @@ func (h *Handle) set(ordinal, start, end uint64, any bool, release bool) (uint64
 
 	for {
 		var store datastore.DataStore
-		h.Lock()
+		h.RLock()
 		store = h.store
-		h.Unlock()
+		h.RUnlock()
+
 		if store != nil {
-			if err := store.GetObject(datastore.Key(h.Key()...), h); err != nil && err != datastore.ErrKeyNotFound {
+			if err = store.GetObject(datastore.Key(h.Key()...), h); err != nil && err != datastore.ErrKeyNotFound {
 				return ret, err
 			}
 		}
@@ -338,41 +339,29 @@ func (h *Handle) set(ordinal, start, end uint64, any bool, release bool) (uint64
 			return ret, err
 		}
 
-		// Create a private copy of h and work on it
-		nh := h.getCopy()
+		h.head = pushReservation(bytePos, bitPos, h.head, release)
+		if release {
+			h.unselected++
+		} else {
+			h.unselected--
+		}
 		h.Unlock()
 
-		nh.head = pushReservation(bytePos, bitPos, nh.head, release)
-		if release {
-			nh.unselected++
-		} else {
-			nh.unselected--
-		}
-
-		// Attempt to write private copy to store
-		if err := nh.writeToStore(); err != nil {
+		if err := h.writeToStore(); err != nil {
 			if _, ok := err.(types.RetryError); !ok {
 				return ret, fmt.Errorf("internal failure while setting the bit: %v", err)
 			}
 			// Retry
 			continue
 		}
-
-		// Previous atomic push was succesfull. Save private copy to local copy
-		h.Lock()
-		defer h.Unlock()
-		h.unselected = nh.unselected
-		h.head = nh.head
-		h.dbExists = nh.dbExists
-		h.dbIndex = nh.dbIndex
 		return ret, nil
 	}
 }
 
 // checks is needed because to cover the case where the number of bits is not a multiple of blockLen
 func (h *Handle) validateOrdinal(ordinal uint64) error {
-	h.Lock()
-	defer h.Unlock()
+	h.RLock()
+	defer h.RUnlock()
 	if ordinal >= h.bits {
 		return errors.New("bit does not belong to the sequence")
 	}
@@ -402,8 +391,8 @@ func (h *Handle) Destroy() error {
 // ToByteArray converts this handle's data into a byte array
 func (h *Handle) ToByteArray() ([]byte, error) {
 
-	h.Lock()
-	defer h.Unlock()
+	h.RLock()
+	defer h.RUnlock()
 	ba := make([]byte, 16)
 	binary.BigEndian.PutUint64(ba[0:], h.bits)
 	binary.BigEndian.PutUint64(ba[8:], h.unselected)
@@ -444,14 +433,14 @@ func (h *Handle) Bits() uint64 {
 
 // Unselected returns the number of bits which are not selected
 func (h *Handle) Unselected() uint64 {
-	h.Lock()
-	defer h.Unlock()
+	h.RLock()
+	defer h.RUnlock()
 	return h.unselected
 }
 
 func (h *Handle) String() string {
-	h.Lock()
-	defer h.Unlock()
+	h.RLock()
+	defer h.RUnlock()
 	return fmt.Sprintf("App: %s, ID: %s, DBIndex: 0x%x, bits: %d, unselected: %d, sequence: %s",
 		h.app, h.id, h.dbIndex, h.bits, h.unselected, h.head.toString())
 }

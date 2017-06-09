@@ -117,9 +117,9 @@ func (h *Handle) fromDsValue(value []byte) error {
 }
 
 func (h *Handle) writeToStore() error {
-	h.Lock()
+	h.RLock()
 	store := h.store
-	h.Unlock()
+	h.RUnlock()
 	if store == nil {
 		return nil
 	}
@@ -131,9 +131,9 @@ func (h *Handle) writeToStore() error {
 }
 
 func (h *Handle) deleteFromStore() error {
-	h.Lock()
+	h.RLock()
 	store := h.store
-	h.Unlock()
+	h.RUnlock()
 	if store == nil {
 		return nil
 	}
