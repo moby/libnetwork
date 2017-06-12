@@ -822,10 +822,6 @@ func (ep *endpoint) Delete(force bool) error {
 		}
 	}
 
-	if err = n.getController().deleteFromStore(ep); err != nil {
-		return err
-	}
-
 	defer func() {
 		if err != nil && !force {
 			ep.dbExists = false
@@ -839,6 +835,11 @@ func (ep *endpoint) Delete(force bool) error {
 	n.getController().unWatchSvcRecord(ep)
 
 	if err = ep.deleteEndpoint(force); err != nil && !force {
+		return err
+	}
+
+	// This has to come after the sandbox and the driver to guarantee that can be the source of truth on restart cases
+	if err = n.getController().deleteFromStore(ep); err != nil {
 		return err
 	}
 
