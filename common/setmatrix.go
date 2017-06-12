@@ -22,8 +22,8 @@ type SetMatrix interface {
 	// returns true if the value is deleted, false otherwise
 	// returns also the length of the set for the key
 	Remove(key string, value interface{}) (bool, int)
-	// Cardinality returns the number of elements in the set for a key
-	// returns false if the set is not present
+	// Cardinality returns the number of elements in the set of a specific key
+	// returns false if the key is not in the map
 	Cardinality(key string) (int, bool)
 	// String returns the string version of the set, empty otherwise
 	// returns false if the set is not present
