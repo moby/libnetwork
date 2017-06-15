@@ -28,6 +28,8 @@ type SetMatrix interface {
 	// String returns the string version of the set, empty otherwise
 	// returns false if the set is not present
 	String(key string) (string, bool)
+	// Returns all the keys in the map
+	Keys() []string
 }
 
 type setMatrix struct {
@@ -120,4 +122,14 @@ func (s *setMatrix) String(key string) (string, bool) {
 		return "", ok
 	}
 	return set.String(), ok
+}
+
+func (s *setMatrix) Keys() []string {
+	s.Lock()
+	defer s.Unlock()
+	keys := make([]string, 0, len(s.matrix))
+	for k := range s.matrix {
+		keys = append(keys, k)
+	}
+	return keys
 }

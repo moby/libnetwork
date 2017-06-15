@@ -21,23 +21,23 @@ func (c *controller) addEndpointNameResolution(svcName, svcID, nID, eID, contain
 	c.addContainerNameResolution(nID, eID, containerName, taskAliases, ip, method)
 
 	// Add endpoint IP to special "tasks.svc_name" so that the applications have access to DNS RR.
-	n.(*network).addSvcRecords(eID, "tasks."+svcName, ip, nil, false, method)
+	n.(*network).addSvcRecords(eID, "tasks."+svcName, svcID, ip, nil, false, method)
 	for _, alias := range serviceAliases {
-		n.(*network).addSvcRecords(eID, "tasks."+alias, ip, nil, false, method)
+		n.(*network).addSvcRecords(eID, "tasks."+alias, svcID, ip, nil, false, method)
 	}
 
 	// Add service name to vip in DNS, if vip is valid. Otherwise resort to DNS RR
 	if len(vip) == 0 {
-		n.(*network).addSvcRecords(eID, svcName, ip, nil, false, method)
+		n.(*network).addSvcRecords(eID, svcName, eID, ip, nil, false, method)
 		for _, alias := range serviceAliases {
-			n.(*network).addSvcRecords(eID, alias, ip, nil, false, method)
+			n.(*network).addSvcRecords(eID, alias, eID, ip, nil, false, method)
 		}
 	}
 
 	if addService && len(vip) != 0 {
-		n.(*network).addSvcRecords(eID, svcName, vip, nil, false, method)
+		n.(*network).addSvcRecords(eID, svcName, svcID, vip, nil, false, method)
 		for _, alias := range serviceAliases {
-			n.(*network).addSvcRecords(eID, alias, vip, nil, false, method)
+			n.(*network).addSvcRecords(eID, alias, svcID, vip, nil, false, method)
 		}
 	}
 
@@ -52,11 +52,11 @@ func (c *controller) addContainerNameResolution(nID, eID, containerName string, 
 	logrus.Debugf("addContainerNameResolution %s %s", eID, containerName)
 
 	// Add resolution for container name
-	n.(*network).addSvcRecords(eID, containerName, ip, nil, true, method)
+	n.(*network).addSvcRecords(eID, containerName, eID, ip, nil, true, method)
 
 	// Add resolution for taskaliases
 	for _, alias := range taskAliases {
-		n.(*network).addSvcRecords(eID, alias, ip, nil, true, method)
+		n.(*network).addSvcRecords(eID, alias, eID, ip, nil, true, method)
 	}
 
 	return nil
@@ -75,25 +75,25 @@ func (c *controller) deleteEndpointNameResolution(svcName, svcID, nID, eID, cont
 
 	// Delete the special "tasks.svc_name" backend record.
 	if !multipleEntries {
-		n.(*network).deleteSvcRecords(eID, "tasks."+svcName, ip, nil, false, method)
+		n.(*network).deleteSvcRecords(eID, "tasks."+svcName, svcID, ip, nil, false, method)
 		for _, alias := range serviceAliases {
-			n.(*network).deleteSvcRecords(eID, "tasks."+alias, ip, nil, false, method)
+			n.(*network).deleteSvcRecords(eID, "tasks."+alias, svcID, ip, nil, false, method)
 		}
 	}
 
 	// If we are doing DNS RR delete the endpoint IP from DNS record right away.
 	if !multipleEntries && len(vip) == 0 {
-		n.(*network).deleteSvcRecords(eID, svcName, ip, nil, false, method)
+		n.(*network).deleteSvcRecords(eID, svcName, eID, ip, nil, false, method)
 		for _, alias := range serviceAliases {
-			n.(*network).deleteSvcRecords(eID, alias, ip, nil, false, method)
+			n.(*network).deleteSvcRecords(eID, alias, eID, ip, nil, false, method)
 		}
 	}
 
 	// Remove the DNS record for VIP only if we are removing the service
 	if rmService && len(vip) != 0 && !multipleEntries {
-		n.(*network).deleteSvcRecords(eID, svcName, vip, nil, false, method)
+		n.(*network).deleteSvcRecords(eID, svcName, svcID, vip, nil, false, method)
 		for _, alias := range serviceAliases {
-			n.(*network).deleteSvcRecords(eID, alias, vip, nil, false, method)
+			n.(*network).deleteSvcRecords(eID, alias, svcID, vip, nil, false, method)
 		}
 	}
 
@@ -108,11 +108,11 @@ func (c *controller) delContainerNameResolution(nID, eID, containerName string, 
 	logrus.Debugf("delContainerNameResolution %s %s", eID, containerName)
 
 	// Delete resolution for container name
-	n.(*network).deleteSvcRecords(eID, containerName, ip, nil, true, method)
+	n.(*network).deleteSvcRecords(eID, containerName, eID, ip, nil, true, method)
 
 	// Delete resolution for taskaliases
 	for _, alias := range taskAliases {
-		n.(*network).deleteSvcRecords(eID, alias, ip, nil, true, method)
+		n.(*network).deleteSvcRecords(eID, alias, eID, ip, nil, true, method)
 	}
 
 	return nil
@@ -228,8 +228,7 @@ func (c *controller) addServiceBinding(svcName, svcID, nID, eID, containerName s
 		}
 		s.Unlock()
 	}
-	logrus.Debugf("addServiceBinding from %s START for %s %s", method, svcName, eID)
-
+	logrus.Debugf("addServiceBinding from %s START for %s %s p:%p nid:%s skey:%v", method, svcName, eID, s, nID, skey)
 	defer s.Unlock()
 
 	lb, ok := s.loadBalancers[nID]
@@ -294,7 +293,6 @@ func (c *controller) rmServiceBinding(svcName, svcID, nID, eID, containerName st
 	c.Lock()
 	s, ok := c.serviceBindings[skey]
 	c.Unlock()
-	logrus.Debugf("rmServiceBinding from %s START for %s %s", method, svcName, eID)
 	if !ok {
 		logrus.Warnf("rmServiceBinding %s %s %s aborted c.serviceBindings[skey] !ok", method, svcName, eID)
 		return nil
@@ -302,6 +300,7 @@ func (c *controller) rmServiceBinding(svcName, svcID, nID, eID, containerName st
 
 	s.Lock()
 	defer s.Unlock()
+	logrus.Debugf("rmServiceBinding from %s START for %s %s p:%p nid:%s sKey:%v", method, svcName, eID, s, nID, skey)
 	lb, ok := s.loadBalancers[nID]
 	if !ok {
 		logrus.Warnf("rmServiceBinding %s %s %s aborted s.loadBalancers[nid] !ok", method, svcName, eID)
@@ -322,17 +321,7 @@ func (c *controller) rmServiceBinding(svcName, svcID, nID, eID, containerName st
 		rmService = true
 
 		delete(s.loadBalancers, nID)
-	}
-
-	if len(s.loadBalancers) == 0 {
-		// All loadbalancers for the service removed. Time to
-		// remove the service itself.
-		c.Lock()
-
-		// Mark the object as deleted so that the add won't use it wrongly
-		s.deleted = true
-		delete(c.serviceBindings, skey)
-		c.Unlock()
+		logrus.Debugf("rmServiceBinding %s delete %s, p:%p in loadbalancers len:%d", eID, nID, lb, len(s.loadBalancers))
 	}
 
 	ok, entries := s.removeIPToEndpoint(ip.String(), eID)
@@ -349,6 +338,19 @@ func (c *controller) rmServiceBinding(svcName, svcID, nID, eID, containerName st
 
 	// Delete the name resolutions
 	c.deleteEndpointNameResolution(svcName, svcID, nID, eID, containerName, vip, serviceAliases, taskAliases, ip, rmService, entries > 0, "rmServiceBinding")
+
+	if len(s.loadBalancers) == 0 {
+		// All loadbalancers for the service removed. Time to
+		// remove the service itself.
+		c.Lock()
+
+		// Mark the object as deleted so that the add won't use it wrongly
+		s.deleted = true
+		// NOTE The delete from the serviceBindings map has to be the last operation else we are allowing a race between this service
+		// that is getting deleted and a new service that will be created if the entry is not anymore there
+		delete(c.serviceBindings, skey)
+		c.Unlock()
+	}
 
 	logrus.Debugf("rmServiceBinding from %s END for %s %s", method, svcName, eID)
 	return nil
