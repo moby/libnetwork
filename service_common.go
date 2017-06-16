@@ -15,7 +15,7 @@ func (c *controller) addEndpointNameResolution(svcName, svcID, nID, eID, contain
 		return err
 	}
 
-	logrus.Debugf("addEndpointNameResolution %s %s add_service:%t", eID, svcName, addService)
+	logrus.Debugf("addEndpointNameResolution %s %s add_service:%t sAliases:%v tAliases:%v", eID, svcName, addService, serviceAliases, taskAliases)
 
 	// Add container resolution mappings
 	c.addContainerNameResolution(nID, eID, containerName, taskAliases, ip, method)
@@ -68,7 +68,7 @@ func (c *controller) deleteEndpointNameResolution(svcName, svcID, nID, eID, cont
 		return err
 	}
 
-	logrus.Debugf("deleteEndpointNameResolution %s %s rm_service:%t suppress:%t", eID, svcName, rmService, multipleEntries)
+	logrus.Debugf("deleteEndpointNameResolution %s %s rm_service:%t suppress:%t sAliases:%v tAliases:%v", eID, svcName, rmService, multipleEntries, serviceAliases, taskAliases)
 
 	// Delete container resolution mappings
 	c.delContainerNameResolution(nID, eID, containerName, taskAliases, ip, method)

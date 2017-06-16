@@ -789,6 +789,9 @@ func (n *network) delete(force bool) error {
 	id := n.id
 	n.Unlock()
 
+	c.networkLocker.Lock(id)
+	defer c.networkLocker.Unlock(id)
+
 	n, err := c.getNetworkFromStore(id)
 	if err != nil {
 		return &UnknownNetworkError{name: name, id: id}
@@ -902,6 +905,9 @@ func (n *network) CreateEndpoint(name string, options ...EndpointOption) (Endpoi
 
 	ep := &endpoint{name: name, generic: make(map[string]interface{}), iface: &endpointInterface{}}
 	ep.id = stringid.GenerateRandomID()
+
+	n.ctrlr.networkLocker.Lock(n.id)
+	defer n.ctrlr.networkLocker.Unlock(n.id)
 
 	// Initialize ep.network with a possibly stale copy of n. We need this to get network from
 	// store. But once we get it from store we will have the most uptodate copy possibly.
@@ -1673,7 +1679,7 @@ func (n *network) ResolveName(req string, ipType int) ([]net.IP, bool) {
 	}
 
 	if ok && len(ipSet) > 0 {
-		// this maps is to avoid IP duplicates, this can happen during a transition period where 2 services are using the same IP
+		// this map is to avoid IP duplicates, this can happen during a transition period where 2 services are using the same IP
 		noDup := make(map[string]bool)
 		var ipLocal []net.IP
 		for _, ip := range ipSet {
