@@ -1237,12 +1237,14 @@ func (n *network) updateSvcRecord(ep *endpoint, localEps []*endpoint, isAdd bool
 		}
 
 		serviceID := ep.svcID
+		if serviceID == "" {
+			serviceID = ep.ID()
+		}
 		if isAdd {
 			// If anonymous endpoint has an alias use the first alias
 			// for ip->name mapping. Not having the reverse mapping
 			// breaks some apps
 			if ep.isAnonymous() {
-				serviceID = ep.ID()
 				if len(myAliases) > 0 {
 					n.addSvcRecords(ep.ID(), myAliases[0], serviceID, iface.Address().IP, ipv6, true, "updateSvcRecord")
 				}
@@ -1254,7 +1256,6 @@ func (n *network) updateSvcRecord(ep *endpoint, localEps []*endpoint, isAdd bool
 			}
 		} else {
 			if ep.isAnonymous() {
-				serviceID = ep.ID()
 				if len(myAliases) > 0 {
 					n.deleteSvcRecords(ep.ID(), myAliases[0], serviceID, iface.Address().IP, ipv6, true, "updateSvcRecord")
 				}
