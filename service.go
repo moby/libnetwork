@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/docker/libnetwork/common"
+	mapset "github.com/deckarep/golang-set"
 )
 
 var (
@@ -47,9 +48,6 @@ type service struct {
 	// List of ingress ports exposed by the service
 	ingressPorts portConfigs
 
-	// Service aliases
-	aliases []string
-
 	// This maps tracks for each IP address the list of endpoints ID
 	// associated with it. At stable state the endpoint ID expected is 1
 	// but during transition and service change it is possible to have
@@ -79,6 +77,19 @@ func (s *service) printIPToEndpoint(ip string) (string, bool) {
 	return s.ipToEndpoint.String(ip)
 }
 
+// aliasSet returns the union of service aliases for all backends.
+func (s *service) aliasSet() (mapset.Set) {
+  set := mapset.NewSet()
+  for _, lb := range s.loadBalancers {
+    for _, be := range lb.backEnds {
+      for _, alias := range be.serviceAliases {
+        set.Add(alias)
+      }
+    }
+  }
+	return set
+}
+
 type loadBalancer struct {
 	vip    net.IP
 	fwMark uint32
@@ -92,7 +103,8 @@ type loadBalancer struct {
 }
 
 type loadBalancerBackend struct {
-	ip            net.IP
-	containerName string
-	taskAliases   []string
+	ip             net.IP
+	containerName  string
+	serviceAliases []string
+	taskAliases    []string
 }
