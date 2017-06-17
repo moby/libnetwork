@@ -132,6 +132,7 @@ func newService(name string, id string, ingressPorts []*PortConfig, serviceAlias
 func (c *controller) cleanupServiceBindings(cleanupNID string) {
 	var cleanupFuncs []func()
 
+	logrus.Debugf("cleanupServiceBindings for %s", cleanupNID)
 	c.Lock()
 	services := make([]*service, 0, len(c.serviceBindings))
 	for _, s := range c.serviceBindings {
@@ -151,16 +152,27 @@ func (c *controller) cleanupServiceBindings(cleanupNID string) {
 				continue
 			}
 
-			for eid, be := range lb.backEnds {
+			// The network is being deleted, erase all the associated service discovery records
+			// TODO(fcrisciani) separate the Load Balancer from the Service discovery, this operation
+			// can be done safely here, but the rmServiceBinding is still keeping consistency in the
+			// data structures that are tracking the endpoint to IP mapping.
+			c.Lock()
+			logrus.Debugf("cleanupServiceBindings erasing the svcRecords for %s", nid)
+			delete(c.svcRecords, nid)
+			c.Unlock()
+
+			for eid, ip := range lb.backEnds {
+				epID := eid
+				epIP := ip
 				service := s
 				loadBalancer := lb
 				networkID := nid
-				epID := eid
-				epIP := be.ip
-
 				cleanupFuncs = append(cleanupFuncs, func() {
-					if err := c.rmServiceBinding(service.name, service.id, networkID, epID, be.containerName, loadBalancer.vip,
-						service.ingressPorts, service.aliases, be.taskAliases, epIP, "cleanupServiceBindings"); err != nil {
+					// ContainerName and taskAliases are not available here, this is still fine because the Service discovery
+					// cleanup already happened before. The only thing that rmServiceBinding is still doing here a part from the Load
+					// Balancer bookeeping, is to keep consistent the mapping of endpoint to IP.
+					if err := c.rmServiceBinding(service.name, service.id, networkID, epID, "", loadBalancer.vip,
+						service.ingressPorts, service.aliases, []string{}, epIP, "cleanupServiceBindings", false); err != nil {
 						logrus.Errorf("Failed to remove service bindings for service %s network %s endpoint %s while cleanup: %v",
 							service.id, networkID, epID, err)
 					}
@@ -221,7 +233,7 @@ func (c *controller) addServiceBinding(svcName, svcID, nID, eID, containerName s
 		lb = &loadBalancer{
 			vip:      vip,
 			fwMark:   fwMarkCtr,
-			backEnds: make(map[string]loadBalancerBackend),
+			backEnds: make(map[string]net.IP),
 			service:  s,
 		}
 
@@ -232,9 +244,7 @@ func (c *controller) addServiceBinding(svcName, svcID, nID, eID, containerName s
 		addService = true
 	}
 
-	lb.backEnds[eID] = loadBalancerBackend{ip: ip,
-		containerName: containerName,
-		taskAliases:   taskAliases}
+	lb.backEnds[eID] = ip
 
 	ok, entries := s.assignIPToEndpoint(ip.String(), eID)
 	if !ok || entries > 1 {
@@ -256,7 +266,7 @@ func (c *controller) addServiceBinding(svcName, svcID, nID, eID, containerName s
 	return nil
 }
 
-func (c *controller) rmServiceBinding(svcName, svcID, nID, eID, containerName string, vip net.IP, ingressPorts []*PortConfig, serviceAliases []string, taskAliases []string, ip net.IP, method string) error {
+func (c *controller) rmServiceBinding(svcName, svcID, nID, eID, containerName string, vip net.IP, ingressPorts []*PortConfig, serviceAliases []string, taskAliases []string, ip net.IP, method string, deleteSvcRecords bool) error {
 
 	var rmService bool
 
@@ -280,7 +290,7 @@ func (c *controller) rmServiceBinding(svcName, svcID, nID, eID, containerName st
 
 	s.Lock()
 	defer s.Unlock()
-	logrus.Debugf("rmServiceBinding from %s START for %s %s p:%p nid:%s sKey:%v", method, svcName, eID, s, nID, skey)
+	logrus.Debugf("rmServiceBinding from %s START for %s %s p:%p nid:%s sKey:%v deleteSvc:%t", method, svcName, eID, s, nID, skey, deleteSvcRecords)
 	lb, ok := s.loadBalancers[nID]
 	if !ok {
 		logrus.Warnf("rmServiceBinding %s %s %s aborted s.loadBalancers[nid] !ok", method, svcName, eID)
@@ -317,7 +327,9 @@ func (c *controller) rmServiceBinding(svcName, svcID, nID, eID, containerName st
 	}
 
 	// Delete the name resolutions
-	c.deleteEndpointNameResolution(svcName, svcID, nID, eID, containerName, vip, serviceAliases, taskAliases, ip, rmService, entries > 0, "rmServiceBinding")
+	if deleteSvcRecords {
+		c.deleteEndpointNameResolution(svcName, svcID, nID, eID, containerName, vip, serviceAliases, taskAliases, ip, rmService, entries > 0, "rmServiceBinding")
+	}
 
 	if len(s.loadBalancers) == 0 {
 		// All loadbalancers for the service removed. Time to
