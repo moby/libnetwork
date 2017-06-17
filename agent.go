@@ -693,7 +693,7 @@ func (ep *endpoint) deleteServiceInfoFromCluster(sb *sandbox, method string) err
 			if n.ingress {
 				ingressPorts = ep.ingressPorts
 			}
-			if err := c.rmServiceBinding(ep.svcName, ep.svcID, n.ID(), ep.ID(), name, ep.virtualIP, ingressPorts, ep.svcAliases, ep.myAliases, ep.Iface().Address().IP, "deleteServiceInfoFromCluster"); err != nil {
+			if err := c.rmServiceBinding(ep.svcName, ep.svcID, n.ID(), ep.ID(), name, ep.virtualIP, ingressPorts, ep.svcAliases, ep.myAliases, ep.Iface().Address().IP, "deleteServiceInfoFromCluster", true); err != nil {
 				return err
 			}
 		} else {
@@ -900,7 +900,7 @@ func (c *controller) handleEpTableEvent(ev events.Event) {
 		logrus.Debugf("handleEpTableEvent DEL %s R:%v", eid, epRec)
 		if svcID != "" {
 			// This is a remote task part of a service
-			if err := c.rmServiceBinding(svcName, svcID, nid, eid, containerName, vip, ingressPorts, serviceAliases, taskAliases, ip, "handleEpTableEvent"); err != nil {
+			if err := c.rmServiceBinding(svcName, svcID, nid, eid, containerName, vip, ingressPorts, serviceAliases, taskAliases, ip, "handleEpTableEvent", true); err != nil {
 				logrus.Errorf("failed removing service binding for %s epRec:%v err:%s", eid, epRec, err)
 				return
 			}

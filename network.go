@@ -1002,12 +1002,6 @@ func (n *network) delete(force bool) error {
 
 	c.cleanupServiceBindings(n.ID())
 
-	// The network had been left, the service discovery can be cleaned up
-	c.Lock()
-	logrus.Debugf("network %s delete, clean svcRecords", n.id)
-	delete(c.svcRecords, n.id)
-	c.Unlock()
-
 removeFromStore:
 	// deleteFromStore performs an atomic delete operation and the
 	// network.epCnt will help prevent any possible
