@@ -20,24 +20,30 @@ func (c *controller) addEndpointNameResolution(svcName, svcID, nID, eID, contain
 	// Add container resolution mappings
 	c.addContainerNameResolution(nID, eID, containerName, taskAliases, ip, method)
 
+	serviceID := svcID
+	if serviceID == "" {
+		// This is the case of a normal container not part of a service
+		serviceID = eID
+	}
+
 	// Add endpoint IP to special "tasks.svc_name" so that the applications have access to DNS RR.
-	n.(*network).addSvcRecords(eID, "tasks."+svcName, svcID, ip, nil, false, method)
+	n.(*network).addSvcRecords(eID, "tasks."+svcName, serviceID, ip, nil, false, method)
 	for _, alias := range serviceAliases {
-		n.(*network).addSvcRecords(eID, "tasks."+alias, svcID, ip, nil, false, method)
+		n.(*network).addSvcRecords(eID, "tasks."+alias, serviceID, ip, nil, false, method)
 	}
 
 	// Add service name to vip in DNS, if vip is valid. Otherwise resort to DNS RR
 	if len(vip) == 0 {
-		n.(*network).addSvcRecords(eID, svcName, eID, ip, nil, false, method)
+		n.(*network).addSvcRecords(eID, svcName, serviceID, ip, nil, false, method)
 		for _, alias := range serviceAliases {
-			n.(*network).addSvcRecords(eID, alias, eID, ip, nil, false, method)
+			n.(*network).addSvcRecords(eID, alias, serviceID, ip, nil, false, method)
 		}
 	}
 
 	if addService && len(vip) != 0 {
-		n.(*network).addSvcRecords(eID, svcName, svcID, vip, nil, false, method)
+		n.(*network).addSvcRecords(eID, svcName, serviceID, vip, nil, false, method)
 		for _, alias := range serviceAliases {
-			n.(*network).addSvcRecords(eID, alias, svcID, vip, nil, false, method)
+			n.(*network).addSvcRecords(eID, alias, serviceID, vip, nil, false, method)
 		}
 	}
 
@@ -73,27 +79,33 @@ func (c *controller) deleteEndpointNameResolution(svcName, svcID, nID, eID, cont
 	// Delete container resolution mappings
 	c.delContainerNameResolution(nID, eID, containerName, taskAliases, ip, method)
 
+	serviceID := svcID
+	if serviceID == "" {
+		// This is the case of a normal container not part of a service
+		serviceID = eID
+	}
+
 	// Delete the special "tasks.svc_name" backend record.
 	if !multipleEntries {
-		n.(*network).deleteSvcRecords(eID, "tasks."+svcName, svcID, ip, nil, false, method)
+		n.(*network).deleteSvcRecords(eID, "tasks."+svcName, serviceID, ip, nil, false, method)
 		for _, alias := range serviceAliases {
-			n.(*network).deleteSvcRecords(eID, "tasks."+alias, svcID, ip, nil, false, method)
+			n.(*network).deleteSvcRecords(eID, "tasks."+alias, serviceID, ip, nil, false, method)
 		}
 	}
 
 	// If we are doing DNS RR delete the endpoint IP from DNS record right away.
 	if !multipleEntries && len(vip) == 0 {
-		n.(*network).deleteSvcRecords(eID, svcName, eID, ip, nil, false, method)
+		n.(*network).deleteSvcRecords(eID, svcName, serviceID, ip, nil, false, method)
 		for _, alias := range serviceAliases {
-			n.(*network).deleteSvcRecords(eID, alias, eID, ip, nil, false, method)
+			n.(*network).deleteSvcRecords(eID, alias, serviceID, ip, nil, false, method)
 		}
 	}
 
 	// Remove the DNS record for VIP only if we are removing the service
 	if rmService && len(vip) != 0 && !multipleEntries {
-		n.(*network).deleteSvcRecords(eID, svcName, svcID, vip, nil, false, method)
+		n.(*network).deleteSvcRecords(eID, svcName, serviceID, vip, nil, false, method)
 		for _, alias := range serviceAliases {
-			n.(*network).deleteSvcRecords(eID, alias, svcID, vip, nil, false, method)
+			n.(*network).deleteSvcRecords(eID, alias, serviceID, vip, nil, false, method)
 		}
 	}
 
