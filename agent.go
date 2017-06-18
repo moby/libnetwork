@@ -648,13 +648,13 @@ func (ep *endpoint) addServiceInfoToCluster(sb *sandbox) error {
 		TaskAliases:  ep.myAliases,
 		EndpointIP:   ep.Iface().Address().IP.String(),
 	})
-
 	if err != nil {
 		return err
 	}
 
 	if agent != nil {
 		if err := agent.networkDB.CreateEntry(libnetworkEPTable, n.ID(), ep.ID(), buf); err != nil {
+			logrus.Warnf("addServiceInfoToCluster NetworkDB CreateEntry failed for %s %s err:%s", ep.id, n.id, err)
 			return err
 		}
 	}
@@ -686,6 +686,13 @@ func (ep *endpoint) deleteServiceInfoFromCluster(sb *sandbox, method string) err
 		name = ep.MyAliases()[0]
 	}
 
+	if agent != nil {
+		// First delete from networkDB then locally
+		if err := agent.networkDB.DeleteEntry(libnetworkEPTable, n.ID(), ep.ID()); err != nil {
+			logrus.Warnf("deleteServiceInfoFromCluster NetworkDB DeleteEntry failed for %s %s err:%s", ep.id, n.id, err)
+		}
+	}
+
 	if ep.Iface().Address() != nil {
 		if ep.svcID != "" {
 			// This is a task part of a service
@@ -701,12 +708,6 @@ func (ep *endpoint) deleteServiceInfoFromCluster(sb *sandbox, method string) err
 			if err := c.delContainerNameResolution(n.ID(), ep.ID(), name, ep.myAliases, ep.Iface().Address().IP, "deleteServiceInfoFromCluster"); err != nil {
 				return err
 			}
-		}
-	}
-
-	if agent != nil {
-		if err := agent.networkDB.DeleteEntry(libnetworkEPTable, n.ID(), ep.ID()); err != nil {
-			return err
 		}
 	}
 
