@@ -194,7 +194,7 @@ func (nDB *NetworkDB) handleNetworkEvent(nEvent *NetworkEvent) bool {
 	return true
 }
 
-func (nDB *NetworkDB) handleTableEvent(tEvent *TableEvent) bool {
+func (nDB *NetworkDB) handleTableEvent(tEvent *TableEvent, isBulkSync bool) bool {
 	// Update our local clock if the received messages has newer
 	// time.
 	nDB.tableClock.Witness(tEvent.LTime)
@@ -220,6 +220,12 @@ func (nDB *NetworkDB) handleTableEvent(tEvent *TableEvent) bool {
 		if e.ltime >= tEvent.LTime {
 			return false
 		}
+	}
+
+	if err == nil {
+		logrus.Debugf("handleTableEvent %t %s %d >= %d type:%s", isBulkSync, tEvent.Key, tEvent.LTime, e.ltime, TableEvent_Type_name[int32(tEvent.Type)])
+	} else {
+		logrus.Debugf("handleTableEvent %t %s lt:%d type:%s", isBulkSync, tEvent.Key, tEvent.LTime, TableEvent_Type_name[int32(tEvent.Type)])
 	}
 
 	e = &entry{
@@ -279,7 +285,7 @@ func (nDB *NetworkDB) handleTableMessage(buf []byte, isBulkSync bool) {
 	}
 
 	// Do not rebroadcast a bulk sync
-	if rebroadcast := nDB.handleTableEvent(&tEvent); rebroadcast && !isBulkSync {
+	if rebroadcast := nDB.handleTableEvent(&tEvent, isBulkSync); rebroadcast && !isBulkSync {
 		var err error
 		buf, err = encodeRawMessage(MessageTypeTableEvent, buf)
 		if err != nil {

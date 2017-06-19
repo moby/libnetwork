@@ -2,7 +2,7 @@ SERVER
 
 cd test/networkdb/server
 env GOOS=linux go build -v server/ndbTester.go
-docker build -t fcrisciani/networkdb-test -f server/Dockerfile
+docker build -t fcrisciani/networkdb-test -f server/Dockerfile .
 ./spawn_cluster.sh
 
 CLIENT

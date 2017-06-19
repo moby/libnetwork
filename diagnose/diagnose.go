@@ -6,6 +6,8 @@ import (
 	"net"
 	"net/http"
 	"sync"
+
+	"github.com/Sirupsen/logrus"
 )
 
 // HTTPHandlerFunc TODO
@@ -63,12 +65,14 @@ func (n *Server) EnableDebug(ip string, port int) {
 	n.port = port
 	listeningAddr := fmt.Sprintf("%s:%d", ip, port)
 
+	logrus.SetLevel(logrus.DebugLevel)
+
 	if n.sk != nil {
-		fmt.Printf("The server is already up and running")
+		logrus.Infof("The server is already up and running")
 		return
 	}
 
-	fmt.Printf("Starting the server listening on %d for commands\n", port)
+	logrus.Infof("Starting the server listening on %d for commands\n", port)
 
 	// Create the socket
 	var err error

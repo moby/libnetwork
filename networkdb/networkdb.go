@@ -299,6 +299,7 @@ func (nDB *NetworkDB) CreateEntry(tname, nid, key string, value []byte) error {
 		return fmt.Errorf("cannot send create event for table %s, %v", tname, err)
 	}
 
+	logrus.Debugf("CreateEntry %s lt:%d", key, entry.ltime)
 	nDB.Lock()
 	nDB.indexes[byTable].Insert(fmt.Sprintf("/%s/%s/%s", tname, nid, key), entry)
 	nDB.indexes[byNetwork].Insert(fmt.Sprintf("/%s/%s/%s", nid, tname, key), entry)
@@ -371,6 +372,7 @@ func (nDB *NetworkDB) DeleteEntry(tname, nid, key string) error {
 		return fmt.Errorf("cannot send table delete event: %v", err)
 	}
 
+	logrus.Debugf("DeleteEntry %s lt:%d", key, entry.ltime)
 	nDB.Lock()
 	nDB.indexes[byTable].Insert(fmt.Sprintf("/%s/%s/%s", tname, nid, key), entry)
 	nDB.indexes[byNetwork].Insert(fmt.Sprintf("/%s/%s/%s", nid, tname, key), entry)

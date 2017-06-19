@@ -4,6 +4,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/hashicorp/memberlist"
 	"github.com/hashicorp/serf/serf"
 )
@@ -111,9 +112,17 @@ type tableEventMessage struct {
 	key   string
 	msg   []byte
 	node  string
+	lTime serf.LamportTime
 }
 
 func (m *tableEventMessage) Invalidates(other memberlist.Broadcast) bool {
+	// msg := other.(*tableEventMessage)
+	msg := other.(*tableEventMessage)
+	if m.key == msg.key && m.tname == msg.tname {
+		logrus.Infof("Compare m{%s, %s, lt:%d} >= other{%s, %s, lt:%d}", m.key, m.node, m.lTime, msg.key, msg.node, msg.lTime)
+		return m.lTime > msg.GetLamportTime()
+	}
+
 	return false
 }
 
@@ -122,6 +131,10 @@ func (m *tableEventMessage) Message() []byte {
 }
 
 func (m *tableEventMessage) Finished() {
+}
+
+func (m *tableEventMessage) GetLamportTime() serf.LamportTime {
+	return m.lTime
 }
 
 func (nDB *NetworkDB) sendTableEvent(event TableEvent_Type, nid string, tname string, key string, entry *entry) error {
@@ -166,6 +179,7 @@ func (nDB *NetworkDB) sendTableEvent(event TableEvent_Type, nid string, tname st
 		tname: tname,
 		key:   key,
 		node:  nDB.config.NodeName,
+		lTime: entry.ltime,
 	})
 	return nil
 }
