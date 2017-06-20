@@ -118,9 +118,12 @@ type tableEventMessage struct {
 func (m *tableEventMessage) Invalidates(other memberlist.Broadcast) bool {
 	// msg := other.(*tableEventMessage)
 	msg := other.(*tableEventMessage)
-	if m.key == msg.key && m.tname == msg.tname {
-		logrus.Infof("Compare m{%s, %s, lt:%d} >= other{%s, %s, lt:%d}", m.key, m.node, m.lTime, msg.key, msg.node, msg.lTime)
-		return m.lTime > msg.GetLamportTime()
+	if m.tname == msg.tname &&
+		m.id == msg.id &&
+		m.key == msg.key &&
+		m.lTime >= msg.lTime {
+		logrus.Infof("Invalidate m{%s, %s, lt:%d} >= other{%s, %s, lt:%d}", m.key, m.node, m.lTime, msg.key, msg.node, msg.lTime)
+		return true
 	}
 
 	return false

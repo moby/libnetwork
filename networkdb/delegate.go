@@ -313,6 +313,7 @@ func (nDB *NetworkDB) handleTableMessage(buf []byte, isBulkSync bool) {
 			tname: tEvent.TableName,
 			key:   tEvent.Key,
 			node:  nDB.config.NodeName,
+			lTime: tEvent.LTime,
 		})
 	}
 }

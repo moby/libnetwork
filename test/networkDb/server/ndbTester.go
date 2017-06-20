@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"strconv"
 	"time"
@@ -16,12 +17,21 @@ import (
 var nDB *networkdb.NetworkDB
 var server diagnose.Server
 var localNodeName string
+var ipAddr string
+
+var testerPaths2Func = map[string]diagnose.HTTPHandlerFunc{
+	"/myip": ipaddress,
+}
+
+func ipaddress(ctx interface{}, w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "%s\n", ipAddr)
+}
 
 func main() {
 	if len(os.Args) < 3 {
 		log.Fatal("You need to specify node name and port number")
 	}
-	localNodeName = os.Args[1]
+	localNodeName = os.Getenv("TASK_ID")
 	port, _ := strconv.Atoi(os.Args[2])
 
 	ip, err := getIPpInterface("eth0")
@@ -29,14 +39,14 @@ func main() {
 		fmt.Fprintf(os.Stderr, "%s There was a problem with the IP %s\n", localNodeName, err)
 		return
 	}
-
-	fmt.Printf("%s uses IP %s\n", localNodeName, ip)
+	ipAddr = ip
+	fmt.Printf("%s uses IP %s\n", localNodeName, ipAddr)
 
 	server = diagnose.Server{}
 	server.Init()
 	nDB, err = networkdb.New(&networkdb.Config{
-		AdvertiseAddr: ip,
-		BindAddr:      ip,
+		AdvertiseAddr: ipAddr,
+		BindAddr:      ipAddr,
 		NodeName:      localNodeName,
 	})
 	if err != nil {
@@ -46,6 +56,7 @@ func main() {
 
 	// Register network db handlers
 	server.RegisterHandler(nDB, networkdb.NetDbPaths2Func)
+	server.RegisterHandler(nil, testerPaths2Func)
 	server.EnableDebug("", port)
 	time.Sleep(120 * time.Minute)
 }

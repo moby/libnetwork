@@ -354,6 +354,8 @@ func (nDB *NetworkDB) reapTableEntries() {
 		nid := params[1]
 		key := params[2]
 
+		logrus.Debugf("Reap time expired deleting %s %s", nid, key)
+
 		if _, ok := nDB.indexes[byTable].Delete(fmt.Sprintf("/%s/%s/%s", tname, nid, key)); !ok {
 			logrus.Errorf("Could not delete entry in table %s with network id %s and key %s as it does not exist", tname, nid, key)
 		}
