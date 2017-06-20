@@ -538,6 +538,9 @@ func (nDB *NetworkDB) LeaveNetwork(nid string) error {
 
 	nDB.Lock()
 	defer nDB.Unlock()
+
+	logrus.Debugf("%s: leave network %s", nDB.config.NodeName, nid)
+
 	var (
 		paths   []string
 		entries []*entry

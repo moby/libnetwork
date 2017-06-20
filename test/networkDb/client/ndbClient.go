@@ -158,14 +158,14 @@ func doWriteDeleteLeaveJoin(ctx context.Context, port, key string, doneCh chan i
 			x++
 			time.Sleep(100 * time.Millisecond)
 			// leave network
-			fmt.Fprintf(os.Stderr, "%s Leave network\n", key)
+			// fmt.Fprintf(os.Stderr, "%s Leave network\n", key)
 			err = leaveNetwork(port, "test")
 			if err != nil {
 				//error
 			}
 			time.Sleep(100 * time.Millisecond)
 			// join network
-			fmt.Fprintf(os.Stderr, "%s Join network\n", key)
+			// fmt.Fprintf(os.Stderr, "%s Join network\n", key)
 			err = joinNetwork(port, "test")
 			if err != nil {
 				//error
