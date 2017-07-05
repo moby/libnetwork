@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/docker/libnetwork/diagnose"
 	"github.com/docker/libnetwork/networkdb"
 )
@@ -36,11 +37,11 @@ func main() {
 
 	ip, err := getIPpInterface("eth0")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s There was a problem with the IP %s\n", localNodeName, err)
+		logrus.Errorf("%s There was a problem with the IP %s\n", localNodeName, err)
 		return
 	}
 	ipAddr = ip
-	fmt.Printf("%s uses IP %s\n", localNodeName, ipAddr)
+	logrus.Infof("%s uses IP %s\n", localNodeName, ipAddr)
 
 	server = diagnose.Server{}
 	server.Init()
@@ -50,7 +51,7 @@ func main() {
 		NodeName:      localNodeName,
 	})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s error in the DB init %s\n", localNodeName, err)
+		logrus.Infof("%s error in the DB init %s\n", localNodeName, err)
 		return
 	}
 

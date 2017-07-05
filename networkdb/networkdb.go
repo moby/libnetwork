@@ -205,6 +205,7 @@ func New(c *Config) (*NetworkDB, error) {
 // instances passed by the caller in the form of addr:port
 func (nDB *NetworkDB) Join(members []string) error {
 	nDB.Lock()
+	nDB.bootStrapIP = make([]net.IP, 0, len(members))
 	for _, m := range members {
 		nDB.bootStrapIP = append(nDB.bootStrapIP, net.ParseIP(m))
 	}
@@ -512,11 +513,11 @@ func (nDB *NetworkDB) JoinNetwork(nid string) error {
 	networkNodes := nDB.networkNodes[nid]
 	nDB.Unlock()
 
+	logrus.Debugf("%s: joined network %s nodes:%v", nDB.config.NodeName, nid, networkNodes)
 	if err := nDB.sendNetworkEvent(nid, NetworkEventTypeJoin, ltime); err != nil {
 		return fmt.Errorf("failed to send leave network event for %s: %v", nid, err)
 	}
 
-	logrus.Debugf("%s: joined network %s", nDB.config.NodeName, nid)
 	if _, err := nDB.bulkSync(networkNodes, true); err != nil {
 		logrus.Errorf("Error bulk syncing while joining network %s: %v", nid, err)
 	}

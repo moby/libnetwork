@@ -4,7 +4,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/hashicorp/memberlist"
 	"github.com/hashicorp/serf/serf"
 )
@@ -112,21 +111,11 @@ type tableEventMessage struct {
 	key   string
 	msg   []byte
 	node  string
-	lTime serf.LamportTime
 }
 
 func (m *tableEventMessage) Invalidates(other memberlist.Broadcast) bool {
-	// msg := other.(*tableEventMessage)
-	msg := other.(*tableEventMessage)
-	if m.tname == msg.tname &&
-		m.id == msg.id &&
-		m.key == msg.key &&
-		m.lTime >= msg.lTime {
-		logrus.Infof("Invalidate m{%s, %s, lt:%d} >= other{%s, %s, lt:%d}", m.key, m.node, m.lTime, msg.key, msg.node, msg.lTime)
-		return true
-	}
-
-	return false
+	otherm := other.(*tableEventMessage)
+	return m.tname == otherm.tname && m.id == otherm.id && m.key == otherm.key
 }
 
 func (m *tableEventMessage) Message() []byte {
@@ -134,10 +123,6 @@ func (m *tableEventMessage) Message() []byte {
 }
 
 func (m *tableEventMessage) Finished() {
-}
-
-func (m *tableEventMessage) GetLamportTime() serf.LamportTime {
-	return m.lTime
 }
 
 func (nDB *NetworkDB) sendTableEvent(event TableEvent_Type, nid string, tname string, key string, entry *entry) error {
@@ -182,7 +167,6 @@ func (nDB *NetworkDB) sendTableEvent(event TableEvent_Type, nid string, tname st
 		tname: tname,
 		key:   key,
 		node:  nDB.config.NodeName,
-		lTime: entry.ltime,
 	})
 	return nil
 }

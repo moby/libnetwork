@@ -183,10 +183,10 @@ func (nDB *NetworkDB) retryJoin(members []string, stop <-chan struct{}) {
 				logrus.Errorf("Failed to join memberlist %s on retry: %v", members, err)
 				continue
 			}
-			if err := nDB.sendNodeEvent(NodeEventTypeJoin); err != nil {
-				logrus.Errorf("failed to send node join on retry: %v", err)
-				continue
-			}
+			// if err := nDB.sendNodeEvent(NodeEventTypeJoin); err != nil {
+			// 	logrus.Errorf("failed to send node join on retry: %v", err)
+			// 	continue
+			// }
 			return
 		case <-stop:
 			return
@@ -199,15 +199,15 @@ func (nDB *NetworkDB) clusterJoin(members []string) error {
 	mlist := nDB.memberlist
 
 	if _, err := mlist.Join(members); err != nil {
-		// Incase of failure, keep retrying join until it succeeds or the cluster is shutdown.
+		// In case of failure, keep retrying join until it succeeds or the cluster is shutdown.
 		go nDB.retryJoin(members, nDB.stopCh)
 
 		return fmt.Errorf("could not join node to memberlist: %v", err)
 	}
 
-	if err := nDB.sendNodeEvent(NodeEventTypeJoin); err != nil {
-		return fmt.Errorf("failed to send node join: %v", err)
-	}
+	// if err := nDB.sendNodeEvent(NodeEventTypeJoin); err != nil {
+	// 	return fmt.Errorf("failed to send node join: %v", err)
+	// }
 
 	return nil
 }
@@ -215,9 +215,9 @@ func (nDB *NetworkDB) clusterJoin(members []string) error {
 func (nDB *NetworkDB) clusterLeave() error {
 	mlist := nDB.memberlist
 
-	if err := nDB.sendNodeEvent(NodeEventTypeLeave); err != nil {
-		logrus.Errorf("failed to send node leave: %v", err)
-	}
+	// if err := nDB.sendNodeEvent(NodeEventTypeLeave); err != nil {
+	// 	logrus.Errorf("failed to send node leave: %v", err)
+	// }
 
 	if err := mlist.Leave(time.Second); err != nil {
 		return err
@@ -283,9 +283,9 @@ func (nDB *NetworkDB) reconnectNode() {
 		return
 	}
 
-	if err := nDB.sendNodeEvent(NodeEventTypeJoin); err != nil {
-		return
-	}
+	// if err := nDB.sendNodeEvent(NodeEventTypeJoin); err != nil {
+	// 	return
+	// }
 
 	// Update all the local table state to a new time to
 	// force update on the node we are trying to rejoin, just in
@@ -373,7 +373,6 @@ func (nDB *NetworkDB) gossip() {
 	thisNodeNetworks := nDB.networks[nDB.config.NodeName]
 	for nid := range thisNodeNetworks {
 		networkNodes[nid] = nDB.networkNodes[nid]
-
 	}
 	nDB.RUnlock()
 

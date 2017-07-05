@@ -195,7 +195,7 @@ func writeAndDelete(writerList []string, keyBase string) {
 	}
 
 	// Stop when stable
-	stableResult := 3
+	stableResult := 10
 	start := time.Now().UnixNano()
 	for {
 		time.Sleep(2 * time.Second)
@@ -217,7 +217,7 @@ func writeAndDelete(writerList []string, keyBase string) {
 					equal++
 				} else {
 					equal = 0
-					stableResult = 3
+					stableResult = 10
 				}
 			}
 			prev = body
