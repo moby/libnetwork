@@ -101,6 +101,11 @@ type PeerInfo struct {
 	IP   string
 }
 
+// PeerClusterInfo represents the peer (gossip cluster) nodes
+type PeerClusterInfo struct {
+	PeerInfo
+}
+
 type node struct {
 	memberlist.Node
 	ltime serf.LamportTime
@@ -200,6 +205,7 @@ func New(c *Config) (*NetworkDB, error) {
 // instances passed by the caller in the form of addr:port
 func (nDB *NetworkDB) Join(members []string) error {
 	nDB.Lock()
+	nDB.bootStrapIP = make([]net.IP, 0, len(members))
 	for _, m := range members {
 		nDB.bootStrapIP = append(nDB.bootStrapIP, net.ParseIP(m))
 	}
@@ -227,6 +233,20 @@ func (nDB *NetworkDB) Peers(nid string) []PeerInfo {
 				IP:   node.Addr.String(),
 			})
 		}
+	}
+	return peers
+}
+
+// ClusterPeers returns all the gossip cluster peers.
+func (nDB *NetworkDB) ClusterPeers() []PeerInfo {
+	nDB.RLock()
+	defer nDB.RUnlock()
+	peers := make([]PeerInfo, 0, len(nDB.nodes))
+	for _, node := range nDB.nodes {
+		peers = append(peers, PeerInfo{
+			Name: node.Name,
+			IP:   node.Node.Addr.String(),
+		})
 	}
 	return peers
 }
@@ -280,6 +300,7 @@ func (nDB *NetworkDB) CreateEntry(tname, nid, key string, value []byte) error {
 		return fmt.Errorf("cannot send create event for table %s, %v", tname, err)
 	}
 
+	logrus.Debugf("CreateEntry %s lt:%d", key, entry.ltime)
 	nDB.Lock()
 	nDB.indexes[byTable].Insert(fmt.Sprintf("/%s/%s/%s", tname, nid, key), entry)
 	nDB.indexes[byNetwork].Insert(fmt.Sprintf("/%s/%s/%s", nid, tname, key), entry)
@@ -352,6 +373,7 @@ func (nDB *NetworkDB) DeleteEntry(tname, nid, key string) error {
 		return fmt.Errorf("cannot send table delete event: %v", err)
 	}
 
+	logrus.Debugf("DeleteEntry %s lt:%d", key, entry.ltime)
 	nDB.Lock()
 	nDB.indexes[byTable].Insert(fmt.Sprintf("/%s/%s/%s", tname, nid, key), entry)
 	nDB.indexes[byNetwork].Insert(fmt.Sprintf("/%s/%s/%s", nid, tname, key), entry)
@@ -491,11 +513,11 @@ func (nDB *NetworkDB) JoinNetwork(nid string) error {
 	networkNodes := nDB.networkNodes[nid]
 	nDB.Unlock()
 
+	logrus.Debugf("%s: joined network %s nodes:%v", nDB.config.NodeName, nid, networkNodes)
 	if err := nDB.sendNetworkEvent(nid, NetworkEventTypeJoin, ltime); err != nil {
 		return fmt.Errorf("failed to send leave network event for %s: %v", nid, err)
 	}
 
-	logrus.Debugf("%s: joined network %s", nDB.config.NodeName, nid)
 	if _, err := nDB.bulkSync(networkNodes, true); err != nil {
 		logrus.Errorf("Error bulk syncing while joining network %s: %v", nid, err)
 	}
@@ -517,6 +539,9 @@ func (nDB *NetworkDB) LeaveNetwork(nid string) error {
 
 	nDB.Lock()
 	defer nDB.Unlock()
+
+	logrus.Debugf("%s: leave network %s", nDB.config.NodeName, nid)
+
 	var (
 		paths   []string
 		entries []*entry

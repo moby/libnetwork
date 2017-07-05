@@ -2,6 +2,8 @@ package serf
 
 import (
 	"sync/atomic"
+
+	"github.com/Sirupsen/logrus"
 )
 
 // LamportClock is a thread safe implementation of a lamport clock. It
@@ -34,7 +36,7 @@ WITNESS:
 	if other < cur {
 		return
 	}
-
+	logrus.Debugf("Witness and bumping %d -> %d", cur, other+1)
 	// Ensure that our local clock is at least one ahead.
 	if !atomic.CompareAndSwapUint64(&l.counter, cur, other+1) {
 		// The CAS failed, so we just retry. Eventually our CAS should

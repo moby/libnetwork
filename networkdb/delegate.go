@@ -27,6 +27,7 @@ func (nDB *NetworkDB) getNode(nEvent *NodeEvent) *node {
 		nDB.nodes,
 	} {
 		if n, ok := nodes[nEvent.NodeName]; ok {
+			// logrus.Debugf("getNode for %s eventLt:%d >= nodeLt:%d if:%t", nEvent.NodeName, nEvent.LTime, n.ltime, n.ltime >= nEvent.LTime)
 			if n.ltime >= nEvent.LTime {
 				return nil
 			}
@@ -81,16 +82,25 @@ func (nDB *NetworkDB) purgeSameNode(n *node) {
 	}
 }
 
-func (nDB *NetworkDB) handleNodeEvent(nEvent *NodeEvent) bool {
-	// Update our local clock if the received messages has newer
-	// time.
-	nDB.networkClock.Witness(nEvent.LTime)
+func (nDB *NetworkDB) handleNodeEvent(nEvent *NodeEvent, tcpSync bool) bool {
+
+	if !tcpSync {
+		logrus.Debugf("handleNodeMessage sync:%t %s NodeMessage {t:%s lt:%d Src:%s}", tcpSync, nDB.config.NodeName, NodeEvent_Type_name[int32(nEvent.Type)], nEvent.LTime, nEvent.NodeName)
+	}
 
 	n := nDB.getNode(nEvent)
 	if n == nil {
 		return false
 	}
-	// If its a node leave event for a manager and this is the only manager we
+
+	logrus.Debugf("handleNodeMessage processing sync:%t %s NodeMessage {t:%s lt:%d Src:%s}", tcpSync, nDB.config.NodeName, NodeEvent_Type_name[int32(nEvent.Type)], nEvent.LTime, nEvent.NodeName)
+
+	// Update our local clock if the received messages has newer
+	// time.
+	// logrus.Debugf("Witnessing handleNodeEvent my:%d evt:%d", nDB.networkClock.Time(), nEvent.LTime)
+	// nDB.networkClock.Witness(nEvent.LTime)
+
+	// If it is a node leave event for a manager and this is the only manager we
 	// know of we want the reconnect logic to kick in. In a single manager
 	// cluster manager's gossip can't be bootstrapped unless some other node
 	// connects to it.
@@ -113,7 +123,7 @@ func (nDB *NetworkDB) handleNodeEvent(nEvent *NodeEvent) bool {
 		nDB.Lock()
 		nDB.nodes[n.Name] = n
 		nDB.Unlock()
-		logrus.Infof("Node join event for %s/%s", n.Name, n.Addr)
+		logrus.Infof("Node %s join event for %s/%s", nDB.config.NodeName, n.Name, n.Addr)
 		return true
 	case NodeEventTypeLeave:
 		nDB.Lock()
@@ -126,11 +136,14 @@ func (nDB *NetworkDB) handleNodeEvent(nEvent *NodeEvent) bool {
 	return false
 }
 
-func (nDB *NetworkDB) handleNetworkEvent(nEvent *NetworkEvent) bool {
+func (nDB *NetworkDB) handleNetworkEvent(nEvent *NetworkEvent, tcpSync bool) bool {
 	var flushEntries bool
 	// Update our local clock if the received messages has newer
 	// time.
-	nDB.networkClock.Witness(nEvent.LTime)
+
+	if !tcpSync {
+		logrus.Debugf("handleNetworkEvent sync:%t %s NetworkEvent {t:%s lt:%d Src:%s Nid:%s}", tcpSync, nDB.config.NodeName, NetworkEvent_Type_name[int32(nEvent.Type)], nEvent.LTime, nEvent.NodeName, nEvent.NetworkID)
+	}
 
 	nDB.Lock()
 	defer func() {
@@ -162,12 +175,17 @@ func (nDB *NetworkDB) handleNetworkEvent(nEvent *NetworkEvent) bool {
 		nDB.networks[nEvent.NodeName] = nodeNetworks
 	}
 
+	// logrus.Debugf("Witnessing handleNetworkEvent my:%d evt:%d", nDB.networkClock.Time(), nEvent.LTime)
+	// nDB.networkClock.Witness(nEvent.LTime)
+
 	if n, ok := nodeNetworks[nEvent.NetworkID]; ok {
 		// We have the latest state. Ignore the event
 		// since it is stale.
 		if n.ltime >= nEvent.LTime {
 			return false
 		}
+
+		logrus.Debugf("handleNetworkEvent processing sync:%t %s NetworkEvent {t:%s lt:%d Src:%s Nid:%s}", tcpSync, nDB.config.NodeName, NetworkEvent_Type_name[int32(nEvent.Type)], nEvent.LTime, nEvent.NodeName, nEvent.NetworkID)
 
 		n.ltime = nEvent.LTime
 		n.leaving = nEvent.Type == NetworkEventTypeLeave
@@ -194,10 +212,14 @@ func (nDB *NetworkDB) handleNetworkEvent(nEvent *NetworkEvent) bool {
 	return true
 }
 
-func (nDB *NetworkDB) handleTableEvent(tEvent *TableEvent) bool {
+func (nDB *NetworkDB) handleTableEvent(tEvent *TableEvent, isBulkSync bool) bool {
 	// Update our local clock if the received messages has newer
 	// time.
-	nDB.tableClock.Witness(tEvent.LTime)
+	// nDB.tableClock.Witness(tEvent.LTime)
+
+	if !isBulkSync {
+		logrus.Debugf("handleTableMessage sync:%t %s TableEvent {t:%s lt:%d Src:%s, Table:%s Nid:%s ep:%s}", isBulkSync, nDB.config.NodeName, TableEvent_Type_name[int32(tEvent.Type)], tEvent.LTime, tEvent.NodeName, tEvent.TableName, tEvent.NetworkID, tEvent.Key)
+	}
 
 	// Ignore the table events for networks that are in the process of going away
 	nDB.RLock()
@@ -221,6 +243,14 @@ func (nDB *NetworkDB) handleTableEvent(tEvent *TableEvent) bool {
 			return false
 		}
 	}
+
+	logrus.Debugf("handleTableMessage processing isSync:%t %s TableEvent {t:%s lt:%d Src:%s, Table:%s Nid:%s ep:%s}", isBulkSync, nDB.config.NodeName, TableEvent_Type_name[int32(tEvent.Type)], tEvent.LTime, tEvent.NodeName, tEvent.TableName, tEvent.NetworkID, tEvent.Key)
+
+	// if err == nil {
+	// 	logrus.Debugf("handleTableEvent %t %s %d >= %d type:%s", isBulkSync, tEvent.Key, tEvent.LTime, e.ltime, TableEvent_Type_name[int32(tEvent.Type)])
+	// } else {
+	// 	logrus.Debugf("handleTableEvent %t %s lt:%d type:%s", isBulkSync, tEvent.Key, tEvent.LTime, TableEvent_Type_name[int32(tEvent.Type)])
+	// }
 
 	e = &entry{
 		ltime:    tEvent.LTime,
@@ -279,7 +309,8 @@ func (nDB *NetworkDB) handleTableMessage(buf []byte, isBulkSync bool) {
 	}
 
 	// Do not rebroadcast a bulk sync
-	if rebroadcast := nDB.handleTableEvent(&tEvent); rebroadcast && !isBulkSync {
+	if rebroadcast := nDB.handleTableEvent(&tEvent, isBulkSync); rebroadcast && !isBulkSync {
+		logrus.Debugf("handleTableMessage %s TableEvent {t:%s lt:%d Src:%s, Table:%s Nid:%s ep:%s} Rebroadcast YES", nDB.config.NodeName, TableEvent_Type_name[int32(tEvent.Type)], tEvent.LTime, tEvent.NodeName, tEvent.TableName, tEvent.NetworkID, tEvent.Key)
 		var err error
 		buf, err = encodeRawMessage(MessageTypeTableEvent, buf)
 		if err != nil {
@@ -318,7 +349,9 @@ func (nDB *NetworkDB) handleNodeMessage(buf []byte) {
 		return
 	}
 
-	if rebroadcast := nDB.handleNodeEvent(&nEvent); rebroadcast {
+	// logrus.Debugf("handleNodeMessage %s NodeMessage {t:%s lt:%d Src:%s}", nDB.config.NodeName, NodeEvent_Type_name[int32(nEvent.Type)], nEvent.LTime, nEvent.NodeName)
+	if rebroadcast := nDB.handleNodeEvent(&nEvent, false); rebroadcast {
+		logrus.Debugf("handleNodeMessage %s NodeMessage {t:%s lt:%d Src:%s} Rebroadcast YES", nDB.config.NodeName, NodeEvent_Type_name[int32(nEvent.Type)], nEvent.LTime, nEvent.NodeName)
 		var err error
 		buf, err = encodeRawMessage(MessageTypeNodeEvent, buf)
 		if err != nil {
@@ -339,7 +372,9 @@ func (nDB *NetworkDB) handleNetworkMessage(buf []byte) {
 		return
 	}
 
-	if rebroadcast := nDB.handleNetworkEvent(&nEvent); rebroadcast {
+	// logrus.Debugf("handleNetworkMessage %s NodeMessage {t:%s lt:%d Src:%s Nid:%s}", nDB.config.NodeName, NetworkEvent_Type_name[int32(nEvent.Type)], nEvent.LTime, nEvent.NodeName, nEvent.NetworkID)
+	if rebroadcast := nDB.handleNetworkEvent(&nEvent, false); rebroadcast {
+		logrus.Debugf("handleNetworkMessage %s NodeMessage {t:%s lt:%d Src:%s Nid:%s} Rebroadcast YES", nDB.config.NodeName, NetworkEvent_Type_name[int32(nEvent.Type)], nEvent.LTime, nEvent.NodeName, nEvent.NetworkID)
 		var err error
 		buf, err = encodeRawMessage(MessageTypeNetworkEvent, buf)
 		if err != nil {
@@ -362,9 +397,9 @@ func (nDB *NetworkDB) handleBulkSync(buf []byte) {
 		return
 	}
 
-	if bsm.LTime > 0 {
-		nDB.tableClock.Witness(bsm.LTime)
-	}
+	// if bsm.LTime > 0 {
+	// 	nDB.tableClock.Witness(bsm.LTime)
+	// }
 
 	nDB.handleMessage(bsm.Payload, true)
 
@@ -443,6 +478,8 @@ func (d *delegate) LocalState(join bool) []byte {
 	d.nDB.RLock()
 	defer d.nDB.RUnlock()
 
+	logrus.Debugf("LocalState invoked isJoin:%t my current time is:%d", join, d.nDB.networkClock.Time())
+
 	pp := NetworkPushPull{
 		LTime:    d.nDB.networkClock.Time(),
 		NodeName: d.nDB.config.NodeName,
@@ -491,12 +528,12 @@ func (d *delegate) MergeRemoteState(buf []byte, isJoin bool) {
 		return
 	}
 
-	nodeEvent := &NodeEvent{
-		LTime:    pp.LTime,
-		NodeName: pp.NodeName,
-		Type:     NodeEventTypeJoin,
-	}
-	d.nDB.handleNodeEvent(nodeEvent)
+	// nodeEvent := &NodeEvent{
+	// 	LTime:    pp.LTime,
+	// 	NodeName: pp.NodeName,
+	// 	Type:     NodeEventTypeJoin,
+	// }
+	// d.nDB.handleNodeEvent(nodeEvent, true)
 
 	for _, n := range pp.Networks {
 		nEvent := &NetworkEvent{
@@ -510,7 +547,7 @@ func (d *delegate) MergeRemoteState(buf []byte, isJoin bool) {
 			nEvent.Type = NetworkEventTypeLeave
 		}
 
-		d.nDB.handleNetworkEvent(nEvent)
+		d.nDB.handleNetworkEvent(nEvent, true)
 	}
 
 }

@@ -436,3 +436,39 @@ func TestNetworkDBCRUDMediumCluster(t *testing.T) {
 	log.Print("Closing DB instances...")
 	closeNetworkDBInstances(dbs)
 }
+
+func TestNetworkDBNodeJoinLeaveIteration(t *testing.T) {
+	dbs := createNetworkDBInstances(t, 2, "node")
+
+	err := dbs[0].JoinNetwork("network1")
+	assert.NoError(t, err)
+
+	if len(dbs[0].networkNodes["network1"]) != 1 {
+		t.Fatalf("The networkNodes list has to have be 1 instead of %d", len(dbs[0].networkNodes["network1"]))
+	}
+
+	err = dbs[1].JoinNetwork("network1")
+	assert.NoError(t, err)
+
+	if len(dbs[0].networkNodes["network1"]) != 2 {
+		t.Fatalf("The networkNodes list has to have be 2 instead of %d", len(dbs[0].networkNodes["network1"]))
+	}
+	if len(dbs[1].networkNodes["network1"]) != 2 {
+		t.Fatalf("The networkNodes list has to have be 2 instead of %d", len(dbs[0].networkNodes["network1"]))
+	}
+
+	err = dbs[0].LeaveNetwork("network1")
+	assert.NoError(t, err)
+	err = dbs[0].JoinNetwork("network1")
+	assert.NoError(t, err)
+
+	if len(dbs[0].networkNodes["network1"]) != 2 {
+		t.Fatalf("The networkNodes list has to have be 2 instead of %d", len(dbs[0].networkNodes["network1"]))
+	}
+	if len(dbs[1].networkNodes["network1"]) != 2 {
+		t.Fatalf("The networkNodes list has to have be 2 instead of %d", len(dbs[0].networkNodes["network1"]))
+	}
+
+	dbs[0].Close()
+	dbs[1].Close()
+}
