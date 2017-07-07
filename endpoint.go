@@ -2,6 +2,7 @@ package libnetwork
 
 import (
 	"container/heap"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -603,8 +604,10 @@ func (ep *endpoint) rename(name string) error {
 		return nil
 	}
 
+	ctx := context.WithValue(context.Background(), callerCtxKey, "rename")
+
 	if c.isAgent() {
-		if err = ep.deleteServiceInfoFromCluster(sb, "rename"); err != nil {
+		if err = ep.deleteServiceInfoFromCluster(ctx, sb); err != nil {
 			return types.InternalErrorf("Could not delete service state for endpoint %s from cluster on rename: %v", ep.Name(), err)
 		}
 	} else {
@@ -628,7 +631,7 @@ func (ep *endpoint) rename(name string) error {
 		}
 		defer func() {
 			if err != nil {
-				ep.deleteServiceInfoFromCluster(sb, "rename")
+				ep.deleteServiceInfoFromCluster(ctx, sb)
 				ep.name = oldName
 				ep.anonymous = oldAnonymous
 				ep.addServiceInfoToCluster(sb)
@@ -751,8 +754,9 @@ func (ep *endpoint) sbLeave(sb *sandbox, force bool, options ...EndpointOption) 
 	if err := n.getController().updateToStore(ep); err != nil {
 		return err
 	}
+	ctx := context.WithValue(context.Background(), callerCtxKey, "sbleave")
 
-	if e := ep.deleteServiceInfoFromCluster(sb, "sbLeave"); e != nil {
+	if e := ep.deleteServiceInfoFromCluster(ctx, sb); e != nil {
 		logrus.Errorf("Could not delete service state for endpoint %s from cluster: %v", ep.Name(), e)
 	}
 

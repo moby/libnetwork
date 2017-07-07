@@ -3,6 +3,7 @@ package libnetwork
 //go:generate protoc -I.:Godeps/_workspace/src/github.com/gogo/protobuf  --gogo_out=import_path=github.com/docker/libnetwork,Mgogoproto/gogo.proto=github.com/gogo/protobuf/gogoproto:. agent.proto
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -26,7 +27,10 @@ const (
 	subsysGossip = "networking:gossip"
 	subsysIPSec  = "networking:ipsec"
 	keyringSize  = 3
+	callerCtxKey = callerCtx("caller")
 )
+
+type callerCtx string
 
 // ByTime implements sort.Interface for []*types.EncryptionKey based on
 // the LamportTime field.
@@ -597,6 +601,8 @@ func (ep *endpoint) addServiceInfoToCluster(sb *sandbox) error {
 	defer sb.Service.Unlock()
 	logrus.Debugf("addServiceInfoToCluster START for %s %s", ep.svcName, ep.ID())
 
+	ctx := context.WithValue(context.Background(), callerCtxKey, "addServiceInfoToCluster")
+
 	// Check that the endpoint is still present on the sandbox before adding it to the service discovery.
 	// This is to handle a race between the EnableService and the sbLeave
 	// It is possible that the EnableService starts, fetches the list of the endpoints and
@@ -628,12 +634,12 @@ func (ep *endpoint) addServiceInfoToCluster(sb *sandbox) error {
 		if n.ingress {
 			ingressPorts = ep.ingressPorts
 		}
-		if err := c.addServiceBinding(ep.svcName, ep.svcID, n.ID(), ep.ID(), name, ep.virtualIP, ingressPorts, ep.svcAliases, ep.myAliases, ep.Iface().Address().IP, "addServiceInfoToCluster"); err != nil {
+		if err := c.addServiceBinding(ctx, ep.svcName, ep.svcID, n.ID(), ep.ID(), name, ep.virtualIP, ingressPorts, ep.svcAliases, ep.myAliases, ep.Iface().Address().IP); err != nil {
 			return err
 		}
 	} else {
 		// This is a container simply attached to an attachable network
-		if err := c.addContainerNameResolution(n.ID(), ep.ID(), name, ep.myAliases, ep.Iface().Address().IP, "addServiceInfoToCluster"); err != nil {
+		if err := c.addContainerNameResolution(ctx, n.ID(), ep.ID(), name, ep.myAliases, ep.Iface().Address().IP); err != nil {
 			return err
 		}
 	}
@@ -664,7 +670,7 @@ func (ep *endpoint) addServiceInfoToCluster(sb *sandbox) error {
 	return nil
 }
 
-func (ep *endpoint) deleteServiceInfoFromCluster(sb *sandbox, method string) error {
+func (ep *endpoint) deleteServiceInfoFromCluster(ctx context.Context, sb *sandbox) error {
 	if ep.isAnonymous() && len(ep.myAliases) == 0 {
 		return nil
 	}
@@ -676,7 +682,7 @@ func (ep *endpoint) deleteServiceInfoFromCluster(sb *sandbox, method string) err
 
 	sb.Service.Lock()
 	defer sb.Service.Unlock()
-	logrus.Debugf("deleteServiceInfoFromCluster from %s START for %s %s", method, ep.svcName, ep.ID())
+	logrus.Debugf("deleteServiceInfoFromCluster from %s START for %s %s", getCaller(ctx), ep.svcName, ep.ID())
 
 	c := n.getController()
 	agent := c.getAgent()
@@ -685,6 +691,7 @@ func (ep *endpoint) deleteServiceInfoFromCluster(sb *sandbox, method string) err
 	if ep.isAnonymous() {
 		name = ep.MyAliases()[0]
 	}
+	newCtx := context.WithValue(ctx, callerCtxKey, "deleteServiceInfoFromCluster")
 
 	if agent != nil {
 		// First delete from networkDB then locally
@@ -700,18 +707,18 @@ func (ep *endpoint) deleteServiceInfoFromCluster(sb *sandbox, method string) err
 			if n.ingress {
 				ingressPorts = ep.ingressPorts
 			}
-			if err := c.rmServiceBinding(ep.svcName, ep.svcID, n.ID(), ep.ID(), name, ep.virtualIP, ingressPorts, ep.svcAliases, ep.myAliases, ep.Iface().Address().IP, "deleteServiceInfoFromCluster", true); err != nil {
+			if err := c.rmServiceBinding(newCtx, ep.svcName, ep.svcID, n.ID(), ep.ID(), name, ep.virtualIP, ingressPorts, ep.svcAliases, ep.myAliases, ep.Iface().Address().IP, true); err != nil {
 				return err
 			}
 		} else {
 			// This is a container simply attached to an attachable network
-			if err := c.delContainerNameResolution(n.ID(), ep.ID(), name, ep.myAliases, ep.Iface().Address().IP, "deleteServiceInfoFromCluster"); err != nil {
+			if err := c.delContainerNameResolution(newCtx, n.ID(), ep.ID(), name, ep.myAliases, ep.Iface().Address().IP); err != nil {
 				return err
 			}
 		}
 	}
 
-	logrus.Debugf("deleteServiceInfoFromCluster from %s END for %s %s", method, ep.svcName, ep.ID())
+	logrus.Debugf("deleteServiceInfoFromCluster from %s END for %s %s", getCaller(ctx), ep.svcName, ep.ID())
 
 	return nil
 }
@@ -883,17 +890,19 @@ func (c *controller) handleEpTableEvent(ev events.Event) {
 		return
 	}
 
+	ctx := context.WithValue(context.Background(), callerCtxKey, "handleEpTableEvent")
+
 	if isAdd {
 		logrus.Debugf("handleEpTableEvent ADD %s R:%v", eid, epRec)
 		if svcID != "" {
 			// This is a remote task part of a service
-			if err := c.addServiceBinding(svcName, svcID, nid, eid, containerName, vip, ingressPorts, serviceAliases, taskAliases, ip, "handleEpTableEvent"); err != nil {
+			if err := c.addServiceBinding(ctx, svcName, svcID, nid, eid, containerName, vip, ingressPorts, serviceAliases, taskAliases, ip); err != nil {
 				logrus.Errorf("failed adding service binding for %s epRec:%v err:%s", eid, epRec, err)
 				return
 			}
 		} else {
 			// This is a remote container simply attached to an attachable network
-			if err := c.addContainerNameResolution(nid, eid, containerName, taskAliases, ip, "handleEpTableEvent"); err != nil {
+			if err := c.addContainerNameResolution(ctx, nid, eid, containerName, taskAliases, ip); err != nil {
 				logrus.Errorf("failed adding service binding for %s epRec:%v err:%s", eid, epRec, err)
 			}
 		}
@@ -901,15 +910,22 @@ func (c *controller) handleEpTableEvent(ev events.Event) {
 		logrus.Debugf("handleEpTableEvent DEL %s R:%v", eid, epRec)
 		if svcID != "" {
 			// This is a remote task part of a service
-			if err := c.rmServiceBinding(svcName, svcID, nid, eid, containerName, vip, ingressPorts, serviceAliases, taskAliases, ip, "handleEpTableEvent", true); err != nil {
+			if err := c.rmServiceBinding(ctx, svcName, svcID, nid, eid, containerName, vip, ingressPorts, serviceAliases, taskAliases, ip, true); err != nil {
 				logrus.Errorf("failed removing service binding for %s epRec:%v err:%s", eid, epRec, err)
 				return
 			}
 		} else {
 			// This is a remote container simply attached to an attachable network
-			if err := c.delContainerNameResolution(nid, eid, containerName, taskAliases, ip, "handleEpTableEvent"); err != nil {
+			if err := c.delContainerNameResolution(ctx, nid, eid, containerName, taskAliases, ip); err != nil {
 				logrus.Errorf("failed adding service binding for %s epRec:%v err:%s", eid, epRec, err)
 			}
 		}
 	}
+}
+
+func getCaller(ctx context.Context) string {
+	if value := ctx.Value(callerCtxKey); value != nil {
+		return value.(string)
+	}
+	return "unknown"
 }
