@@ -40,10 +40,15 @@ func (e *eventDelegate) NotifyJoin(mn *memberlist.Node) {
 }
 
 func (e *eventDelegate) NotifyLeave(mn *memberlist.Node) {
+	var failed bool
+	logrus.Infof("Node %s/%s, left gossip cluster", mn.Name, mn.Addr)
 	e.broadcastNodeEvent(mn.Addr, opDelete)
-	e.nDB.deleteNodeTableEntries(mn.Name)
-	e.nDB.deleteNetworkEntriesForNode(mn.Name)
+	// The node left or failed, delete all the entries created by it.
+	// If the node was temporary down, deleting the entries will guarantee that the CREATE events will be accepted
+	// If the node instead left because was going down, then it makes sense to just delete all its state
 	e.nDB.Lock()
+	e.nDB.deleteNetworkEntriesForNode(mn.Name)
+	e.nDB.deleteNodeTableEntries(mn.Name)
 	if n, ok := e.nDB.nodes[mn.Name]; ok {
 		delete(e.nDB.nodes, mn.Name)
 
@@ -51,8 +56,12 @@ func (e *eventDelegate) NotifyLeave(mn *memberlist.Node) {
 		// Explicit leave will have already removed the node from the list of nodes (nDB.nodes) and put it into the leftNodes map
 		n.reapTime = nodeReapInterval
 		e.nDB.failedNodes[mn.Name] = n
+		failed = true
 	}
 	e.nDB.Unlock()
+	if failed {
+		logrus.Infof("Node %s/%s, added to failed nodes list", mn.Name, mn.Addr)
+	}
 }
 
 func (e *eventDelegate) NotifyUpdate(n *memberlist.Node) {
