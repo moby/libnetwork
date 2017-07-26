@@ -6,8 +6,8 @@ import (
 	"net"
 	"strings"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/docker/libnetwork/iptables"
+	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 )
 
