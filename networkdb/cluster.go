@@ -547,13 +547,14 @@ func (nDB *NetworkDB) bulkSyncNode(networks []string, node string, unsolicited b
 
 			params := strings.Split(path[1:], "/")
 			tEvent := TableEvent{
-				Type:      eType,
-				LTime:     entry.ltime,
-				NodeName:  entry.node,
-				NetworkID: nid,
-				TableName: params[1],
-				Key:       params[2],
-				Value:     entry.value,
+				Type:           eType,
+				LTime:          entry.ltime,
+				NodeName:       entry.node,
+				NetworkID:      nid,
+				TableName:      params[1],
+				Key:            params[2],
+				Value:          entry.value,
+				NetworkEpochID: entry.networkEpochID,
 			}
 
 			msg, err := encodeMessage(MessageTypeTableEvent, &tEvent)

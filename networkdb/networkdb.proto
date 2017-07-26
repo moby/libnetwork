@@ -99,6 +99,13 @@ message NetworkEvent {
 	string node_name = 3;
 	// ID of the network for which the event is generated.
 	string network_id = 4 [(gogoproto.customname) = "NetworkID"];
+	// Current Epoch ID of the network on the originating node. In swarm 
+	// mode overlay networks are instantiated on a node only when there is
+	// a local task attached to that network. Network is cleaned up when
+	// the last task attachment to a network goes down. Network's Epoch ID
+	// and the Table entry's network Epoch ID help the nodes to drop old
+	// events
+	uint64 epoch_id = 5 [(gogoproto.customname) = "EpochID"];
 }
 
 // NetworkEntry for push pull of networks.
@@ -112,6 +119,8 @@ message NetworkEntry {
 	string node_name = 3;
 	// Indicates if a leave from this network is in progress.
 	bool leaving = 4;
+	// Current Epoch ID of the network on the originating node
+	uint64 epoch_id = 5 [(gogoproto.customname) = "EpochID"];
 }
 
 // NetworkPushpull message payload definition.
@@ -119,6 +128,8 @@ message NetworkPushPull {
 	// Lamport time when this push pull was initiated.
 	uint64 l_time = 1 [(gogoproto.customtype) = "github.com/hashicorp/serf/serf.LamportTime", (gogoproto.nullable) = false];
 	repeated NetworkEntry networks = 2;
+	// Name of the node sending this push pull payload
+	string node_name = 3 [(gogoproto.customname) = "NodeName"];
 }
 
 // TableEvent message payload definition.
@@ -152,6 +163,11 @@ message TableEvent {
 	string key = 6;
 	// Entry value.
 	bytes value = 7;
+	// Current Epoch ID of the network this table entry belongs to on the
+	// originating node. Epoch ID is used associate a Table event with the
+	// corresponding network instance and this allow the receiving nodes
+	// to drop Table events for the older instances of the network.
+	uint64 network_epoch_id = 8 [(gogoproto.customname) = "NetworkEpochID"];
 }
 
 // BulkSync message payload definition.

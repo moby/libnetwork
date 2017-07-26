@@ -146,7 +146,7 @@ func (nDB *NetworkDB) handleNetworkEvent(nEvent *NetworkEvent) bool {
 		//
 		// deleteNodeNetworkEntries takes nDB lock.
 		if flushEntries {
-			nDB.deleteNodeNetworkEntries(nEvent.NetworkID, nEvent.NodeName)
+			nDB.deleteNodeNetworkEntries(nEvent.NetworkID, nEvent.NodeName, nEvent.EpochID, nEvent.Type)
 		}
 	}()
 
@@ -166,11 +166,27 @@ func (nDB *NetworkDB) handleNetworkEvent(nEvent *NetworkEvent) bool {
 	}
 
 	if n, ok := nodeNetworks[nEvent.NetworkID]; ok {
+		// If a leave event is received late network state shouldn't
+		// be updated, but cleanup the old table entries.
+		if nEvent.Type == NetworkEventTypeLeave {
+			flushEntries = true
+		}
 		// We have the latest state. Ignore the event
 		// since it is stale.
 		if n.ltime >= nEvent.LTime {
 			return false
 		}
+		// On every node epoch ID is a monotonously increasing
+		// number. Its safe to discard older events if we have
+		// a higher number already.
+		if nEvent.EpochID != 0 && nEvent.EpochID <= n.epochID {
+			return false
+		}
+		// On a network join from a node, cleanup its table entries
+		// for this network with Epoch ID < current Epoch ID.
+		// On a network leave from a node, cleanup its table entries
+		// with Epoch ID <= current Epoch ID
+		flushEntries = true
 
 		n.ltime = nEvent.LTime
 		n.leaving = nEvent.Type == NetworkEventTypeLeave
@@ -194,8 +210,9 @@ func (nDB *NetworkDB) handleNetworkEvent(nEvent *NetworkEvent) bool {
 
 	// This remote network join is being seen the first time.
 	nodeNetworks[nEvent.NetworkID] = &network{
-		id:    nEvent.NetworkID,
-		ltime: nEvent.LTime,
+		id:      nEvent.NetworkID,
+		ltime:   nEvent.LTime,
+		epochID: nEvent.EpochID,
 	}
 
 	nDB.addNetworkNode(nEvent.NetworkID, nEvent.NodeName)
@@ -211,9 +228,32 @@ func (nDB *NetworkDB) handleTableEvent(tEvent *TableEvent) bool {
 	nDB.RLock()
 	networks := nDB.networks[nDB.config.NodeName]
 	network, ok := networks[tEvent.NetworkID]
+
+	peerNetworks := nDB.networks[tEvent.NodeName]
+	peerNetwork, peerOK := peerNetworks[tEvent.NetworkID]
 	nDB.RUnlock()
+
 	if !ok || network.leaving {
 		return true
+	}
+
+	// If we haven't heard of this network from the peer don't accept the
+	// table event. Because without the network epoch we can't identify if
+	// this is a table event we have to accept or discard.
+	if !peerOK {
+		return false
+	}
+
+	if peerNetwork.epochID == 0 || tEvent.NetworkEpochID == 0 {
+		return false
+	}
+
+	// If the table event has an epoch ID lower than the peer's current
+	// epoch ID for the network discard the event. Even if its a delete
+	// we would have cleaned up those when we received the network event
+	// with the last epoch ID
+	if tEvent.NetworkEpochID < peerNetwork.epochID {
+		return false
 	}
 
 	e, err := nDB.getEntry(tEvent.TableName, tEvent.NetworkID, tEvent.Key)
@@ -231,10 +271,11 @@ func (nDB *NetworkDB) handleTableEvent(tEvent *TableEvent) bool {
 	}
 
 	e = &entry{
-		ltime:    tEvent.LTime,
-		node:     tEvent.NodeName,
-		value:    tEvent.Value,
-		deleting: tEvent.Type == TableEventTypeDelete,
+		ltime:          tEvent.LTime,
+		node:           tEvent.NodeName,
+		value:          tEvent.Value,
+		deleting:       tEvent.Type == TableEventTypeDelete,
+		networkEpochID: tEvent.NetworkEpochID,
 	}
 
 	if e.deleting {
@@ -463,6 +504,7 @@ func (d *delegate) LocalState(join bool) []byte {
 				NetworkID: n.id,
 				NodeName:  name,
 				Leaving:   n.leaving,
+				EpochID:   n.epochID,
 			})
 		}
 	}
@@ -512,6 +554,7 @@ func (d *delegate) MergeRemoteState(buf []byte, isJoin bool) {
 			NodeName:  n.NodeName,
 			NetworkID: n.NetworkID,
 			Type:      NetworkEventTypeJoin,
+			EpochID:   n.EpochID,
 		}
 
 		if n.Leaving {

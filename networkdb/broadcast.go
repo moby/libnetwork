@@ -17,8 +17,9 @@ type networkEventMessage struct {
 }
 
 func (m *networkEventMessage) Invalidates(other memberlist.Broadcast) bool {
-	otherm := other.(*networkEventMessage)
-	return m.id == otherm.id && m.node == otherm.node
+	//otherm := other.(*networkEventMessage)
+	//return m.id == otherm.id && m.node == otherm.node
+	return false
 }
 
 func (m *networkEventMessage) Message() []byte {
@@ -28,12 +29,13 @@ func (m *networkEventMessage) Message() []byte {
 func (m *networkEventMessage) Finished() {
 }
 
-func (nDB *NetworkDB) sendNetworkEvent(nid string, event NetworkEvent_Type, ltime serf.LamportTime) error {
+func (nDB *NetworkDB) sendNetworkEvent(nid string, event NetworkEvent_Type, ltime serf.LamportTime, epochID uint64) error {
 	nEvent := NetworkEvent{
 		Type:      event,
 		LTime:     ltime,
 		NodeName:  nDB.config.NodeName,
 		NetworkID: nid,
+		EpochID:   epochID,
 	}
 
 	raw, err := encodeMessage(MessageTypeNetworkEvent, &nEvent)
@@ -126,13 +128,14 @@ func (m *tableEventMessage) Finished() {
 
 func (nDB *NetworkDB) sendTableEvent(event TableEvent_Type, nid string, tname string, key string, entry *entry) error {
 	tEvent := TableEvent{
-		Type:      event,
-		LTime:     entry.ltime,
-		NodeName:  nDB.config.NodeName,
-		NetworkID: nid,
-		TableName: tname,
-		Key:       key,
-		Value:     entry.value,
+		Type:           event,
+		LTime:          entry.ltime,
+		NodeName:       nDB.config.NodeName,
+		NetworkID:      nid,
+		TableName:      tname,
+		Key:            key,
+		Value:          entry.value,
+		NetworkEpochID: entry.networkEpochID,
 	}
 
 	raw, err := encodeMessage(MessageTypeTableEvent, &tEvent)

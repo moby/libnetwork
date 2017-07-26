@@ -61,6 +61,15 @@ type NetworkDB struct {
 	// for the network that node is participating in.
 	networks map[string]map[string]*network
 
+	// Per network epoch ID. Clients of networkdb can join & leave the
+	// with same network ID multiple times. Each instantiation of network
+	// in the networkdb gets its own Epoch ID. And the events associated
+	// with the network all get stamped with the current epoch ID.
+	// networkDB uses an eventual consistency mechanism to distribute the
+	// events across the cluster. Hence events can go out of order. Epoch ID
+	// helps the receiving nodes to discard older events
+	networkEpoch map[string]uint64
+
 	// A map of nodes which are participating in a given
 	// network. The key is a network ID.
 	networkNodes map[string][]string
@@ -126,6 +135,9 @@ type network struct {
 	// The broadcast queue for table event gossip. This is only
 	// initialized for this node's network attachment entries.
 	tableBroadcasts *memberlist.TransmitLimitedQueue
+	// Epoch ID of the current instance of the network on the
+	// source node
+	epochID uint64
 }
 
 // Config represents the configuration of the networdb instance and
@@ -169,6 +181,9 @@ type entry struct {
 	// Number of seconds still left before a deleted table entry gets
 	// removed from networkDB
 	reapTime time.Duration
+	// Epoch ID of the current instance of the network this entry is
+	// associated with.
+	networkEpochID uint64
 }
 
 // New creates a new instance of NetworkDB using the Config passed by
@@ -182,6 +197,7 @@ func New(c *Config) (*NetworkDB, error) {
 		failedNodes:    make(map[string]*node),
 		leftNodes:      make(map[string]*node),
 		networkNodes:   make(map[string][]string),
+		networkEpoch:   make(map[string]uint64),
 		bulkSyncAckTbl: make(map[string]chan struct{}),
 		broadcaster:    events.NewBroadcaster(),
 	}
@@ -232,14 +248,14 @@ func (nDB *NetworkDB) Peers(nid string) []PeerInfo {
 }
 
 // GetEntry retrieves the value of a table entry in a given (network,
-// table, key) tuple
-func (nDB *NetworkDB) GetEntry(tname, nid, key string) ([]byte, error) {
+// table, key) tuple and the associated network epoch ID.
+func (nDB *NetworkDB) GetEntry(tname, nid, key string) ([]byte, uint64, error) {
 	entry, err := nDB.getEntry(tname, nid, key)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	return entry.value, nil
+	return entry.value, entry.networkEpochID, nil
 }
 
 func (nDB *NetworkDB) getEntry(tname, nid, key string) (*entry, error) {
@@ -270,10 +286,25 @@ func (nDB *NetworkDB) CreateEntry(tname, nid, key string, value []byte) error {
 		return fmt.Errorf("cannot create entry in table %s with network id %s and key %s, already exists", tname, nid, key)
 	}
 
+	var epochID uint64
+	nDB.RLock()
+	thisNodeNetworks, ok := nDB.networks[nDB.config.NodeName]
+	if ok {
+		// The network may have been removed
+		network, networkOk := thisNodeNetworks[nid]
+		if !networkOk {
+			nDB.RUnlock()
+			return nil
+		}
+		epochID = network.epochID
+	}
+	nDB.RUnlock()
+
 	entry := &entry{
-		ltime: nDB.tableClock.Increment(),
-		node:  nDB.config.NodeName,
-		value: value,
+		ltime:          nDB.tableClock.Increment(),
+		node:           nDB.config.NodeName,
+		value:          value,
+		networkEpochID: epochID,
 	}
 
 	if err := nDB.sendTableEvent(TableEventTypeCreate, nid, tname, key, entry); err != nil {
@@ -293,14 +324,16 @@ func (nDB *NetworkDB) CreateEntry(tname, nid, key string, value []byte) error {
 // propagates this event to the cluster. It is an error to update a
 // non-existent entry.
 func (nDB *NetworkDB) UpdateEntry(tname, nid, key string, value []byte) error {
-	if _, err := nDB.GetEntry(tname, nid, key); err != nil {
+	_, epochID, err := nDB.GetEntry(tname, nid, key)
+	if err != nil {
 		return fmt.Errorf("cannot update entry as the entry in table %s with network id %s and key %s does not exist", tname, nid, key)
 	}
 
 	entry := &entry{
-		ltime: nDB.tableClock.Increment(),
-		node:  nDB.config.NodeName,
-		value: value,
+		ltime:          nDB.tableClock.Increment(),
+		node:           nDB.config.NodeName,
+		value:          value,
+		networkEpochID: epochID,
 	}
 
 	if err := nDB.sendTableEvent(TableEventTypeUpdate, nid, tname, key, entry); err != nil {
@@ -335,17 +368,18 @@ func (nDB *NetworkDB) GetTableByNetwork(tname, nid string) map[string]interface{
 // table, key) tuple and if the NetworkDB is part of the cluster
 // propagates this event to the cluster.
 func (nDB *NetworkDB) DeleteEntry(tname, nid, key string) error {
-	value, err := nDB.GetEntry(tname, nid, key)
+	value, epochID, err := nDB.GetEntry(tname, nid, key)
 	if err != nil {
 		return fmt.Errorf("cannot delete entry as the entry in table %s with network id %s and key %s does not exist", tname, nid, key)
 	}
 
 	entry := &entry{
-		ltime:    nDB.tableClock.Increment(),
-		node:     nDB.config.NodeName,
-		value:    value,
-		deleting: true,
-		reapTime: reapInterval,
+		ltime:          nDB.tableClock.Increment(),
+		node:           nDB.config.NodeName,
+		value:          value,
+		deleting:       true,
+		reapTime:       reapInterval,
+		networkEpochID: epochID,
 	}
 
 	if err := nDB.sendTableEvent(TableEventTypeDelete, nid, tname, key, entry); err != nil {
@@ -379,7 +413,7 @@ func (nDB *NetworkDB) deleteNetworkEntriesForNode(deletedNode string) {
 	nDB.Unlock()
 }
 
-func (nDB *NetworkDB) deleteNodeNetworkEntries(nid, node string) {
+func (nDB *NetworkDB) deleteNodeNetworkEntries(nid, node string, epochID uint64, event NetworkEvent_Type) {
 	nDB.Lock()
 	nDB.indexes[byNetwork].WalkPrefix(fmt.Sprintf("/%s", nid),
 		func(path string, v interface{}) bool {
@@ -393,12 +427,31 @@ func (nDB *NetworkDB) deleteNodeNetworkEntries(nid, node string) {
 				return false
 			}
 
+			delete := false
+			if event == NetworkEventTypeLeave {
+				if oldEntry.networkEpochID == 0 && epochID == 0 {
+					delete = true
+				} else {
+					delete = oldEntry.networkEpochID <= epochID
+				}
+			} else if event == NetworkEventTypeJoin {
+				if oldEntry.networkEpochID == 0 && epochID == 0 {
+					delete = false
+				} else {
+					delete = oldEntry.networkEpochID < epochID
+				}
+			}
+			if !delete {
+				return false
+			}
+
 			entry := &entry{
-				ltime:    oldEntry.ltime,
-				node:     node,
-				value:    oldEntry.value,
-				deleting: true,
-				reapTime: reapInterval,
+				ltime:          oldEntry.ltime,
+				node:           node,
+				value:          oldEntry.value,
+				deleting:       true,
+				reapTime:       reapInterval,
+				networkEpochID: oldEntry.networkEpochID,
 			}
 
 			nDB.indexes[byTable].Insert(fmt.Sprintf("/%s/%s/%s", tname, nid, key), entry)
@@ -477,7 +530,13 @@ func (nDB *NetworkDB) JoinNetwork(nid string) error {
 		nodeNetworks = make(map[string]*network)
 		nDB.networks[nDB.config.NodeName] = nodeNetworks
 	}
-	nodeNetworks[nid] = &network{id: nid, ltime: ltime}
+	nDB.networkEpoch[nid]++
+	nw := &network{
+		id:      nid,
+		ltime:   ltime,
+		epochID: nDB.networkEpoch[nid],
+	}
+	nodeNetworks[nid] = nw
 	nodeNetworks[nid].tableBroadcasts = &memberlist.TransmitLimitedQueue{
 		NumNodes: func() int {
 			nDB.RLock()
@@ -491,7 +550,7 @@ func (nDB *NetworkDB) JoinNetwork(nid string) error {
 	networkNodes := nDB.networkNodes[nid]
 	nDB.Unlock()
 
-	if err := nDB.sendNetworkEvent(nid, NetworkEventTypeJoin, ltime); err != nil {
+	if err := nDB.sendNetworkEvent(nid, NetworkEventTypeJoin, ltime, nw.epochID); err != nil {
 		return fmt.Errorf("failed to send leave network event for %s: %v", nid, err)
 	}
 
@@ -511,7 +570,17 @@ func (nDB *NetworkDB) JoinNetwork(nid string) error {
 // networkdb
 func (nDB *NetworkDB) LeaveNetwork(nid string) error {
 	ltime := nDB.networkClock.Increment()
-	if err := nDB.sendNetworkEvent(nid, NetworkEventTypeLeave, ltime); err != nil {
+	var epochID uint64
+
+	nDB.RLock()
+	networks := nDB.networks[nDB.config.NodeName]
+	network, ok := networks[nid]
+	if ok {
+		epochID = network.epochID
+	}
+	nDB.RUnlock()
+
+	if err := nDB.sendNetworkEvent(nid, NetworkEventTypeLeave, ltime, epochID); err != nil {
 		return fmt.Errorf("failed to send leave network event for %s: %v", nid, err)
 	}
 
@@ -561,6 +630,7 @@ func (nDB *NetworkDB) LeaveNetwork(nid string) error {
 
 	n.ltime = ltime
 	n.leaving = true
+	n.reapTime = reapInterval
 	return nil
 }
 
