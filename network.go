@@ -1,6 +1,7 @@
 package libnetwork
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -1235,30 +1236,33 @@ func (n *network) updateSvcRecord(ep *endpoint, localEps []*endpoint, isAdd bool
 		if serviceID == "" {
 			serviceID = ep.ID()
 		}
+
+		ctx := context.WithValue(context.Background(), callerCtxKey, "updateSvcRecord")
+
 		if isAdd {
 			// If anonymous endpoint has an alias use the first alias
 			// for ip->name mapping. Not having the reverse mapping
 			// breaks some apps
 			if ep.isAnonymous() {
 				if len(myAliases) > 0 {
-					n.addSvcRecords(ep.ID(), myAliases[0], serviceID, iface.Address().IP, ipv6, true, "updateSvcRecord")
+					n.addSvcRecords(ctx, ep.ID(), myAliases[0], serviceID, iface.Address().IP, ipv6, true)
 				}
 			} else {
-				n.addSvcRecords(ep.ID(), epName, serviceID, iface.Address().IP, ipv6, true, "updateSvcRecord")
+				n.addSvcRecords(ctx, ep.ID(), epName, serviceID, iface.Address().IP, ipv6, true)
 			}
 			for _, alias := range myAliases {
-				n.addSvcRecords(ep.ID(), alias, serviceID, iface.Address().IP, ipv6, false, "updateSvcRecord")
+				n.addSvcRecords(ctx, ep.ID(), alias, serviceID, iface.Address().IP, ipv6, false)
 			}
 		} else {
 			if ep.isAnonymous() {
 				if len(myAliases) > 0 {
-					n.deleteSvcRecords(ep.ID(), myAliases[0], serviceID, iface.Address().IP, ipv6, true, "updateSvcRecord")
+					n.deleteSvcRecords(ctx, ep.ID(), myAliases[0], serviceID, iface.Address().IP, ipv6, true)
 				}
 			} else {
-				n.deleteSvcRecords(ep.ID(), epName, serviceID, iface.Address().IP, ipv6, true, "updateSvcRecord")
+				n.deleteSvcRecords(ctx, ep.ID(), epName, serviceID, iface.Address().IP, ipv6, true)
 			}
 			for _, alias := range myAliases {
-				n.deleteSvcRecords(ep.ID(), alias, serviceID, iface.Address().IP, ipv6, false, "updateSvcRecord")
+				n.deleteSvcRecords(ctx, ep.ID(), alias, serviceID, iface.Address().IP, ipv6, false)
 			}
 		}
 	}
@@ -1294,14 +1298,14 @@ func delNameToIP(svcMap common.SetMatrix, name, serviceID string, epIP net.IP) {
 	})
 }
 
-func (n *network) addSvcRecords(eID, name, serviceID string, epIP, epIPv6 net.IP, ipMapUpdate bool, method string) {
+func (n *network) addSvcRecords(ctx context.Context, eID, name, serviceID string, epIP, epIPv6 net.IP, ipMapUpdate bool) {
 	// Do not add service names for ingress network as this is a
 	// routing only network
 	if n.ingress {
 		return
 	}
 
-	logrus.Debugf("%s (%s).addSvcRecords(%s, %s, %s, %t) %s sid:%s", eID, n.ID()[0:7], name, epIP, epIPv6, ipMapUpdate, method, serviceID)
+	logrus.Debugf("%s (%s).addSvcRecords(%s, %s, %s, %t) %s sid:%s", eID, n.ID()[0:7], name, epIP, epIPv6, ipMapUpdate, getCaller(ctx), serviceID)
 
 	c := n.getController()
 	c.Lock()
@@ -1330,14 +1334,14 @@ func (n *network) addSvcRecords(eID, name, serviceID string, epIP, epIPv6 net.IP
 	}
 }
 
-func (n *network) deleteSvcRecords(eID, name, serviceID string, epIP net.IP, epIPv6 net.IP, ipMapUpdate bool, method string) {
+func (n *network) deleteSvcRecords(ctx context.Context, eID, name, serviceID string, epIP net.IP, epIPv6 net.IP, ipMapUpdate bool) {
 	// Do not delete service names from ingress network as this is a
 	// routing only network
 	if n.ingress {
 		return
 	}
 
-	logrus.Debugf("%s (%s).deleteSvcRecords(%s, %s, %s, %t) %s sid:%s ", eID, n.ID()[0:7], name, epIP, epIPv6, ipMapUpdate, method, serviceID)
+	logrus.Debugf("%s (%s).deleteSvcRecords(%s, %s, %s, %t) %s sid:%s ", eID, n.ID()[0:7], name, epIP, epIPv6, ipMapUpdate, getCaller(ctx), serviceID)
 
 	c := n.getController()
 	c.Lock()

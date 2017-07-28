@@ -1,6 +1,7 @@
 package libnetwork
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -479,8 +480,9 @@ func TestServiceVIPReuse(t *testing.T) {
 	}
 
 	// Add 2 services with same name but different service ID to share the same VIP
-	n.(*network).addSvcRecords("ep1", "service_test", "serviceID1", net.ParseIP("192.168.0.1"), net.IP{}, true, "test")
-	n.(*network).addSvcRecords("ep2", "service_test", "serviceID2", net.ParseIP("192.168.0.1"), net.IP{}, true, "test")
+	ctx := context.WithValue(context.Background(), callerCtxKey, "test")
+	n.(*network).addSvcRecords(ctx, "ep1", "service_test", "serviceID1", net.ParseIP("192.168.0.1"), net.IP{}, true)
+	n.(*network).addSvcRecords(ctx, "ep2", "service_test", "serviceID2", net.ParseIP("192.168.0.1"), net.IP{}, true)
 
 	ipToResolve := netutils.ReverseIP("192.168.0.1")
 
@@ -503,7 +505,7 @@ func TestServiceVIPReuse(t *testing.T) {
 	}
 
 	// Delete service record for one of the services, the IP should remain because one service is still associated with it
-	n.(*network).deleteSvcRecords("ep1", "service_test", "serviceID1", net.ParseIP("192.168.0.1"), net.IP{}, true, "test")
+	n.(*network).deleteSvcRecords(ctx, "ep1", "service_test", "serviceID1", net.ParseIP("192.168.0.1"), net.IP{}, true)
 	ipList, _ = n.(*network).ResolveName("service_test", types.IPv4)
 	if len(ipList) == 0 {
 		t.Fatal("There must be the VIP")
@@ -523,7 +525,7 @@ func TestServiceVIPReuse(t *testing.T) {
 	}
 
 	// Delete again the service using the previous service ID, nothing should happen
-	n.(*network).deleteSvcRecords("ep2", "service_test", "serviceID1", net.ParseIP("192.168.0.1"), net.IP{}, true, "test")
+	n.(*network).deleteSvcRecords(ctx, "ep2", "service_test", "serviceID1", net.ParseIP("192.168.0.1"), net.IP{}, true)
 	ipList, _ = n.(*network).ResolveName("service_test", types.IPv4)
 	if len(ipList) == 0 {
 		t.Fatal("There must be the VIP")
@@ -543,7 +545,7 @@ func TestServiceVIPReuse(t *testing.T) {
 	}
 
 	// Delete now using the second service ID, now all the entries should be gone
-	n.(*network).deleteSvcRecords("ep2", "service_test", "serviceID2", net.ParseIP("192.168.0.1"), net.IP{}, true, "test")
+	n.(*network).deleteSvcRecords(ctx, "ep2", "service_test", "serviceID2", net.ParseIP("192.168.0.1"), net.IP{}, true)
 	ipList, _ = n.(*network).ResolveName("service_test", types.IPv4)
 	if len(ipList) != 0 {
 		t.Fatal("All the VIPs should be gone now")
