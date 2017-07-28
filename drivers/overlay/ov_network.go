@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/pkg/reexec"
@@ -705,6 +706,7 @@ func (n *network) initSandbox(restore bool) error {
 }
 
 func (n *network) watchMiss(nlSock *nl.NetlinkSocket) {
+	t := time.Now()
 	for {
 		msgs, err := nlSock.Receive()
 		if err != nil {
@@ -730,38 +732,79 @@ func (n *network) watchMiss(nlSock *nl.NetlinkSocket) {
 				continue
 			}
 
-			if neigh.IP.To4() == nil {
-				if neigh.HardwareAddr != nil {
-					logrus.Debugf("Miss notification, l2 mac %v", neigh.HardwareAddr)
-				}
+			var (
+				ip             net.IP
+				mac            net.HardwareAddr
+				l2Miss, l3Miss bool
+			)
+			if neigh.IP.To4() != nil {
+				ip = neigh.IP
+				l3Miss = true
+			} else if neigh.HardwareAddr != nil {
+				mac = []byte(neigh.HardwareAddr)
+				ip = net.IP(mac[2:])
+				l2Miss = true
+			} else {
 				continue
 			}
 
 			// Not any of the network's subnets. Ignore.
-			if !n.contains(neigh.IP) {
+			if !n.contains(ip) {
 				continue
 			}
 
-			logrus.Debugf("miss notification for dest IP, %v", neigh.IP.String())
+			logrus.Debugf("miss notification: dest IP %v, dest MAC %v", ip, mac)
 
 			if neigh.State&(netlink.NUD_STALE|netlink.NUD_INCOMPLETE) == 0 {
 				continue
 			}
 
-			if !n.driver.isSerfAlive() {
-				continue
-			}
+			if n.driver.isSerfAlive() {
+				mac, IPmask, vtep, err := n.driver.resolvePeer(n.id, ip)
+				if err != nil {
+					logrus.Errorf("could not resolve peer %q: %v", ip, err)
+					continue
+				}
 
-			mac, IPmask, vtep, err := n.driver.resolvePeer(n.id, neigh.IP)
-			if err != nil {
-				logrus.Errorf("could not resolve peer %q: %v", neigh.IP, err)
-				continue
-			}
-
-			if err := n.driver.peerAdd(n.id, "dummy", neigh.IP, IPmask, mac, vtep, true); err != nil {
-				logrus.Errorf("could not add neighbor entry for missed peer %q: %v", neigh.IP, err)
+				if err := n.driver.peerAdd(n.id, "dummy", ip, IPmask, mac, vtep, true, l2Miss, l3Miss); err != nil {
+					logrus.Errorf("could not add neighbor entry for missed peer %q: %v", ip, err)
+				}
+			} else {
+				// If the gc_thresh values are lower kernel might knock off the neighor entries.
+				// When we get a L3 miss check if its a valid peer and reprogram the neighbor
+				// entry again. Rate limit it to once attempt every 500ms, just in case a faulty
+				// container sends a flood of packets to invalid peers
+				if !l3Miss {
+					continue
+				}
+				if time.Since(t) > 500*time.Millisecond {
+					t = time.Now()
+					n.programNeighbor(ip)
+				}
 			}
 		}
+	}
+}
+
+func (n *network) programNeighbor(ip net.IP) {
+	peerMac, _, _, err := n.driver.peerDbSearch(n.id, ip)
+	if err != nil {
+		logrus.Errorf("Reprogramming on L3 miss failed for %s, no peer entry", ip)
+		return
+	}
+	s := n.getSubnetforIPAddr(ip)
+	if s == nil {
+		logrus.Errorf("Reprogramming on L3 miss failed for %s, not a valid subnet", ip)
+		return
+	}
+	sbox := n.sandbox()
+	if sbox == nil {
+		logrus.Errorf("Reprogramming on L3 miss failed for %s, overlay sandbox missing", ip)
+		return
+	}
+	if err := sbox.AddNeighbor(ip, peerMac, true, sbox.NeighborOptions().LinkName(s.vxlanName)); err != nil {
+		logrus.Errorf("Reprogramming on L3 miss failed for %s: %v", ip, err)
+		return
 	}
 }
 
@@ -1046,6 +1089,15 @@ func (n *network) contains(ip net.IP) bool {
 	}
 
 	return false
+}
+
+func (n *network) getSubnetforIPAddr(ip net.IP) *subnet {
+	for _, s := range n.subnets {
+		if s.subnetIP.Contains(ip) {
+			return s
+		}
+	}
+	return nil
 }
 
 // getSubnetforIP returns the subnet to which the given IP belongs
