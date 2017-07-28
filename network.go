@@ -1121,6 +1121,17 @@ func (n *network) CreateEndpoint(name string, options ...EndpointOption) (Endpoi
 		}
 	}()
 
+	if err = n.getController().updateToStore(ep); err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			if e := n.getController().deleteFromStore(ep); e != nil {
+				logrus.Warnf("error rolling back endpoint %s from store: %v", name, e)
+			}
+		}
+	}()
+
 	if err = n.addEndpoint(ep); err != nil {
 		return nil, err
 	}
@@ -1139,13 +1150,6 @@ func (n *network) CreateEndpoint(name string, options ...EndpointOption) (Endpoi
 	if err = n.getController().updateToStore(ep); err != nil {
 		return nil, err
 	}
-	defer func() {
-		if err != nil {
-			if e := n.getController().deleteFromStore(ep); e != nil {
-				logrus.Warnf("error rolling back endpoint %s from store: %v", name, e)
-			}
-		}
-	}()
 
 	// Watch for service records
 	n.getController().watchSvcRecord(ep)
