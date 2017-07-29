@@ -59,8 +59,6 @@ func (pKey *peerKey) Scan(state fmt.ScanState, verb rune) error {
 	return nil
 }
 
-var peerDbWg sync.WaitGroup
-
 func (d *driver) peerDbWalk(f func(string, *peerKey, *peerEntry) bool) error {
 	d.peerDb.Lock()
 	nids := []string{}
@@ -141,8 +139,6 @@ func (d *driver) peerDbSearch(nid string, peerIP net.IP) (net.HardwareAddr, net.
 func (d *driver) peerDbAdd(nid, eid string, peerIP net.IP, peerIPMask net.IPMask,
 	peerMac net.HardwareAddr, vtep net.IP, isLocal bool) {
 
-	peerDbWg.Wait()
-
 	d.peerDb.Lock()
 	pMap, ok := d.peerDb.mp[nid]
 	if !ok {
@@ -173,7 +169,6 @@ func (d *driver) peerDbAdd(nid, eid string, peerIP net.IP, peerIPMask net.IPMask
 
 func (d *driver) peerDbDelete(nid, eid string, peerIP net.IP, peerIPMask net.IPMask,
 	peerMac net.HardwareAddr, vtep net.IP) peerEntry {
-	peerDbWg.Wait()
 
 	d.peerDb.Lock()
 	pMap, ok := d.peerDb.mp[nid]
@@ -215,8 +210,6 @@ func (d *driver) peerDbUpdateSandbox(nid string) {
 	}
 	d.peerDb.Unlock()
 
-	peerDbWg.Add(1)
-
 	var peerOps []func()
 	pMap.Lock()
 	for pKeyStr, pEntry := range pMap.mp {
@@ -244,13 +237,12 @@ func (d *driver) peerDbUpdateSandbox(nid string) {
 
 		peerOps = append(peerOps, op)
 	}
-	pMap.Unlock()
 
 	for _, op := range peerOps {
 		op()
 	}
+	pMap.Unlock()
 
-	peerDbWg.Done()
 }
 
 func (d *driver) peerAdd(nid, eid string, peerIP net.IP, peerIPMask net.IPMask,
