@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	reapInterval     = 60 * time.Second
+	reapInterval     = 30 * time.Minute
 	reapPeriod       = 5 * time.Second
 	retryInterval    = 1 * time.Second
 	nodeReapInterval = 24 * time.Hour
@@ -288,13 +288,6 @@ func (nDB *NetworkDB) reconnectNode() {
 		return
 	}
 
-	// Update all the local table state to a new time to
-	// force update on the node we are trying to rejoin, just in
-	// case that node has these in deleting state still. This is
-	// facilitate fast convergence after recovering from a gossip
-	// failure.
-	nDB.updateLocalTableTime()
-
 	logrus.Debugf("Initiating bulk sync with node %s after reconnect", node.Name)
 	nDB.bulkSync([]string{node.Name}, true)
 }
@@ -311,12 +304,11 @@ func (nDB *NetworkDB) reapState() {
 
 func (nDB *NetworkDB) reapNetworks() {
 	nDB.Lock()
-	for name, nn := range nDB.networks {
+	for _, nn := range nDB.networks {
 		for id, n := range nn {
 			if n.leaving {
 				if n.reapTime <= 0 {
 					delete(nn, id)
-					nDB.deleteNetworkNode(id, name)
 					continue
 				}
 				n.reapTime -= reapPeriod
