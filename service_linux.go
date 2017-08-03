@@ -313,24 +313,27 @@ func filterPortConfigs(ingressPorts []*PortConfig, isDelete bool) []*PortConfig 
 }
 
 func programIngress(gwIP net.IP, ingressPorts []*PortConfig, isDelete bool) error {
+
+	iptable := iptables.GetIptable(iptables.IPV4)
+
 	addDelOpt := "-I"
 	if isDelete {
 		addDelOpt = "-D"
 	}
 
-	chainExists := iptables.ExistChain(ingressChain, iptables.Nat)
-	filterChainExists := iptables.ExistChain(ingressChain, iptables.Filter)
+	chainExists := iptable.ExistChain(ingressChain, iptables.Nat)
+	filterChainExists := iptable.ExistChain(ingressChain, iptables.Filter)
 
 	ingressOnce.Do(func() {
 		// Flush nat table and filter table ingress chain rules during init if it
 		// exists. It might contain stale rules from previous life.
 		if chainExists {
-			if err := iptables.RawCombinedOutput("-t", "nat", "-F", ingressChain); err != nil {
+			if err := iptable.RawCombinedOutput("-t", "nat", "-F", ingressChain); err != nil {
 				logrus.Errorf("Could not flush nat table ingress chain rules during init: %v", err)
 			}
 		}
 		if filterChainExists {
-			if err := iptables.RawCombinedOutput("-F", ingressChain); err != nil {
+			if err := iptable.RawCombinedOutput("-F", ingressChain); err != nil {
 				logrus.Errorf("Could not flush filter table ingress chain rules during init: %v", err)
 			}
 		}
@@ -338,41 +341,40 @@ func programIngress(gwIP net.IP, ingressPorts []*PortConfig, isDelete bool) erro
 
 	if !isDelete {
 		if !chainExists {
-			if err := iptables.RawCombinedOutput("-t", "nat", "-N", ingressChain); err != nil {
+			if err := iptable.RawCombinedOutput("-t", "nat", "-N", ingressChain); err != nil {
 				return fmt.Errorf("failed to create ingress chain: %v", err)
 			}
 		}
 		if !filterChainExists {
-			if err := iptables.RawCombinedOutput("-N", ingressChain); err != nil {
+			if err := iptable.RawCombinedOutput("-N", ingressChain); err != nil {
 				return fmt.Errorf("failed to create filter table ingress chain: %v", err)
 			}
 		}
 
-		if !iptables.Exists(iptables.Nat, ingressChain, "-j", "RETURN") {
-			if err := iptables.RawCombinedOutput("-t", "nat", "-A", ingressChain, "-j", "RETURN"); err != nil {
+		if !iptable.Exists(iptables.Nat, ingressChain, "-j", "RETURN") {
+			if err := iptable.RawCombinedOutput("-t", "nat", "-A", ingressChain, "-j", "RETURN"); err != nil {
 				return fmt.Errorf("failed to add return rule in nat table ingress chain: %v", err)
 			}
 		}
 
-		if !iptables.Exists(iptables.Filter, ingressChain, "-j", "RETURN") {
-			if err := iptables.RawCombinedOutput("-A", ingressChain, "-j", "RETURN"); err != nil {
+		if !iptable.Exists(iptables.Filter, ingressChain, "-j", "RETURN") {
+			if err := iptable.RawCombinedOutput("-A", ingressChain, "-j", "RETURN"); err != nil {
 				return fmt.Errorf("failed to add return rule to filter table ingress chain: %v", err)
 			}
 		}
 
 		for _, chain := range []string{"OUTPUT", "PREROUTING"} {
-			if !iptables.Exists(iptables.Nat, chain, "-m", "addrtype", "--dst-type", "LOCAL", "-j", ingressChain) {
-				if err := iptables.RawCombinedOutput("-t", "nat", "-I", chain, "-m", "addrtype", "--dst-type", "LOCAL", "-j", ingressChain); err != nil {
+			if !iptable.Exists(iptables.Nat, chain, "-m", "addrtype", "--dst-type", "LOCAL", "-j", ingressChain) {
+				if err := iptable.RawCombinedOutput("-t", "nat", "-I", chain, "-m", "addrtype", "--dst-type", "LOCAL", "-j", ingressChain); err != nil {
 					return fmt.Errorf("failed to add jump rule in %s to ingress chain: %v", chain, err)
 				}
 			}
 		}
 
-		if !iptables.Exists(iptables.Filter, "FORWARD", "-j", ingressChain) {
-			if err := iptables.RawCombinedOutput("-I", "FORWARD", "-j", ingressChain); err != nil {
+		if !iptable.Exists(iptables.Filter, "FORWARD", "-j", ingressChain) {
+			if err := iptable.RawCombinedOutput("-I", "FORWARD", "-j", ingressChain); err != nil {
 				return fmt.Errorf("failed to add jump rule to %s in filter table forward chain: %v", ingressChain, err)
 			}
-			arrangeUserFilterRule()
 		}
 
 		oifName, err := findOIFName(gwIP)
@@ -386,18 +388,18 @@ func programIngress(gwIP net.IP, ingressPorts []*PortConfig, isDelete bool) erro
 		}
 
 		ruleArgs := strings.Fields(fmt.Sprintf("-m addrtype --src-type LOCAL -o %s -j MASQUERADE", oifName))
-		if !iptables.Exists(iptables.Nat, "POSTROUTING", ruleArgs...) {
-			if err := iptables.RawCombinedOutput(append([]string{"-t", "nat", "-I", "POSTROUTING"}, ruleArgs...)...); err != nil {
+		if !iptable.Exists(iptables.Nat, "POSTROUTING", ruleArgs...) {
+			if err := iptable.RawCombinedOutput(append([]string{"-t", "nat", "-I", "POSTROUTING"}, ruleArgs...)...); err != nil {
 				return fmt.Errorf("failed to add ingress localhost POSTROUTING rule for %s: %v", oifName, err)
 			}
 		}
 	}
 
 	for _, iPort := range ingressPorts {
-		if iptables.ExistChain(ingressChain, iptables.Nat) {
+		if iptable.ExistChain(ingressChain, iptables.Nat) {
 			rule := strings.Fields(fmt.Sprintf("-t nat %s %s -p %s --dport %d -j DNAT --to-destination %s:%d",
 				addDelOpt, ingressChain, strings.ToLower(PortConfig_Protocol_name[int32(iPort.Protocol)]), iPort.PublishedPort, gwIP, iPort.PublishedPort))
-			if err := iptables.RawCombinedOutput(rule...); err != nil {
+			if err := iptable.RawCombinedOutput(rule...); err != nil {
 				errStr := fmt.Sprintf("setting up rule failed, %v: %v", rule, err)
 				if !isDelete {
 					return fmt.Errorf("%s", errStr)
@@ -412,7 +414,7 @@ func programIngress(gwIP net.IP, ingressPorts []*PortConfig, isDelete bool) erro
 		// 2) unmanaged containers on bridge networks
 		rule := strings.Fields(fmt.Sprintf("%s %s -m state -p %s --sport %d --state ESTABLISHED,RELATED -j ACCEPT",
 			addDelOpt, ingressChain, strings.ToLower(PortConfig_Protocol_name[int32(iPort.Protocol)]), iPort.PublishedPort))
-		if err := iptables.RawCombinedOutput(rule...); err != nil {
+		if err := iptable.RawCombinedOutput(rule...); err != nil {
 			errStr := fmt.Sprintf("setting up rule failed, %v: %v", rule, err)
 			if !isDelete {
 				return fmt.Errorf("%s", errStr)
@@ -422,7 +424,7 @@ func programIngress(gwIP net.IP, ingressPorts []*PortConfig, isDelete bool) erro
 
 		rule = strings.Fields(fmt.Sprintf("%s %s -p %s --dport %d -j ACCEPT",
 			addDelOpt, ingressChain, strings.ToLower(PortConfig_Protocol_name[int32(iPort.Protocol)]), iPort.PublishedPort))
-		if err := iptables.RawCombinedOutput(rule...); err != nil {
+		if err := iptable.RawCombinedOutput(rule...); err != nil {
 			errStr := fmt.Sprintf("setting up rule failed, %v: %v", rule, err)
 			if !isDelete {
 				return fmt.Errorf("%s", errStr)
@@ -445,13 +447,14 @@ func programIngress(gwIP net.IP, ingressPorts []*PortConfig, isDelete bool) erro
 // This chain has the rules to allow access to the published ports for swarm tasks
 // from local bridge networks and docker_gwbridge (ie:taks on other swarm netwroks)
 func arrangeIngressFilterRule() {
-	if iptables.ExistChain(ingressChain, iptables.Filter) {
-		if iptables.Exists(iptables.Filter, "FORWARD", "-j", ingressChain) {
-			if err := iptables.RawCombinedOutput("-D", "FORWARD", "-j", ingressChain); err != nil {
+	iptable := iptables.GetIptable(iptables.IPV4)
+	if iptable.ExistChain(ingressChain, iptables.Filter) {
+		if iptable.Exists(iptables.Filter, "FORWARD", "-j", ingressChain) {
+			if err := iptable.RawCombinedOutput("-D", "FORWARD", "-j", ingressChain); err != nil {
 				logrus.Warnf("failed to delete jump rule to ingressChain in filter table: %v", err)
 			}
 		}
-		if err := iptables.RawCombinedOutput("-I", "FORWARD", "-j", ingressChain); err != nil {
+		if err := iptable.RawCombinedOutput("-I", "FORWARD", "-j", ingressChain); err != nil {
 			logrus.Warnf("failed to add jump rule to ingressChain in filter table: %v", err)
 		}
 	}
@@ -590,6 +593,7 @@ func invokeFWMarker(path string, vip net.IP, fwMark uint32, ingressPorts []*Port
 
 // Firewall marker reexec function.
 func fwMarker() {
+	iptable := iptables.GetIptable(iptables.IPV4)
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
@@ -643,7 +647,7 @@ func fwMarker() {
 		}
 
 		ruleParams := strings.Fields(fmt.Sprintf("-m ipvs --ipvs -d %s -j SNAT --to-source %s", subnet, eIP))
-		if !iptables.Exists("nat", "POSTROUTING", ruleParams...) {
+		if !iptable.Exists("nat", "POSTROUTING", ruleParams...) {
 			rule := append(strings.Fields("-t nat -A POSTROUTING"), ruleParams...)
 			rules = append(rules, rule)
 
@@ -662,7 +666,7 @@ func fwMarker() {
 	rules = append(rules, rule)
 
 	for _, rule := range rules {
-		if err := iptables.RawCombinedOutputNative(rule...); err != nil {
+		if err := iptable.RawCombinedOutputNative(rule...); err != nil {
 			logrus.Errorf("setting up rule failed, %v: %v", rule, err)
 			os.Exit(5)
 		}
@@ -697,6 +701,7 @@ func addRedirectRules(path string, eIP *net.IPNet, ingressPorts []*PortConfig) e
 
 // Redirecter reexec function.
 func redirecter() {
+	iptable := iptables.GetIptable(iptables.IPV4)
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
@@ -749,7 +754,7 @@ func redirecter() {
 	}
 
 	for _, rule := range rules {
-		if err := iptables.RawCombinedOutputNative(rule...); err != nil {
+		if err := iptable.RawCombinedOutputNative(rule...); err != nil {
 			logrus.Errorf("setting up rule failed, %v: %v", rule, err)
 			os.Exit(6)
 		}
@@ -764,15 +769,15 @@ func redirecter() {
 		{"-d", eIP.String(), "-p", "udp", "-j", "DROP"},
 		{"-d", eIP.String(), "-p", "tcp", "-j", "DROP"},
 	} {
-		if !iptables.ExistsNative(iptables.Filter, "INPUT", rule...) {
-			if err := iptables.RawCombinedOutputNative(append([]string{"-A", "INPUT"}, rule...)...); err != nil {
+		if !iptable.ExistsNative(iptables.Filter, "INPUT", rule...) {
+			if err := iptable.RawCombinedOutputNative(append([]string{"-A", "INPUT"}, rule...)...); err != nil {
 				logrus.Errorf("setting up rule failed, %v: %v", rule, err)
 				os.Exit(7)
 			}
 		}
 		rule[0] = "-s"
-		if !iptables.ExistsNative(iptables.Filter, "OUTPUT", rule...) {
-			if err := iptables.RawCombinedOutputNative(append([]string{"-A", "OUTPUT"}, rule...)...); err != nil {
+		if !iptable.ExistsNative(iptables.Filter, "OUTPUT", rule...) {
+			if err := iptable.RawCombinedOutputNative(append([]string{"-A", "OUTPUT"}, rule...)...); err != nil {
 				logrus.Errorf("setting up rule failed, %v: %v", rule, err)
 				os.Exit(8)
 			}

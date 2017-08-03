@@ -11,18 +11,19 @@ const userChain = "DOCKER-USER"
 // docker operations/restarts. Docker will not delete or modify any pre-existing
 // rules from the DOCKER-USER filter chain.
 func arrangeUserFilterRule() {
-	_, err := iptables.NewChain(userChain, iptables.Filter, false)
+	iptable := iptables.GetIptable(iptables.IPV4)
+	_, err := iptable.NewChain(userChain, iptables.Filter, false)
 	if err != nil {
 		logrus.Warnf("Failed to create %s chain: %v", userChain, err)
 		return
 	}
 
-	if err = iptables.AddReturnRule(userChain); err != nil {
+	if err = iptable.AddReturnRule(userChain); err != nil {
 		logrus.Warnf("Failed to add the RETURN rule for %s: %v", userChain, err)
 		return
 	}
 
-	err = iptables.EnsureJumpRule("FORWARD", userChain)
+	err = iptable.EnsureJumpRule("FORWARD", userChain)
 	if err != nil {
 		logrus.Warnf("Failed to ensure the jump rule for %s: %v", userChain, err)
 	}

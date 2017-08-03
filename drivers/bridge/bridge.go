@@ -50,6 +50,7 @@ type configuration struct {
 	EnableIPForwarding  bool
 	EnableIPTables      bool
 	EnableUserlandProxy bool
+	EnableIPv6          bool
 	UserlandProxyPath   string
 }
 
@@ -123,6 +124,7 @@ type bridgeNetwork struct {
 	config        *networkConfiguration
 	endpoints     map[string]*bridgeEndpoint // key: endpoint id
 	portMapper    *portmapper.PortMapper
+	portMapperV6  *portmapper.PortMapper
 	driver        *driver // The network's driver
 	iptCleanFuncs iptablesCleanFuncs
 	sync.Mutex
@@ -134,6 +136,9 @@ type driver struct {
 	natChain       *iptables.ChainInfo
 	filterChain    *iptables.ChainInfo
 	isolationChain *iptables.ChainInfo
+	natChainV6     *iptables.ChainInfo
+	filterChainV6  *iptables.ChainInfo
+	isolationChainV6 *iptables.ChainInfo
 	networks       map[string]*bridgeNetwork
 	store          datastore.DataStore
 	nlh            *netlink.Handle
@@ -257,12 +262,16 @@ func (n *bridgeNetwork) registerIptCleanFunc(clean iptableCleanFunc) {
 	n.iptCleanFuncs = append(n.iptCleanFuncs, clean)
 }
 
-func (n *bridgeNetwork) getDriverChains() (*iptables.ChainInfo, *iptables.ChainInfo, *iptables.ChainInfo, error) {
+func (n *bridgeNetwork) getDriverChains(ipv6 bool) (*iptables.ChainInfo, *iptables.ChainInfo, *iptables.ChainInfo, error) {
 	n.Lock()
 	defer n.Unlock()
 
 	if n.driver == nil {
 		return nil, nil, nil, types.BadRequestErrorf("no driver found")
+	}
+
+	if ipv6 == true {
+		return n.driver.natChainV6, n.driver.filterChainV6, n.driver.isolationChainV6, nil
 	}
 
 	return n.driver.natChain, n.driver.filterChain, n.driver.isolationChain, nil
@@ -293,7 +302,7 @@ func (n *bridgeNetwork) getEndpoint(eid string) (*bridgeEndpoint, error) {
 
 // Install/Removes the iptables rules needed to isolate this network
 // from each of the other networks
-func (n *bridgeNetwork) isolateNetwork(others []*bridgeNetwork, enable bool) error {
+func (n *bridgeNetwork) isolateNetwork(ipFamily bool, others []*bridgeNetwork, enable bool) error {
 	n.Lock()
 	thisConfig := n.config
 	n.Unlock()
@@ -313,7 +322,7 @@ func (n *bridgeNetwork) isolateNetwork(others []*bridgeNetwork, enable bool) err
 		}
 
 		if thisConfig.BridgeName != otherConfig.BridgeName {
-			if err := setINC(thisConfig.BridgeName, otherConfig.BridgeName, enable); err != nil {
+			if err := setINC(ipFamily, thisConfig.BridgeName, otherConfig.BridgeName, enable); err != nil {
 				return err
 			}
 		}
@@ -352,6 +361,13 @@ func (c *networkConfiguration) conflictsWithNetworks(id string, others []*bridge
 				return types.ForbiddenErrorf("conflicts with network %s (%s) by ip network", nwID, nwConfig.BridgeName)
 			}
 		}
+		// Same for IPv6
+		if c.AddressIPv6 != nil && nwBridge.bridgeIPv6 != nil {
+			if nwBridge.bridgeIPv6.Contains(c.AddressIPv6.IP) ||
+				c.AddressIPv6.Contains(nwBridge.bridgeIPv6.IP) {
+				return types.ForbiddenErrorf("IPv6 conflicts with network %s (%s) by ip network", nwID, nwConfig.BridgeName)
+			}
+		}
 	}
 
 	return nil
@@ -364,6 +380,9 @@ func (d *driver) configure(option map[string]interface{}) error {
 		natChain       *iptables.ChainInfo
 		filterChain    *iptables.ChainInfo
 		isolationChain *iptables.ChainInfo
+		natChainV6     *iptables.ChainInfo
+		filterChainV6  *iptables.ChainInfo
+		isolationChainV6 *iptables.ChainInfo
 	)
 
 	genericData, ok := option[netlabel.GenericData]
@@ -391,12 +410,20 @@ func (d *driver) configure(option map[string]interface{}) error {
 			}
 		}
 		removeIPChains()
-		natChain, filterChain, isolationChain, err = setupIPChains(config)
+		natChain, filterChain, isolationChain, err = setupIPChains(config, iptables.IPV4)
 		if err != nil {
 			return err
 		}
+		if config.EnableIPv6 {
+			natChainV6, filterChainV6, isolationChainV6, err = setupIPChains(config, iptables.IPV6)
+			if err != nil {
+				return err
+			}
+		}
+
 		// Make sure on firewall reload, first thing being re-played is chains creation
-		iptables.OnReloaded(func() { logrus.Debugf("Recreating iptables chains on firewall reload"); setupIPChains(config) })
+		iptables.OnReloaded(func() { logrus.Debugf("Recreating iptables chains on firewall reload"); setupIPChains(config, iptables.IPV4) })
+		iptables.OnReloaded(func() { logrus.Debugf("Recreating ip6tables chains on firewall reload"); setupIPChains(config, iptables.IPV6) })
 	}
 
 	if config.EnableIPForwarding {
@@ -405,12 +432,21 @@ func (d *driver) configure(option map[string]interface{}) error {
 			logrus.Warn(err)
 			return err
 		}
+		if config.EnableIPv6 {
+			iptable:= iptables.GetIptable(iptables.IPV6)
+                        if err := iptable.SetDefaultPolicy(iptables.Filter, "FORWARD", iptables.Drop); err != nil {
+                                logrus.Warnf("Settig the default DROP policy on firewall reload failed, %v", err)
+                        }
+		}
 	}
 
 	d.Lock()
 	d.natChain = natChain
 	d.filterChain = filterChain
 	d.isolationChain = isolationChain
+	d.natChainV6 = natChainV6
+	d.filterChainV6 = filterChainV6
+	d.isolationChainV6 = isolationChainV6
 	d.config = config
 	d.Unlock()
 
@@ -649,6 +685,7 @@ func (d *driver) createNetwork(config *networkConfiguration) error {
 		endpoints:  make(map[string]*bridgeEndpoint),
 		config:     config,
 		portMapper: portmapper.New(d.config.UserlandProxyPath),
+		portMapperV6: portmapper.New(d.config.UserlandProxyPath),
 		driver:     d,
 	}
 
@@ -686,17 +723,16 @@ func (d *driver) createNetwork(config *networkConfiguration) error {
 	if err = config.conflictsWithNetworks(config.ID, networkList); err != nil {
 		return err
 	}
-
 	setupNetworkIsolationRules := func(config *networkConfiguration, i *bridgeInterface) error {
-		if err := network.isolateNetwork(networkList, true); err != nil {
-			if err := network.isolateNetwork(networkList, false); err != nil {
+		if err := network.isolateNetwork(iptables.IPV4, networkList, true); err != nil {
+			if err := network.isolateNetwork(iptables.IPV4, networkList, false); err != nil {
 				logrus.Warnf("Failed on removing the inter-network iptables rules on cleanup: %v", err)
 			}
 			return err
 		}
 		network.registerIptCleanFunc(func() error {
 			nwList := d.getNetworks()
-			return network.isolateNetwork(nwList, false)
+			return network.isolateNetwork(iptables.IPV4, nwList, false)
 		})
 		return nil
 	}
