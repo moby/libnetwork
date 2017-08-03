@@ -131,17 +131,17 @@ type bridgeNetwork struct {
 }
 
 type driver struct {
-	config         *configuration
-	network        *bridgeNetwork
-	natChain       *iptables.ChainInfo
-	filterChain    *iptables.ChainInfo
-	isolationChain *iptables.ChainInfo
-	natChainV6     *iptables.ChainInfo
-	filterChainV6  *iptables.ChainInfo
+	config           *configuration
+	network          *bridgeNetwork
+	natChain         *iptables.ChainInfo
+	filterChain      *iptables.ChainInfo
+	isolationChain   *iptables.ChainInfo
+	natChainV6       *iptables.ChainInfo
+	filterChainV6    *iptables.ChainInfo
 	isolationChainV6 *iptables.ChainInfo
-	networks       map[string]*bridgeNetwork
-	store          datastore.DataStore
-	nlh            *netlink.Handle
+	networks         map[string]*bridgeNetwork
+	store            datastore.DataStore
+	nlh              *netlink.Handle
 	sync.Mutex
 }
 
@@ -375,13 +375,13 @@ func (c *networkConfiguration) conflictsWithNetworks(id string, others []*bridge
 
 func (d *driver) configure(option map[string]interface{}) error {
 	var (
-		config         *configuration
-		err            error
-		natChain       *iptables.ChainInfo
-		filterChain    *iptables.ChainInfo
-		isolationChain *iptables.ChainInfo
-		natChainV6     *iptables.ChainInfo
-		filterChainV6  *iptables.ChainInfo
+		config           *configuration
+		err              error
+		natChain         *iptables.ChainInfo
+		filterChain      *iptables.ChainInfo
+		isolationChain   *iptables.ChainInfo
+		natChainV6       *iptables.ChainInfo
+		filterChainV6    *iptables.ChainInfo
 		isolationChainV6 *iptables.ChainInfo
 	)
 
@@ -422,8 +422,14 @@ func (d *driver) configure(option map[string]interface{}) error {
 		}
 
 		// Make sure on firewall reload, first thing being re-played is chains creation
-		iptables.OnReloaded(func() { logrus.Debugf("Recreating iptables chains on firewall reload"); setupIPChains(config, iptables.IPV4) })
-		iptables.OnReloaded(func() { logrus.Debugf("Recreating ip6tables chains on firewall reload"); setupIPChains(config, iptables.IPV6) })
+		iptables.OnReloaded(func() {
+			logrus.Debugf("Recreating iptables chains on firewall reload")
+			setupIPChains(config, iptables.IPV4)
+		})
+		iptables.OnReloaded(func() {
+			logrus.Debugf("Recreating ip6tables chains on firewall reload")
+			setupIPChains(config, iptables.IPV6)
+		})
 	}
 
 	if config.EnableIPForwarding {
@@ -433,10 +439,10 @@ func (d *driver) configure(option map[string]interface{}) error {
 			return err
 		}
 		if config.EnableIPv6 {
-			iptable:= iptables.GetIptable(iptables.IPV6)
-                        if err := iptable.SetDefaultPolicy(iptables.Filter, "FORWARD", iptables.Drop); err != nil {
-                                logrus.Warnf("Settig the default DROP policy on firewall reload failed, %v", err)
-                        }
+			iptable := iptables.GetIptable(iptables.IPV6)
+			if err := iptable.SetDefaultPolicy(iptables.Filter, "FORWARD", iptables.Drop); err != nil {
+				logrus.Warnf("Settig the default DROP policy on firewall reload failed, %v", err)
+			}
 		}
 	}
 
@@ -681,12 +687,12 @@ func (d *driver) createNetwork(config *networkConfiguration) error {
 
 	// Create and set network handler in driver
 	network := &bridgeNetwork{
-		id:         config.ID,
-		endpoints:  make(map[string]*bridgeEndpoint),
-		config:     config,
-		portMapper: portmapper.New(d.config.UserlandProxyPath),
+		id:           config.ID,
+		endpoints:    make(map[string]*bridgeEndpoint),
+		config:       config,
+		portMapper:   portmapper.New(d.config.UserlandProxyPath),
 		portMapperV6: portmapper.New(d.config.UserlandProxyPath),
-		driver:     d,
+		driver:       d,
 	}
 
 	d.Lock()

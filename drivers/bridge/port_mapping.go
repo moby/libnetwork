@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	defaultBindingIP = net.IPv4(0, 0, 0, 0)
+	defaultBindingIP   = net.IPv4(0, 0, 0, 0)
 	defaultBindingIPV6 = net.ParseIP("::1")
 )
 
@@ -147,7 +147,7 @@ func (n *bridgeNetwork) releasePort(bnd types.PortBinding) error {
 
 	portmapper := n.portMapper
 
-	if strings.ContainsAny(host.String(),"]") == true {
+	if strings.ContainsAny(host.String(), "]") == true {
 		portmapper = n.portMapperV6
 	}
 

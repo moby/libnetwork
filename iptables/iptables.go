@@ -39,13 +39,13 @@ const (
 	Drop Policy = "DROP"
 	// Accept is the default iptables ACCEPT policy
 	Accept Policy = "ACCEPT"
-	IPV6 = true
-	IPV4 = false
+	IPV6          = true
+	IPV4          = false
 )
 
 var (
 	iptablesPath  string
-	ip6tablesPath  string
+	ip6tablesPath string
 	supportsXlock = false
 	supportsCOpt  = false
 	xLockWaitMsg  = "Another app is currently holding the xtables lock; waiting"
@@ -128,7 +128,7 @@ func initCheck() error {
 	return nil
 }
 
-func GetIptable(ipv6 bool) *IpTable{
+func GetIptable(ipv6 bool) *IpTable {
 	return &IpTable{ipv6: ipv6}
 }
 
@@ -251,8 +251,8 @@ func (iptable IpTable) ProgramChain(c *ChainInfo, bridgeName string, hairpinMode
 // RemoveExistingChain removes existing chain from the table.
 func (iptable IpTable) RemoveExistingChain(name string, table Table) error {
 	c := &ChainInfo{
-		Name:  name,
-		Table: table,
+		Name:    name,
+		Table:   table,
 		IpTable: iptable,
 	}
 	if string(c.Table) == "" {
@@ -316,7 +316,7 @@ func (c *ChainInfo) Forward(action Action, ip net.IP, port int, proto, destAddr 
 // Link adds reciprocal ACCEPT rule for two supplied IP addresses.
 // Traffic is allowed from ip1 to ip2 and vice-versa
 func (c *ChainInfo) Link(action Action, ip1, ip2 net.IP, port int, proto string, bridgeName string) error {
-	iptable:= GetIptable(c.IpTable.ipv6)
+	iptable := GetIptable(c.IpTable.ipv6)
 	// forward
 	args := []string{
 		"-i", bridgeName, "-o", bridgeName,
@@ -366,7 +366,7 @@ func (c *ChainInfo) Prerouting(action Action, args ...string) error {
 
 // Output adds linking rule to an OUTPUT chain.
 func (c *ChainInfo) Output(action Action, args ...string) error {
-	iptable:= GetIptable(c.IpTable.ipv6)
+	iptable := GetIptable(c.IpTable.ipv6)
 	a := []string{"-t", string(c.Table), string(action), "OUTPUT"}
 	if len(args) > 0 {
 		a = append(a, args...)
@@ -381,12 +381,12 @@ func (c *ChainInfo) Output(action Action, args ...string) error {
 
 // Remove removes the chain.
 func (c *ChainInfo) Remove() error {
-	iptable:= GetIptable(c.IpTable.ipv6)
+	iptable := GetIptable(c.IpTable.ipv6)
 	// Ignore errors - This could mean the chains were never set up
 	if c.Table == Nat {
-		c.Prerouting( Delete, "-m", "addrtype", "--dst-type", "LOCAL", "-j", c.Name)
-		c.Output( Delete, "-m", "addrtype", "--dst-type", "LOCAL", "!", "--dst", iptable.LoopbackByVersion(), "-j", c.Name)
-		c.Output( Delete, "-m", "addrtype", "--dst-type", "LOCAL", "-j", c.Name) // Created in versions <= 0.1.6
+		c.Prerouting(Delete, "-m", "addrtype", "--dst-type", "LOCAL", "-j", c.Name)
+		c.Output(Delete, "-m", "addrtype", "--dst-type", "LOCAL", "!", "--dst", iptable.LoopbackByVersion(), "-j", c.Name)
+		c.Output(Delete, "-m", "addrtype", "--dst-type", "LOCAL", "-j", c.Name) // Created in versions <= 0.1.6
 
 		c.Prerouting(Delete)
 		c.Output(Delete)
