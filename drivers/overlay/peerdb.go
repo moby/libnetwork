@@ -266,6 +266,13 @@ func (d *driver) peerAdd(nid, eid string, peerIP net.IP, peerIPMask net.IPMask,
 		return err
 	}
 
+	// This peer add could be for an IP which was assigned to a remote task
+	// that just went down and we haaven't received the gossip delete event
+	// yet. Hence check the current peerDb and clean up the kernel state.
+	// The case where the network sandbox is not avialble is when the node
+	// doesn't have this network instantiated yet. In that there is nothing
+	// to clean up.
+	oldMac, _, oldVtep, existsErr := d.peerDbSearch(nid, peerIP)
 	if updateDb {
 		d.peerDbAdd(nid, eid, peerIP, peerIPMask, peerMac, vtep, false)
 	}
@@ -305,6 +312,14 @@ func (d *driver) peerAdd(nid, eid string, peerIP net.IP, peerIPMask net.IPMask,
 	// Add neighbor entry for the peer IP
 	if err := sbox.AddNeighbor(peerIP, peerMac, l3Miss, sbox.NeighborOptions().LinkName(s.vxlanName)); err != nil {
 		return fmt.Errorf("could not add neighbor entry into the sandbox: %v", err)
+	}
+
+	if existsErr == nil && vtep.String() != oldVtep.String() &&
+		oldVtep.String() != d.advertiseAddress {
+		if err := sbox.DeleteNeighbor(oldVtep, oldMac, true); err != nil {
+			logrus.Errorf(`peerAdd for %s with vtep %s, old vtep %s 
+			cleanup failed: %v`, peerIP, vtep, oldVtep, err)
+		}
 	}
 
 	// Add fdb entry to the bridge for the peer mac

@@ -120,6 +120,18 @@ func (d *driver) Join(nid, eid string, sboxKey string, jinfo driverapi.JoinInfo,
 		}
 	}
 
+	// When a task gets rescheduled to a local node the same IP could
+	// have been used for a remote task that just went down. This node
+	// we may not have yet received the gossip delete event yet. Hence
+	// the kernel state has to be cleaned up before updating the peerDb
+	peerMac, _, vtep, err := d.peerDbSearch(nid, ep.addr.IP)
+	if err == nil && vtep.String() != d.advertiseAddress {
+		if err = sbox.DeleteNeighbor(vtep, peerMac, true); err != nil {
+			logrus.Warnf(`Local endpoint join with IP %s, remote peer %s 
+				     delete failed: %v`, ep.addr.IP, vtep, err)
+		}
+	}
+
 	d.peerDbAdd(nid, eid, ep.addr.IP, ep.addr.Mask, ep.mac,
 		net.ParseIP(d.advertiseAddress), true)
 
