@@ -11,7 +11,7 @@ const userChain = "DOCKER-USER"
 // docker operations/restarts. Docker will not delete or modify any pre-existing
 // rules from the DOCKER-USER filter chain.
 func arrangeUserFilterRule() {
-	iptable := iptables.GetIptable(iptables.IPV4)
+	iptable := iptables.GetIptable(iptables.IPv4)
 	_, err := iptable.NewChain(userChain, iptables.Filter, false)
 	if err != nil {
 		logrus.Warnf("Failed to create %s chain: %v", userChain, err)

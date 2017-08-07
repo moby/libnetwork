@@ -210,7 +210,7 @@ func programMangle(vni uint32, add bool) (err error) {
 		action = "install"
 	)
 
-	iptable := iptables.GetIptable(iptables.IPV4)
+	iptable := iptables.GetIptable(iptables.IPv4)
 
 	if add == iptable.Exists(iptables.Mangle, chain, rule...) {
 		return
@@ -241,7 +241,7 @@ func programInput(vni uint32, add bool) (err error) {
 		msg        = "add"
 	)
 
-	iptable := iptables.GetIptable(iptables.IPV4)
+	iptable := iptables.GetIptable(iptables.IPv4)
 
 	if !add {
 		action = iptables.Delete

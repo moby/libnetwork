@@ -57,7 +57,7 @@ func reexecSetupResolver() {
 		os.Exit(3)
 	}
 
-	iptable := iptables.GetIptable(iptables.IPV4)
+	iptable := iptables.GetIptable(iptables.IPv4)
 
 	// insert outputChain and postroutingchain
 	err = iptable.RawCombinedOutputNative("-t", "nat", "-C", "OUTPUT", "-d", resolverIP, "-j", outputChain)

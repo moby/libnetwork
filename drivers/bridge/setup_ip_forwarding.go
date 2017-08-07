@@ -39,7 +39,7 @@ func setupIPForwarding(enableIPTables bool) error {
 		if !enableIPTables {
 			return nil
 		}
-		iptable := iptables.GetIptable(iptables.IPV4)
+		iptable := iptables.GetIptable(iptables.IPv4)
 		if err := iptable.SetDefaultPolicy(iptables.Filter, "FORWARD", iptables.Drop); err != nil {
 			if err := configureIPForwarding(false); err != nil {
 				logrus.Errorf("Disabling IP forwarding failed, %v", err)

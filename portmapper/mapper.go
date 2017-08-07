@@ -137,6 +137,7 @@ func (pm *PortMapper) MapRange(container net.Addr, hostIP net.IP, hostPortStart,
 	}
 
 	containerIP, containerPort := getIPAndPort(m.container)
+	// FIXME - why duplicate
 	if hostIP.To4() != nil {
 		if err := pm.forward(iptables.Append, m.proto, hostIP, allocatedHostPort, containerIP.String(), containerPort); err != nil {
 			return nil, err
@@ -147,6 +148,7 @@ func (pm *PortMapper) MapRange(container net.Addr, hostIP net.IP, hostPortStart,
 		}
 	}
 
+	// FIXME - same for v6
 	cleanup := func() error {
 		// need to undo the iptables rules before we return
 		m.userlandProxy.Stop()
@@ -160,6 +162,7 @@ func (pm *PortMapper) MapRange(container net.Addr, hostIP net.IP, hostPortStart,
 		return nil
 	}
 
+	// FIXME - same for v6
 	if hostIP.To4() != nil {
 		if err := m.userlandProxy.Start(); err != nil {
 			if err := cleanup(); err != nil {
@@ -243,6 +246,5 @@ func (pm *PortMapper) forward(action iptables.Action, proto string, sourceIP net
 	if pm.chain == nil {
 		return nil
 	}
-
 	return pm.chain.Forward(action, sourceIP, sourcePort, proto, containerIP, containerPort, pm.bridgeName)
 }

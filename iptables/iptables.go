@@ -22,6 +22,9 @@ type Policy string
 // Table refers to Nat, Filter or Mangle.
 type Table string
 
+// IPVersion refers to IP version, v4 or v6
+type IPVersion string
+
 const (
 	// Append appends the rule at the end of the chain.
 	Append Action = "-A"
@@ -39,8 +42,10 @@ const (
 	Drop Policy = "DROP"
 	// Accept is the default iptables ACCEPT policy
 	Accept Policy = "ACCEPT"
-	IPV6          = true
-	IPV4          = false
+	// IPv4 is version 4
+	IPv4 IPVersion = "IPV4"
+	// IPv6 is version 6
+	IPv6 IPVersion = "IPV6"
 )
 
 var (
@@ -56,8 +61,9 @@ var (
 	initOnce            sync.Once
 )
 
-type IpTable struct {
-	ipv6 bool
+// IPTable defines struct with IPVersion and few other members are added later
+type IPTable struct {
+	Version IPVersion
 }
 
 // ChainInfo defines the iptables chain.
@@ -65,7 +71,7 @@ type ChainInfo struct {
 	Name        string
 	Table       Table
 	HairpinMode bool
-	IpTable     IpTable
+	IPTable     IPTable
 }
 
 // ChainError is returned to represent errors during ip table operation.
@@ -128,17 +134,18 @@ func initCheck() error {
 	return nil
 }
 
-func GetIptable(ipv6 bool) *IpTable {
-	return &IpTable{ipv6: ipv6}
+// GetIptable returns an instance of IPTable with specified version
+func GetIptable(version IPVersion) *IPTable {
+	return &IPTable{Version: version}
 }
 
 // NewChain adds a new chain to ip table.
-func (iptable IpTable) NewChain(name string, table Table, hairpinMode bool) (*ChainInfo, error) {
+func (iptable IPTable) NewChain(name string, table Table, hairpinMode bool) (*ChainInfo, error) {
 	c := &ChainInfo{
 		Name:        name,
 		Table:       table,
 		HairpinMode: hairpinMode,
-		IpTable:     iptable,
+		IPTable:     iptable,
 	}
 	if string(c.Table) == "" {
 		c.Table = Filter
@@ -155,16 +162,16 @@ func (iptable IpTable) NewChain(name string, table Table, hairpinMode bool) (*Ch
 	return c, nil
 }
 
-func (iptable IpTable) LoopbackByVersion() string {
-	if iptable.ipv6 == IPV6 {
+// LoopbackByVersion returns loopback address by version
+func (iptable IPTable) LoopbackByVersion() string {
+	if iptable.Version == IPv6 {
 		return "::1/128"
-	} else {
-		return "127.0.0.0/8"
 	}
+	return "127.0.0.0/8"
 }
 
 // ProgramChain is used to add rules to a chain
-func (iptable IpTable) ProgramChain(c *ChainInfo, bridgeName string, hairpinMode, enable bool) error {
+func (iptable IPTable) ProgramChain(c *ChainInfo, bridgeName string, hairpinMode, enable bool) error {
 	if c.Name == "" {
 		return errors.New("Could not program chain, missing chain name")
 	}
@@ -249,11 +256,11 @@ func (iptable IpTable) ProgramChain(c *ChainInfo, bridgeName string, hairpinMode
 }
 
 // RemoveExistingChain removes existing chain from the table.
-func (iptable IpTable) RemoveExistingChain(name string, table Table) error {
+func (iptable IPTable) RemoveExistingChain(name string, table Table) error {
 	c := &ChainInfo{
 		Name:    name,
 		Table:   table,
-		IpTable: iptable,
+		IPTable: iptable,
 	}
 	if string(c.Table) == "" {
 		c.Table = Filter
@@ -264,7 +271,7 @@ func (iptable IpTable) RemoveExistingChain(name string, table Table) error {
 // Forward adds forwarding rule to 'filter' table and corresponding nat rule to 'nat' table.
 func (c *ChainInfo) Forward(action Action, ip net.IP, port int, proto, destAddr string, destPort int, bridgeName string) error {
 
-	iptable := GetIptable(c.IpTable.ipv6)
+	iptable := GetIptable(c.IPTable.Version)
 	daddr := ip.String()
 	if ip.IsUnspecified() {
 		// iptables interprets "0.0.0.0" as "0.0.0.0/32", whereas we
@@ -316,7 +323,7 @@ func (c *ChainInfo) Forward(action Action, ip net.IP, port int, proto, destAddr 
 // Link adds reciprocal ACCEPT rule for two supplied IP addresses.
 // Traffic is allowed from ip1 to ip2 and vice-versa
 func (c *ChainInfo) Link(action Action, ip1, ip2 net.IP, port int, proto string, bridgeName string) error {
-	iptable := GetIptable(c.IpTable.ipv6)
+	iptable := GetIptable(c.IPTable.Version)
 	// forward
 	args := []string{
 		"-i", bridgeName, "-o", bridgeName,
@@ -342,7 +349,7 @@ func (c *ChainInfo) Link(action Action, ip1, ip2 net.IP, port int, proto string,
 // ProgramRule adds the rule specified by args only if the
 // rule is not already present in the chain. Reciprocally,
 // it removes the rule only if present.
-func (iptable IpTable) ProgramRule(table Table, chain string, action Action, args []string) error {
+func (iptable IPTable) ProgramRule(table Table, chain string, action Action, args []string) error {
 	if iptable.Exists(table, chain, args...) != (action == Delete) {
 		return nil
 	}
@@ -351,7 +358,7 @@ func (iptable IpTable) ProgramRule(table Table, chain string, action Action, arg
 
 // Prerouting adds linking rule to nat/PREROUTING chain.
 func (c *ChainInfo) Prerouting(action Action, args ...string) error {
-	iptable := GetIptable(c.IpTable.ipv6)
+	iptable := GetIptable(c.IPTable.Version)
 	a := []string{"-t", string(Nat), string(action), "PREROUTING"}
 	if len(args) > 0 {
 		a = append(a, args...)
@@ -366,7 +373,7 @@ func (c *ChainInfo) Prerouting(action Action, args ...string) error {
 
 // Output adds linking rule to an OUTPUT chain.
 func (c *ChainInfo) Output(action Action, args ...string) error {
-	iptable := GetIptable(c.IpTable.ipv6)
+	iptable := GetIptable(c.IPTable.Version)
 	a := []string{"-t", string(c.Table), string(action), "OUTPUT"}
 	if len(args) > 0 {
 		a = append(a, args...)
@@ -381,7 +388,7 @@ func (c *ChainInfo) Output(action Action, args ...string) error {
 
 // Remove removes the chain.
 func (c *ChainInfo) Remove() error {
-	iptable := GetIptable(c.IpTable.ipv6)
+	iptable := GetIptable(c.IPTable.Version)
 	// Ignore errors - This could mean the chains were never set up
 	if c.Table == Nat {
 		c.Prerouting(Delete, "-m", "addrtype", "--dst-type", "LOCAL", "-j", c.Name)
@@ -397,17 +404,17 @@ func (c *ChainInfo) Remove() error {
 }
 
 // Exists checks if a rule exists
-func (iptable IpTable) Exists(table Table, chain string, rule ...string) bool {
+func (iptable IPTable) Exists(table Table, chain string, rule ...string) bool {
 	return iptable.exists(false, table, chain, rule...)
 }
 
 // ExistsNative behaves as Exists with the difference it
 // will always invoke `iptables` binary.
-func (iptable IpTable) ExistsNative(table Table, chain string, rule ...string) bool {
+func (iptable IPTable) ExistsNative(table Table, chain string, rule ...string) bool {
 	return iptable.exists(true, table, chain, rule...)
 }
 
-func (iptable IpTable) exists(native bool, table Table, chain string, rule ...string) bool {
+func (iptable IPTable) exists(native bool, table Table, chain string, rule ...string) bool {
 	f := iptable.Raw
 	if native {
 		f = iptable.raw
@@ -434,9 +441,9 @@ func (iptable IpTable) exists(native bool, table Table, chain string, rule ...st
 	return iptable.existsRaw(table, chain, rule...)
 }
 
-func (iptable IpTable) existsRaw(table Table, chain string, rule ...string) bool {
+func (iptable IPTable) existsRaw(table Table, chain string, rule ...string) bool {
 	path := iptablesPath
-	if iptable.ipv6 == true {
+	if iptable.Version == IPv6 {
 		path = ip6tablesPath
 	}
 	ruleString := fmt.Sprintf("%s %s\n", chain, strings.Join(rule, " "))
@@ -446,7 +453,7 @@ func (iptable IpTable) existsRaw(table Table, chain string, rule ...string) bool
 }
 
 // Raw calls 'iptables' system command, passing supplied arguments.
-func (iptable IpTable) Raw(args ...string) ([]byte, error) {
+func (iptable IPTable) Raw(args ...string) ([]byte, error) {
 	if firewalldRunning {
 		output, err := Passthrough(Iptables, args...)
 		if err == nil || !strings.Contains(err.Error(), "was not provided by any .service files") {
@@ -456,7 +463,7 @@ func (iptable IpTable) Raw(args ...string) ([]byte, error) {
 	return iptable.raw(args...)
 }
 
-func (iptable IpTable) raw(args ...string) ([]byte, error) {
+func (iptable IPTable) raw(args ...string) ([]byte, error) {
 	if err := initCheck(); err != nil {
 		return nil, err
 	}
@@ -468,7 +475,7 @@ func (iptable IpTable) raw(args ...string) ([]byte, error) {
 	}
 
 	path := iptablesPath
-	if iptable.ipv6 == true {
+	if iptable.Version == IPv6 {
 		path = ip6tablesPath
 	}
 
@@ -489,7 +496,7 @@ func (iptable IpTable) raw(args ...string) ([]byte, error) {
 
 // RawCombinedOutput inernally calls the Raw function and returns a non nil
 // error if Raw returned a non nil error or a non empty output
-func (iptable IpTable) RawCombinedOutput(args ...string) error {
+func (iptable IPTable) RawCombinedOutput(args ...string) error {
 	if output, err := iptable.Raw(args...); err != nil || len(output) != 0 {
 		return fmt.Errorf("%s (%v)", string(output), err)
 	}
@@ -498,7 +505,7 @@ func (iptable IpTable) RawCombinedOutput(args ...string) error {
 
 // RawCombinedOutputNative behave as RawCombinedOutput with the difference it
 // will always invoke `iptables` binary
-func (iptable IpTable) RawCombinedOutputNative(args ...string) error {
+func (iptable IPTable) RawCombinedOutputNative(args ...string) error {
 	if output, err := iptable.raw(args...); err != nil || len(output) != 0 {
 		return fmt.Errorf("%s (%v)", string(output), err)
 	}
@@ -506,7 +513,7 @@ func (iptable IpTable) RawCombinedOutputNative(args ...string) error {
 }
 
 // ExistChain checks if a chain exists
-func (iptable IpTable) ExistChain(chain string, table Table) bool {
+func (iptable IPTable) ExistChain(chain string, table Table) bool {
 	if _, err := iptable.Raw("-t", string(table), "-L", chain); err == nil {
 		return true
 	}
@@ -523,7 +530,7 @@ func GetVersion() (major, minor, micro int, err error) {
 }
 
 // SetDefaultPolicy sets the passed default policy for the table/chain
-func (iptable IpTable) SetDefaultPolicy(table Table, chain string, policy Policy) error {
+func (iptable IPTable) SetDefaultPolicy(table Table, chain string, policy Policy) error {
 	if err := iptable.RawCombinedOutput("-t", string(table), "-P", chain, string(policy)); err != nil {
 		return fmt.Errorf("setting default policy to %v in %v chain failed: %v", policy, chain, err)
 	}
@@ -544,7 +551,7 @@ func supportsCOption(mj, mn, mc int) bool {
 }
 
 // AddReturnRule adds a return rule for the chain in the filter table
-func (iptable IpTable) AddReturnRule(chain string) error {
+func (iptable IPTable) AddReturnRule(chain string) error {
 	var (
 		table = Filter
 		args  = []string{"-j", "RETURN"}
@@ -563,7 +570,7 @@ func (iptable IpTable) AddReturnRule(chain string) error {
 }
 
 // EnsureJumpRule ensures the jump rule is on top
-func (iptable IpTable) EnsureJumpRule(fromChain, toChain string) error {
+func (iptable IPTable) EnsureJumpRule(fromChain, toChain string) error {
 	var (
 		table = Filter
 		args  = []string{"-j", toChain}

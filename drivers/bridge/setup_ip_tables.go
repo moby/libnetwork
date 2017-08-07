@@ -17,7 +17,7 @@ const (
 	IsolationChain = "DOCKER-ISOLATION"
 )
 
-func setupIPChains(config *configuration, ipFamily bool) (*iptables.ChainInfo, *iptables.ChainInfo, *iptables.ChainInfo, error) {
+func setupIPChains(config *configuration, version iptables.IPVersion) (*iptables.ChainInfo, *iptables.ChainInfo, *iptables.ChainInfo, error) {
 	// Sanity check.
 	if config.EnableIPTables == false {
 		return nil, nil, nil, errors.New("cannot create new chains, EnableIPTable is disabled")
@@ -25,7 +25,7 @@ func setupIPChains(config *configuration, ipFamily bool) (*iptables.ChainInfo, *
 
 	hairpinMode := !config.EnableUserlandProxy
 
-	iptable := iptables.GetIptable(ipFamily)
+	iptable := iptables.GetIptable(version)
 
 	natChain, err := iptable.NewChain(DockerChain, iptables.Nat, hairpinMode)
 	if err != nil {
@@ -84,7 +84,7 @@ func (n *bridgeNetwork) setupIPTables(config *networkConfiguration, i *bridgeInt
 		Mask: i.bridgeIPv4.Mask,
 	}
 
-	iptable := iptables.GetIptable(iptables.IPV4)
+	iptable := iptables.GetIptable(iptables.IPv4)
 
 	if config.Internal {
 		if err = setupInternalNetworkRules(config.BridgeName, maskedAddrv4, config.EnableICC, true); err != nil {
@@ -100,7 +100,7 @@ func (n *bridgeNetwork) setupIPTables(config *networkConfiguration, i *bridgeInt
 		n.registerIptCleanFunc(func() error {
 			return setupIPTablesInternal(config.BridgeName, maskedAddrv4, config.EnableICC, config.EnableIPMasquerade, hairpinMode, false)
 		})
-		natChain, filterChain, _, err := n.getDriverChains(iptables.IPV4)
+		natChain, filterChain, _, err := n.getDriverChains(iptables.IPv4)
 		if err != nil {
 			return fmt.Errorf("Failed to setup IP tables, cannot acquire chain info %s", err.Error())
 		}
@@ -138,7 +138,7 @@ func (n *bridgeNetwork) setupIPTables(config *networkConfiguration, i *bridgeInt
 		Mask: i.bridgeIPv6.Mask,
 	}
 
-	iptable = iptables.GetIptable(iptables.IPV6)
+	iptable = iptables.GetIptable(iptables.IPv6)
 
 	if config.Internal {
 		if err = setupInternalNetworkRules(config.BridgeName, maskedAddrv6, config.EnableICC, true); err != nil {
@@ -154,7 +154,7 @@ func (n *bridgeNetwork) setupIPTables(config *networkConfiguration, i *bridgeInt
 		n.registerIptCleanFunc(func() error {
 			return setupIPTablesInternal(config.BridgeName, maskedAddrv6, config.EnableICC, config.EnableIPMasquerade, hairpinMode, false)
 		})
-		natChainV6, filterChainV6, _, err := n.getDriverChains(iptables.IPV6)
+		natChainV6, filterChainV6, _, err := n.getDriverChains(iptables.IPv6)
 		if err != nil {
 			return fmt.Errorf("Failed to setup IP tables, cannot acquire chain info %s", err.Error())
 		}
@@ -203,48 +203,48 @@ func setupIPTablesInternal(bridgeIface string, addr net.Addr, icc, ipmasq, hairp
 		outRule   = iptRule{table: iptables.Filter, chain: "FORWARD", args: []string{"-i", bridgeIface, "!", "-o", bridgeIface, "-j", "ACCEPT"}}
 	)
 
-	ipFamily := iptables.IPV4
+	ipVersion := iptables.IPv4
 
 	if strings.Contains(address, ":") {
-		ipFamily = iptables.IPV6
+		ipVersion = iptables.IPv6
 	}
 
 	// Set NAT.
 	if ipmasq {
-		if err := programChainRule(ipFamily, natRule, "NAT", enable); err != nil {
+		if err := programChainRule(ipVersion, natRule, "NAT", enable); err != nil {
 			return err
 		}
 	}
 
 	if ipmasq && !hairpin {
-		if err := programChainRule(ipFamily, skipDNAT, "SKIP DNAT", enable); err != nil {
+		if err := programChainRule(ipVersion, skipDNAT, "SKIP DNAT", enable); err != nil {
 			return err
 		}
 	}
 
 	// In hairpin mode, masquerade traffic from localhost
 	if hairpin {
-		if err := programChainRule(ipFamily, hpNatRule, "MASQ LOCAL HOST", enable); err != nil {
+		if err := programChainRule(ipVersion, hpNatRule, "MASQ LOCAL HOST", enable); err != nil {
 			return err
 		}
 	}
 
 	// Set Inter Container Communication.
-	if err := setIcc(ipFamily, bridgeIface, icc, enable); err != nil {
+	if err := setIcc(ipVersion, bridgeIface, icc, enable); err != nil {
 		return err
 	}
 
 	// Set Accept on all non-intercontainer outgoing packets.
-	if err := programChainRule(ipFamily, outRule, "ACCEPT NON_ICC OUTGOING", enable); err != nil {
+	if err := programChainRule(ipVersion, outRule, "ACCEPT NON_ICC OUTGOING", enable); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func programChainRule(ipFamily bool, rule iptRule, ruleDescr string, insert bool) error {
+func programChainRule(version iptables.IPVersion, rule iptRule, ruleDescr string, insert bool) error {
 
-	iptable := iptables.GetIptable(ipFamily)
+	iptable := iptables.GetIptable(version)
 
 	var (
 		prefix    []string
@@ -275,8 +275,8 @@ func programChainRule(ipFamily bool, rule iptRule, ruleDescr string, insert bool
 	return nil
 }
 
-func setIcc(ipFamily bool, bridgeIface string, iccEnable, insert bool) error {
-	iptable := iptables.GetIptable(ipFamily)
+func setIcc(version iptables.IPVersion, bridgeIface string, iccEnable, insert bool) error {
+	iptable := iptables.GetIptable(version)
 	var (
 		table      = iptables.Filter
 		chain      = "FORWARD"
@@ -320,8 +320,8 @@ func setIcc(ipFamily bool, bridgeIface string, iccEnable, insert bool) error {
 }
 
 // Control Inter Network Communication. Install/remove only if it is not/is present.
-func setINC(ipFamily bool, iface1, iface2 string, enable bool) error {
-	iptable := iptables.GetIptable(ipFamily)
+func setINC(version iptables.IPVersion, iface1, iface2 string, enable bool) error {
+	iptable := iptables.GetIptable(version)
 	var (
 		table = iptables.Filter
 		chain = IsolationChain
@@ -369,20 +369,20 @@ func setupInternalNetworkRules(bridgeIface string, addr net.Addr, icc, insert bo
 		outDropRule = iptRule{table: iptables.Filter, chain: IsolationChain, args: []string{"-o", bridgeIface, "!", "-s", addr.String(), "-j", "DROP"}}
 	)
 
-	useIpv6 := false
+	version := iptables.IPv4
 
 	if strings.Contains(addr.String(), ":") {
-		useIpv6 = true
+		version = iptables.IPv6
 	}
 
-	if err := programChainRule(useIpv6, inDropRule, "DROP INCOMING", insert); err != nil {
+	if err := programChainRule(version, inDropRule, "DROP INCOMING", insert); err != nil {
 		return err
 	}
-	if err := programChainRule(useIpv6, outDropRule, "DROP OUTGOING", insert); err != nil {
+	if err := programChainRule(version, outDropRule, "DROP OUTGOING", insert); err != nil {
 		return err
 	}
 	// Set Inter Container Communication.
-	if err := setIcc(useIpv6, bridgeIface, icc, insert); err != nil {
+	if err := setIcc(version, bridgeIface, icc, insert); err != nil {
 		return err
 	}
 	return nil
