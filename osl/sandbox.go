@@ -32,6 +32,9 @@ type Sandbox interface {
 	// Unset the previously set default IPv6 gateway in the sandbox
 	UnsetGatewayIPv6() error
 
+	// Add a policy routing rule to the sandbox
+	AddPolicyRoutingRule(table int, src, dst *net.IPNet) error
+
 	// Add a static route to the sandbox.
 	AddStaticRoute(*types.StaticRoute) error
 
