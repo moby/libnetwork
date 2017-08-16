@@ -335,11 +335,20 @@ func (c *networkConfiguration) conflictsWithNetworks(id string, others []*bridge
 		if nwID == id {
 			continue
 		}
+
+		if nwConfig == nil {
+			continue
+		}
+
 		// Verify the name (which may have been set by newInterface()) does not conflict with
 		// existing bridge interfaces. Ironically the system chosen name gets stored in the config...
 		// Basically we are checking if the two original configs were both empty.
 		if nwConfig.BridgeName == c.BridgeName {
 			return types.ForbiddenErrorf("conflicts with network %s (%s) by bridge name", nwID, nwConfig.BridgeName)
+		}
+
+		if nwBridge == nil {
+			continue
 		}
 		// If this network config specifies the AddressIPv4, we need
 		// to make sure it does not conflict with any previously allocated
