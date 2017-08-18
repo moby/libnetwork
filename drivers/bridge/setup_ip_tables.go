@@ -351,12 +351,15 @@ func setINC(version iptables.IPVersion, iface1, iface2 string, enable bool) erro
 	return nil
 }
 
-func removeIPChains() {
+func removeIPChains(version iptables.IPVersion) {
+	ipt := iptables.IPTable{Version: version}
+
 	for _, chainInfo := range []iptables.ChainInfo{
-		{Name: DockerChain, Table: iptables.Nat},
-		{Name: DockerChain, Table: iptables.Filter},
-		{Name: IsolationChain, Table: iptables.Filter},
+		{Name: DockerChain, Table: iptables.Nat, IPTable: ipt},
+		{Name: DockerChain, Table: iptables.Filter, IPTable: ipt},
+		{Name: IsolationChain, Table: iptables.Filter, IPTable: ipt},
 	} {
+
 		if err := chainInfo.Remove(); err != nil {
 			logrus.Warnf("Failed to remove existing iptables entries in table %s chain %s : %v", chainInfo.Table, chainInfo.Name, err)
 		}

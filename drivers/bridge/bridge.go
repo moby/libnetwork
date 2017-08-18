@@ -409,7 +409,12 @@ func (d *driver) configure(option map[string]interface{}) error {
 				logrus.Warnf("Running modprobe bridge br_netfilter failed with message: %s, error: %v", out, err)
 			}
 		}
-		removeIPChains()
+
+		removeIPChains(iptables.IPv4)
+		if config.EnableIPv6 {
+			removeIPChains(iptables.IPv6)
+		}
+
 		natChain, filterChain, isolationChain, err = setupIPChains(config, iptables.IPv4)
 		if err != nil {
 			return err

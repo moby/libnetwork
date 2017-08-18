@@ -1000,20 +1000,24 @@ func TestCleanupIptableRules(t *testing.T) {
 		{Name: IsolationChain, Table: iptables.Filter},
 	}
 
-	if _, _, _, err := setupIPChains(&configuration{EnableIPTables: true}, iptables.IPv4); err != nil {
-		t.Fatalf("Error setting up ip chains: %v", err)
-	}
+	ipVersions := []iptables.IPVersion{iptables.IPv4, iptables.IPv6}
 
-	iptable := iptables.GetIptable(iptables.IPv4)
-	for _, chainInfo := range bridgeChain {
-		if !iptable.ExistChain(chainInfo.Name, chainInfo.Table) {
-			t.Fatalf("iptables chain %s of %s table should have been created", chainInfo.Name, chainInfo.Table)
+	for _, version := range ipVersions {
+		if _, _, _, err := setupIPChains(&configuration{EnableIPTables: true}, version); err != nil {
+			t.Fatalf("Error setting up ip chains for %s: %v", version, err)
 		}
-	}
-	removeIPChains()
-	for _, chainInfo := range bridgeChain {
-		if iptable.ExistChain(chainInfo.Name, chainInfo.Table) {
-			t.Fatalf("iptables chain %s of %s table should have been deleted", chainInfo.Name, chainInfo.Table)
+
+		iptable := iptables.GetIptable(version)
+		for _, chainInfo := range bridgeChain {
+			if !iptable.ExistChain(chainInfo.Name, chainInfo.Table) {
+				t.Fatalf("iptables version %s chain %s of %s table should have been created", version, chainInfo.Name, chainInfo.Table)
+			}
+		}
+		removeIPChains(version)
+		for _, chainInfo := range bridgeChain {
+			if iptable.ExistChain(chainInfo.Name, chainInfo.Table) {
+				t.Fatalf("iptables version %s chain %s of %s table should have been deleted", version, chainInfo.Name, chainInfo.Table)
+			}
 		}
 	}
 }
