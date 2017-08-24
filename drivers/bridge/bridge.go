@@ -96,7 +96,7 @@ type containerConfiguration struct {
 	ChildEndpoints  []string
 }
 
-// cnnectivityConfiguration represents the user specified configuration regarding the external connectivity
+// connectivityConfiguration represents the user specified configuration regarding the external connectivity
 type connectivityConfiguration struct {
 	PortBindings []types.PortBinding
 	ExposedPorts []types.TransportPort
@@ -682,7 +682,7 @@ func (d *driver) createNetwork(config *networkConfiguration) error {
 	// Verify the network configuration does not conflict with previously installed
 	// networks. This step is needed now because driver might have now set the bridge
 	// name on this config struct. And because we need to check for possible address
-	// conflicts, so we need to check against operationa lnetworks.
+	// conflicts, so we need to check against operational networks.
 	if err = config.conflictsWithNetworks(config.ID, networkList); err != nil {
 		return err
 	}
@@ -734,8 +734,8 @@ func (d *driver) createNetwork(config *networkConfiguration) error {
 		// Enable IPv6 Forwarding
 		{enableIPv6Forwarding, setupIPv6Forwarding},
 
-		// Setup Loopback Adresses Routing
-		{!d.config.EnableUserlandProxy, setupLoopbackAdressesRouting},
+		// Setup Loopback Addresses Routing
+		{!d.config.EnableUserlandProxy, setupLoopbackAddressesRouting},
 
 		// Setup IPTables.
 		{d.config.EnableIPTables, network.setupIPTables},

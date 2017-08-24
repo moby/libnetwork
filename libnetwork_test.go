@@ -1412,7 +1412,7 @@ var (
 	once   sync.Once
 	start  = make(chan struct{})
 	done   = make(chan chan struct{}, numThreads-1)
-	origns = netns.None()
+	origins = netns.None()
 	testns = netns.None()
 	sboxes = make([]libnetwork.Sandbox, numThreads)
 )
@@ -1429,13 +1429,13 @@ func createGlobalInstance(t *testing.T) {
 	var err error
 	defer close(start)
 
-	origns, err = netns.Get()
+	origins, err = netns.Get()
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	if testutils.IsRunningInContainer() {
-		testns = origns
+		testns = origins
 	} else {
 		testns, err = netns.New()
 		if err != nil {
