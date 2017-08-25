@@ -38,7 +38,9 @@ type driver struct {
 	exitCh           chan chan struct{}
 	bindAddress      string
 	advertiseAddress string
-	neighIP          string
+	joinDone         bool
+	joinQueue        []string
+	joinQueueCond    *sync.Cond
 	config           map[string]interface{}
 	peerDb           peerNetworkMap
 	secMap           *encrMap
@@ -67,10 +69,14 @@ func Init(dc driverapi.DriverCallback, config map[string]interface{}) error {
 		peerDb: peerNetworkMap{
 			mp: map[string]*peerMap{},
 		},
-		secMap:   &encrMap{nodes: map[string][]*spi{}},
-		config:   config,
-		peerOpCh: make(chan *peerOperation),
+		secMap:    &encrMap{nodes: map[string][]*spi{}},
+		config:    config,
+		peerOpCh:  make(chan *peerOperation),
+		joinDone:  false,
+		joinQueue: []string{},
 	}
+
+	d.joinQueueCond = sync.NewCond(d)
 
 	// Launch the go routine for processing peer operations
 	ctx, cancel := context.WithCancel(context.Background())
@@ -254,6 +260,39 @@ func validateSelf(node string) error {
 	return fmt.Errorf("Multi-Host overlay networking requires cluster-advertise(%s) to be configured with a local ip-address that is reachable within the cluster", advIP.String())
 }
 
+func (d *driver) nodeJoinWorker() {
+	// Lock the object, and attempt to join everything in
+	for !d.joinDone {
+		d.Lock()
+
+		if len(d.joinQueue) == 0 {
+			d.joinQueueCond.Wait()
+		}
+
+		// Attempt to join on everything
+		for len(d.joinQueue) > 0 {
+			neighIP := d.joinQueue[0]
+			d.joinQueue = d.joinQueue[1:]
+
+			logrus.Debugf("attempting to join serf neighbour %s", neighIP)
+			err := d.serfJoin(neighIP)
+
+			if err == nil {
+				logrus.Debugf("joining serf neighbour %s successful", neighIP)
+				d.joinDone = true
+
+				// Blank the queue
+				d.joinQueue = []string{}
+				break
+			} else {
+				logrus.Errorf("joining serf neighbor %s failed: %v", neighIP, err)
+			}
+		}
+
+		d.Unlock()
+	}
+}
+
 func (d *driver) nodeJoin(advertiseAddress, bindAddress string, self bool) {
 	if self && !d.isSerfAlive() {
 		d.Lock()
@@ -273,7 +312,10 @@ func (d *driver) nodeJoin(advertiseAddress, bindAddress string, self bool) {
 				logrus.Warn(err.Error())
 			}
 			err := d.serfInit()
-			if err != nil {
+			if err == nil {
+				// Fire off the process to actually try and join us to a peer
+				go d.nodeJoinWorker()
+			} else {
 				logrus.Errorf("initializing serf instance failed: %v", err)
 				d.Lock()
 				d.advertiseAddress = ""
@@ -284,29 +326,14 @@ func (d *driver) nodeJoin(advertiseAddress, bindAddress string, self bool) {
 		}
 	}
 
+	// Need to wrap this in a lock, as nodeJoinWorker may destroy this channel
+	// when it manages to successfully join to Serf
 	d.Lock()
-	if !self {
-		d.neighIP = advertiseAddress
+	if !self && !d.joinDone {
+		d.joinQueue = append(d.joinQueue, advertiseAddress)
+		d.joinQueueCond.Broadcast()
 	}
-	neighIP := d.neighIP
 	d.Unlock()
-
-	if d.serfInstance != nil && neighIP != "" {
-		var err error
-		d.joinOnce.Do(func() {
-			err = d.serfJoin(neighIP)
-			if err == nil {
-				d.pushLocalDb()
-			}
-		})
-		if err != nil {
-			logrus.Errorf("joining serf neighbor %s failed: %v", advertiseAddress, err)
-			d.Lock()
-			d.joinOnce = sync.Once{}
-			d.Unlock()
-			return
-		}
-	}
 }
 
 func (d *driver) pushLocalEndpointEvent(action, nid, eid string) {
