@@ -260,6 +260,10 @@ func validateSelf(node string) error {
 	return fmt.Errorf("Multi-Host overlay networking requires cluster-advertise(%s) to be configured with a local ip-address that is reachable within the cluster", advIP.String())
 }
 
+// Goroutine to join this node to a discovered Serf neighbour. This will listen
+// for items pushed into `joinQueue`, and attempt to call `serfJoin on them`.
+// When a join is successful, all items are removed from `joinQueue` and this
+// goroutine exits.
 func (d *driver) nodeJoinWorker() {
 	// Lock the object, and attempt to join everything in
 	for !d.joinDone {
