@@ -31,7 +31,6 @@ import (
 )
 
 var (
-	hostMode    bool
 	networkOnce sync.Once
 	networkMu   sync.Mutex
 	vniTbl      = make(map[uint32]string)
@@ -56,20 +55,21 @@ type subnetJSON struct {
 }
 
 type network struct {
-	id        string
-	dbIndex   uint64
-	dbExists  bool
-	sbox      osl.Sandbox
-	nlSocket  *nl.NetlinkSocket
-	endpoints endpointTable
-	driver    *driver
-	joinCnt   int
-	once      *sync.Once
-	initEpoch int
-	initErr   error
-	subnets   []*subnet
-	secure    bool
-	mtu       int
+	id         string
+	dbIndex    uint64
+	dbExists   bool
+	sbox       osl.Sandbox
+	nlSocket   *nl.NetlinkSocket
+	endpoints  endpointTable
+	driver     *driver
+	joinCnt    int
+	once       *sync.Once
+	initEpoch  int
+	initErr    error
+	subnets    []*subnet
+	secure     bool
+	hostAccess bool
+	mtu        int
 	sync.Mutex
 }
 
@@ -172,6 +172,9 @@ func (d *driver) CreateNetwork(id string, option map[string]interface{}, nInfo d
 		}
 		if _, ok := optMap[secureOption]; ok {
 			n.secure = true
+		}
+		if _, ok := optMap[hostAccess]; ok {
+			n.hostAccess = true
 		}
 		if val, ok := optMap[netlabel.DriverMTU]; ok {
 			var err error
@@ -304,7 +307,7 @@ func (n *network) joinSubnetSandbox(s *subnet, restore bool) error {
 	return s.initErr
 }
 
-func (n *network) leaveSandbox() {
+func (n *network) leaveSandbox(linfo driverapi.LeaveInfo) {
 	n.Lock()
 	defer n.Unlock()
 	n.joinCnt--
@@ -318,6 +321,13 @@ func (n *network) leaveSandbox() {
 	n.once = &sync.Once{}
 	for _, s := range n.subnets {
 		s.once = &sync.Once{}
+		if n.hostAccess {
+			err := linfo.ReleaseAddress(s.gwIP.IP)
+			if err != nil {
+				logrus.Errorf("Releasing GW IP failed %v", err)
+			}
+			s.gwIP = nil
+		}
 	}
 
 	n.destroySandbox()
@@ -334,7 +344,7 @@ func (n *network) destroySandbox() {
 
 		for _, s := range n.subnets {
 			if hostMode {
-				if err := removeFilters(n.id[:12], s.brName); err != nil {
+				if err := removeFilters(n.id[:12], s.brName, n.hostAccess); err != nil {
 					logrus.Warnf("Could not remove overlay filters: %v", err)
 				}
 			}
@@ -410,9 +420,7 @@ func populateVNITbl() {
 
 func networkOnceInit() {
 	populateVNITbl()
-
-	if os.Getenv("_OVERLAY_HOST_MODE") != "" {
-		hostMode = true
+	if hostMode {
 		return
 	}
 
@@ -552,6 +560,7 @@ func (n *network) setupSubnetSandbox(s *subnet, brName, vxlanName string) error 
 
 	if err := sbox.AddInterface(brName, "br",
 		sbox.InterfaceOptions().Address(s.gwIP),
+		sbox.InterfaceOptions().MacAddress(netutils.GenerateMACFromIP(s.gwIP.IP)),
 		sbox.InterfaceOptions().Bridge(true)); err != nil {
 		return fmt.Errorf("bridge creation in sandbox failed for subnet %q: %v", s.subnetIP.String(), err)
 	}
@@ -586,7 +595,7 @@ func (n *network) setupSubnetSandbox(s *subnet, brName, vxlanName string) error 
 	}
 
 	if hostMode {
-		if err := addFilters(n.id[:12], brName); err != nil {
+		if err := addFilters(n.id[:12], brName, n.hostAccess); err != nil {
 			return err
 		}
 	}
@@ -811,6 +820,11 @@ func (d *driver) network(nid string) *network {
 			n.driver = d
 			n.endpoints = endpointTable{}
 			n.once = &sync.Once{}
+			if n.hostAccess {
+				for _, s := range n.subnets {
+					s.gwIP = nil
+				}
+			}
 			d.Lock()
 			d.networks[nid] = n
 			d.Unlock()
@@ -888,6 +902,7 @@ func (n *network) Value() []byte {
 	}
 
 	m["secure"] = n.secure
+	m["hostAccess"] = n.hostAccess
 	m["subnets"] = netJSON
 	m["mtu"] = n.mtu
 	b, err := json.Marshal(m)
@@ -938,6 +953,9 @@ func (n *network) SetValue(value []byte) error {
 	if isMap {
 		if val, ok := m["secure"]; ok {
 			n.secure = val.(bool)
+		}
+		if val, ok := m["hostAccess"]; ok {
+			n.hostAccess = val.(bool)
 		}
 		if val, ok := m["mtu"]; ok {
 			n.mtu = int(val.(float64))

@@ -47,7 +47,7 @@ func (sb *sandbox) setupDefaultGW() error {
 		}
 	}
 
-	createOptions := []EndpointOption{CreateOptionAnonymous()}
+	createOptions := []EndpointOption{CreateOptionAnonymous(), CreateOptionDisableResolution()}
 
 	eplen := gwEPlen
 	if len(sb.containerID) < gwEPlen {

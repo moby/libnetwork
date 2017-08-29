@@ -1,12 +1,18 @@
 title = "LibNetwork Configuration file"
 
 [daemon]
-  debug = false
+  debug = true
+  labels = ["com.docker.network.driver.overlay.hostmode=true"]
 [cluster]
-  discovery = "token://swarm-discovery-token"
-  Address = "Cluster-wide reachable Host IP"
+  discovery = "etcd://localhost:2379"
+  Address = "192.168.56.101"
 [datastore]
   embedded = false
 [datastore.client]
-  provider = "consul"
-  Address = "localhost:8500"
+  provider = "etcd"
+  Address = "localhost:2379"
+[scopes]
+  [scopes.global]
+      [scopes.global.client]
+            provider = "etcd"
+                  address = "localhost:2379"

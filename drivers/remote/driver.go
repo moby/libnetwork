@@ -248,7 +248,7 @@ func (d *driver) Join(nid, eid string, sboxKey string, jinfo driverapi.JoinInfo,
 	ifaceName := res.InterfaceName
 	if iface := jinfo.InterfaceName(); iface != nil && ifaceName != nil {
 		if err := iface.SetNames(ifaceName.SrcName, ifaceName.DstPrefix); err != nil {
-			return errorWithRollback(fmt.Sprintf("failed to set interface name: %s", err), d.Leave(nid, eid))
+			return errorWithRollback(fmt.Sprintf("failed to set interface name: %s", err), d.Leave(nid, eid, nil))
 		}
 	}
 
@@ -258,7 +258,7 @@ func (d *driver) Join(nid, eid string, sboxKey string, jinfo driverapi.JoinInfo,
 			return fmt.Errorf(`unable to parse Gateway "%s"`, res.Gateway)
 		}
 		if jinfo.SetGateway(addr) != nil {
-			return errorWithRollback(fmt.Sprintf("failed to set gateway: %v", addr), d.Leave(nid, eid))
+			return errorWithRollback(fmt.Sprintf("failed to set gateway: %v", addr), d.Leave(nid, eid, nil))
 		}
 	}
 	if res.GatewayIPv6 != "" {
@@ -266,7 +266,7 @@ func (d *driver) Join(nid, eid string, sboxKey string, jinfo driverapi.JoinInfo,
 			return fmt.Errorf(`unable to parse GatewayIPv6 "%s"`, res.GatewayIPv6)
 		}
 		if jinfo.SetGatewayIPv6(addr) != nil {
-			return errorWithRollback(fmt.Sprintf("failed to set gateway IPv6: %v", addr), d.Leave(nid, eid))
+			return errorWithRollback(fmt.Sprintf("failed to set gateway IPv6: %v", addr), d.Leave(nid, eid, nil))
 		}
 	}
 	if len(res.StaticRoutes) > 0 {
@@ -276,7 +276,7 @@ func (d *driver) Join(nid, eid string, sboxKey string, jinfo driverapi.JoinInfo,
 		}
 		for _, route := range routes {
 			if jinfo.AddStaticRoute(route.Destination, route.RouteType, route.NextHop) != nil {
-				return errorWithRollback(fmt.Sprintf("failed to set static route: %v", route), d.Leave(nid, eid))
+				return errorWithRollback(fmt.Sprintf("failed to set static route: %v", route), d.Leave(nid, eid, nil))
 			}
 		}
 	}
@@ -287,7 +287,7 @@ func (d *driver) Join(nid, eid string, sboxKey string, jinfo driverapi.JoinInfo,
 }
 
 // Leave method is invoked when a Sandbox detaches from an endpoint.
-func (d *driver) Leave(nid, eid string) error {
+func (d *driver) Leave(nid, eid string, linfo driverapi.LeaveInfo) error {
 	leave := &api.LeaveRequest{
 		NetworkID:  nid,
 		EndpointID: eid,

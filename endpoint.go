@@ -478,7 +478,7 @@ func (ep *endpoint) sbJoin(sb *sandbox, options ...EndpointOption) (err error) {
 	}
 	defer func() {
 		if err != nil {
-			if e := d.Leave(nid, epid); e != nil {
+			if e := d.Leave(nid, epid, ep); e != nil {
 				logrus.Warnf("driver leave failed while rolling back join: %v", e)
 			}
 		}
@@ -739,7 +739,7 @@ func (ep *endpoint) sbLeave(sb *sandbox, force bool, options ...EndpointOption) 
 			}
 		}
 
-		if err := d.Leave(n.id, ep.id); err != nil {
+		if err := d.Leave(n.id, ep.id, ep); err != nil {
 			if _, ok := err.(types.MaskableError); !ok {
 				logrus.Warnf("driver error disconnecting container %s : %v", ep.name, err)
 			}

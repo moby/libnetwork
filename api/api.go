@@ -646,6 +646,10 @@ func procPublishService(c libnetwork.NetworkController, vars map[string]string, 
 		setFctList = append(setFctList, libnetwork.CreateOptionMyAlias(str))
 	}
 
+	if sp.DisableResolution {
+		setFctList = append(setFctList, libnetwork.CreateOptionDisableResolution())
+	}
+
 	ep, err := n.CreateEndpoint(sp.Name, setFctList...)
 	if err != nil {
 		return "", endpointToService(convertNetworkError(err))

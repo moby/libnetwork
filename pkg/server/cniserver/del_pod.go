@@ -3,13 +3,14 @@ package server
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/docker/libnetwork/client"
-	"github.com/docker/libnetwork/pkg/cniapi"
 	"io/ioutil"
 	"net/http"
+
+	"github.com/docker/libnetwork/client"
+	"github.com/docker/libnetwork/pkg/cniapi"
 )
 
-func deletePod(w http.ResponseWriter, r *http.Request, vars map[string]string) (interface{},error) {
+func deletePod(w http.ResponseWriter, r *http.Request, vars map[string]string) (interface{}, error) {
 	//TODO: need to explore force cleanup and test for parallel delete pods
 	cniInfo := cniapi.CniInfo{}
 

@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 	"sync"
 
 	"github.com/docker/libnetwork/datastore"
@@ -20,16 +21,19 @@ import (
 )
 
 const (
-	networkType  = "overlay"
-	vethPrefix   = "veth"
-	vethLen      = 7
-	vxlanIDStart = 256
-	vxlanIDEnd   = (1 << 24) - 1
-	vxlanPort    = 4789
-	vxlanEncap   = 50
-	secureOption = "encrypted"
+	networkType   = "overlay"
+	vethPrefix    = "veth"
+	vethLen       = 7
+	vxlanIDStart  = 256
+	vxlanIDEnd    = (1 << 24) - 1
+	vxlanPort     = 4789
+	vxlanEncap    = 50
+	secureOption  = "encrypted"
+	hostAccess    = "hostaccess"
+	hostModeLabel = netlabel.DriverPrefix + "." + networkType + ".hostmode"
 )
 
+var hostMode bool
 var initVxlanIdm = make(chan (bool), 1)
 
 type driver struct {
@@ -99,6 +103,14 @@ func Init(dc driverapi.DriverCallback, config map[string]interface{}) error {
 		if err != nil {
 			return types.InternalErrorf("failed to initialize local data store: %v", err)
 		}
+	}
+
+	if os.Getenv("_OVERLAY_HOST_MODE") != "" {
+		hostMode = true
+	}
+
+	if _, ok := config[hostModeLabel]; ok {
+		hostMode = true
 	}
 
 	if err := d.restoreEndpoints(); err != nil {

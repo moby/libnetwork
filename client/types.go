@@ -54,9 +54,10 @@ type networkCreate struct {
 
 // ServiceCreate represents the body of the "publish service" http request message
 type ServiceCreate struct {
-	Name      string   `json:"name"`
-	MyAliases []string `json:"my_aliases"`
-	Network   string   `json:"network_name"`
+	Name              string   `json:"name"`
+	MyAliases         []string `json:"my_aliases"`
+	Network           string   `json:"network_name"`
+	DisableResolution bool     `json:"disable_resolution"`
 }
 
 // ServiceDelete represents the body of the "unpublish service" http request message

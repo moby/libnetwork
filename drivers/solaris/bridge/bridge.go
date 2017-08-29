@@ -843,7 +843,7 @@ func (d *driver) link(network *bridgeNetwork, endpoint *bridgeEndpoint, enable b
 }
 
 // Leave method is invoked when a Sandbox detaches from an endpoint.
-func (d *driver) Leave(nid, eid string) error {
+func (d *driver) Leave(nid, eid string, linfo driverapi.LeaveInfo) error {
 	network, err := d.getNetwork(nid)
 	if err != nil {
 		return types.InternalMaskableErrorf("%s", err)

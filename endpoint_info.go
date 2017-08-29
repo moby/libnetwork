@@ -396,6 +396,75 @@ func (ep *endpoint) DisableGatewayService() {
 	ep.joinInfo.disableGatewayService = true
 }
 
+func (ep *endpoint) RequestAddress(subnet *net.IPNet) (*net.IPNet, error) {
+	if subnet == nil || subnet.IP.IsUnspecified() {
+		return nil, fmt.Errorf("Invalid RequestAddress request")
+	}
+
+	n, err := ep.getNetworkFromStore()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get network during RequestAddress: %v", err)
+	}
+	ipam, _, err := n.getController().getIPAMDriver(n.ipamType)
+	if err != nil {
+		return nil, err
+	}
+
+	ipVer := 4
+	if subnet.IP.To4() == nil {
+		ipVer = 6
+	}
+
+	ipInfo := n.getIPInfo(ipVer)
+
+	// ipv6 address is not mandatory
+	if len(ipInfo) == 0 {
+		return nil, fmt.Errorf("error allocating IP with no IPInfo")
+	}
+
+	for _, d := range ipInfo {
+		if !d.Pool.Contains(subnet.IP) {
+			continue
+		}
+		addr, _, err := ipam.RequestAddress(d.PoolID, nil, nil)
+		if err != nil {
+			return nil, err
+		}
+		return addr, err
+	}
+	return nil, fmt.Errorf("Unable to allocate address")
+}
+
+func (ep *endpoint) ReleaseAddress(ip net.IP) error {
+	n, err := ep.getNetworkFromStore()
+	if err != nil {
+		return fmt.Errorf("failed to get network during RequestAddress: %v", err)
+	}
+	ipam, _, err := n.getController().getIPAMDriver(n.ipamType)
+	if err != nil {
+		return err
+	}
+
+	ipVer := 4
+	if ip.To4() == nil {
+		ipVer = 6
+	}
+
+	ipInfo := n.getIPInfo(ipVer)
+
+	if len(ipInfo) == 0 {
+		return nil
+	}
+
+	for _, d := range ipInfo {
+		if !d.Pool.Contains(ip) {
+			continue
+		}
+		return ipam.ReleaseAddress(d.PoolID, ip)
+	}
+	return fmt.Errorf("Unable to release address")
+}
+
 func (epj *endpointJoinInfo) MarshalJSON() ([]byte, error) {
 	epMap := make(map[string]interface{})
 	if epj.gw != nil {

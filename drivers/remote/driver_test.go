@@ -435,7 +435,7 @@ func TestRemoteDriver(t *testing.T) {
 	if _, err = d.EndpointOperInfo(netID, endID); err != nil {
 		t.Fatal(err)
 	}
-	if err = d.Leave(netID, endID); err != nil {
+	if err = d.Leave(netID, endID, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err = d.DeleteEndpoint(netID, endID); err != nil {

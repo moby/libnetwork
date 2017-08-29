@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/docker/libnetwork/netutils"
 	"github.com/hashicorp/serf/serf"
 	"github.com/sirupsen/logrus"
 )
@@ -86,6 +87,33 @@ func (d *driver) notifyEvent(event ovNotify) {
 	ePayload := fmt.Sprintf("%s %s %s %s", event.action, ep.addr.IP.String(),
 		net.IP(ep.addr.Mask).String(), ep.mac.String())
 	eName := fmt.Sprintf("jl %s %s %s", d.serfInstance.LocalMember().Addr.String(),
+		event.nw.id, ep.id)
+
+	if err := d.serfInstance.UserEvent(eName, []byte(ePayload), true); err != nil {
+		logrus.Errorf("Sending user event failed: %v\n", err)
+	}
+
+	// Following Serf Event of sending the unique gateway IP is applicable only
+	// to the network that requires hostAccess
+
+	nw := event.nw
+	if !nw.hostAccess {
+		return
+	}
+	var snet *subnet = nil
+	for _, s := range nw.subnets {
+		if s.subnetIP.Contains(ep.addr.IP) {
+			snet = s
+		}
+	}
+	if snet == nil || snet.gwIP == nil {
+		logrus.Errorf("GW IP reset is not sent in serf channel %v", snet)
+		return
+	}
+
+	ePayload = fmt.Sprintf("%s %s %s %s", event.action, snet.gwIP.IP.String(),
+		net.IP(snet.gwIP.Mask).String(), netutils.GenerateMACFromIP(snet.gwIP.IP).String())
+	eName = fmt.Sprintf("jl %s %s %s", d.serfInstance.LocalMember().Addr.String(),
 		event.nw.id, ep.id)
 
 	if err := d.serfInstance.UserEvent(eName, []byte(ePayload), true); err != nil {

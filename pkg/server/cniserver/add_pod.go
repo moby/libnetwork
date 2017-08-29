@@ -106,7 +106,7 @@ func createSandbox(ContainerID, netns string) (string, error) {
 
 func createEndpoint(ContainerID string, netConfig types.NetConf) (client.EndpointInfo, error) {
 	var ep client.EndpointInfo
-	sc := client.ServiceCreate{Name: ContainerID, Network: netConfig.Name}
+	sc := client.ServiceCreate{Name: ContainerID, Network: netConfig.Name, DisableResolution: true}
 	obj, _, err := readBody(httpCall("POST", "/services", sc, nil))
 	if err != nil {
 		return ep, err

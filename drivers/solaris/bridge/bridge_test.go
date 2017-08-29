@@ -579,7 +579,7 @@ func testQueryEndpointInfo(t *testing.T, ulPxyEnabled bool) {
 	}
 
 	// release host mapped ports
-	err = d.Leave("net1", "ep1")
+	err = d.Leave("net1", "ep1", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
