@@ -50,7 +50,6 @@ type driver struct {
 	localStore       datastore.DataStore
 	vxlanIdm         *idm.Idm
 	initOS           sync.Once
-	joinOnce         sync.Once
 	localJoinOnce    sync.Once
 	keys             []*key
 	peerOpCh         chan *peerOperation
