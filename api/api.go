@@ -650,8 +650,9 @@ func procPublishService(c libnetwork.NetworkController, vars map[string]string, 
 	if err != nil {
 		return "", endpointToService(convertNetworkError(err))
 	}
+	epResp := getEndpointInfo(ep)
 
-	return ep.ID(), &createdResponse
+	return epResp, &createdResponse
 }
 
 func procUnpublishService(c libnetwork.NetworkController, vars map[string]string, body []byte) (interface{}, *responseStatus) {
@@ -706,6 +707,12 @@ func procAttachBackend(c libnetwork.NetworkController, vars map[string]string, b
 	err = sv.Join(sb, setFctList...)
 	if err != nil {
 		return nil, convertNetworkError(err)
+	}
+	if bk.SandboxKey != "" {
+		err = sb.SetKey(bk.SandboxKey)
+		if err != nil {
+			return nil, convertNetworkError(err)
+		}
 	}
 
 	return sb.Key(), &successResponse

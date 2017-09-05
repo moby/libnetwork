@@ -36,7 +36,8 @@ build-local:
 	@mkdir -p "bin"
 	go build -tags experimental -o "bin/dnet" ./cmd/dnet
 	go build -o "bin/docker-proxy" ./cmd/proxy
-
+	go build -o "bin/cniserver" ./pkg/server
+	go build -o "bin/cnictl" ./cni/
 clean:
 	@echo "🐳 $@"
 	@if [ -d bin ]; then \
