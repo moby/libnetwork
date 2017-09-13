@@ -1,6 +1,8 @@
 package config
 
 import (
+	"fmt"
+	"os"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -69,7 +71,23 @@ func ParseConfig(tomlCfgFile string) (*Config, error) {
 	if _, err := toml.DecodeFile(tomlCfgFile, cfg); err != nil {
 		return nil, err
 	}
+	if cfg.Cluster.Address == "" {
+		cfg.Cluster.Address = os.Getenv("DNET_ADDRESS")
+	}
+	if cfg.Cluster.Discovery == "" {
+		cfg.Cluster.Discovery = os.Getenv("DNET_DISCOVERY")
+	}
+	fmt.Printf("cluster address=%s, discovery=%s \n", cfg.Cluster.Address, cfg.Cluster.Discovery)
 
+	if _, ok := cfg.Scopes[datastore.GlobalScope]; !ok {
+		kvParts := strings.SplitN(cfg.Cluster.Discovery, "://", 2)
+		if len(kvParts) == 2 {
+			gCfg := datastore.ScopeClientCfg{Provider: kvParts[0], Address: kvParts[1]}
+			cfg.Scopes[datastore.GlobalScope] = &datastore.ScopeCfg{gCfg}
+			fmt.Printf("KVStore provider=%s, address=%s\n", kvParts[0], kvParts[1])
+		}
+
+	}
 	cfg.LoadDefaultScopes(cfg.Daemon.DataDir)
 	return cfg, nil
 }
