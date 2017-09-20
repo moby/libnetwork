@@ -15,12 +15,12 @@ func getPlatformOption() EndpointOption {
 
 func (c *controller) createGWNetwork() (Network, error) {
 	netOption := map[string]string{
-		bridge.BridgeName:         libnGWNetwork,
+		bridge.BridgeName:         c.DefaultGwNetworkName(),
 		bridge.EnableICC:          strconv.FormatBool(false),
 		bridge.EnableIPMasquerade: strconv.FormatBool(true),
 	}
 
-	n, err := c.NewNetwork("bridge", libnGWNetwork, "",
+	n, err := c.NewNetwork("bridge", c.DefaultGwNetworkName(), "",
 		NetworkOptionDriverOpts(netOption),
 		NetworkOptionEnableIPv6(false),
 	)

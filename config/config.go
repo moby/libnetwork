@@ -1,7 +1,6 @@
 package config
 
 import (
-	"fmt"
 	"os"
 	"strings"
 
@@ -37,6 +36,7 @@ type DaemonCfg struct {
 	Experimental           bool
 	DataDir                string
 	DefaultNetwork         string
+	DefaultGwNetwork       string
 	DefaultDriver          string
 	Labels                 []string
 	DriverCfg              map[string]interface{}
@@ -81,14 +81,12 @@ func ParseConfig(tomlCfgFile string) (*Config, error) {
 	if !(strings.Contains(cfg.Cluster.Discovery, "etcd") || strings.Contains(cfg.Cluster.Discovery, "consul")) {
 		cfg.Cluster.Discovery = "etcd://" + cfg.Cluster.Discovery
 	}
-	fmt.Printf("cluster address=%s, discovery=%s \n", cfg.Cluster.Address, cfg.Cluster.Discovery)
 
 	if _, ok := cfg.Scopes[datastore.GlobalScope]; !ok {
 		kvParts := strings.SplitN(cfg.Cluster.Discovery, "://", 2)
 		if len(kvParts) == 2 {
 			gCfg := datastore.ScopeClientCfg{Provider: kvParts[0], Address: kvParts[1]}
 			cfg.Scopes[datastore.GlobalScope] = &datastore.ScopeCfg{gCfg}
-			fmt.Printf("KVStore provider=%s, address=%s\n", kvParts[0], kvParts[1])
 		}
 
 	}
@@ -119,8 +117,14 @@ type Option func(c *Config)
 // OptionDefaultNetwork function returns an option setter for a default network
 func OptionDefaultNetwork(dn string) Option {
 	return func(c *Config) {
-		logrus.Debugf("Option DefaultNetwork: %s", dn)
 		c.Daemon.DefaultNetwork = strings.TrimSpace(dn)
+	}
+}
+
+// OptionDefaultGwNetwork function returns an option setter for a default Gateway network
+func OptionDefaultGwNetwork(dn string) Option {
+	return func(c *Config) {
+		c.Daemon.DefaultGwNetwork = strings.TrimSpace(dn)
 	}
 }
 

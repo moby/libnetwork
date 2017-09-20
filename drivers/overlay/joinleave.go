@@ -44,7 +44,7 @@ func (d *driver) Join(nid, eid string, sboxKey string, jinfo driverapi.JoinInfo,
 		return fmt.Errorf("could not find subnet for endpoint %s", eid)
 	}
 
-	if s.gwIP == nil {
+	if n.hostAccess && s.gwIP == nil {
 		gwIP, err := jinfo.RequestAddress(s.subnetIP)
 		if err != nil {
 			logrus.Errorf("RequestAddress failed %s %v", s.subnetIP.String(), err)

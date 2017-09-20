@@ -29,6 +29,12 @@ var procGwNetwork = make(chan (bool), 1)
    - its deleted when an endpoint with GW joins the container
 */
 
+func (c *controller) initDefaultGwNetwork() {
+	if c.cfg.Daemon.DefaultGwNetwork == "" {
+		c.cfg.Daemon.DefaultGwNetwork = libnGWNetwork
+	}
+}
+
 func (sb *sandbox) setupDefaultGW() error {
 
 	// check if the container already has a GW endpoint
@@ -40,7 +46,7 @@ func (sb *sandbox) setupDefaultGW() error {
 
 	// Look for default gw network. In case of error (includes not found),
 	// retry and create it if needed in a serialized execution.
-	n, err := c.NetworkByName(libnGWNetwork)
+	n, err := c.NetworkByName(sb.controller.DefaultGwNetworkName())
 	if err != nil {
 		if n, err = c.defaultGwNetwork(); err != nil {
 			return err
@@ -146,7 +152,7 @@ func (sb *sandbox) needDefaultGW() bool {
 
 func (sb *sandbox) getEndpointInGWNetwork() *endpoint {
 	for _, ep := range sb.getConnectedEndpoints() {
-		if ep.getNetwork().name == libnGWNetwork && strings.HasPrefix(ep.Name(), "gateway_") {
+		if ep.getNetwork().name == sb.controller.DefaultGwNetworkName() && strings.HasPrefix(ep.Name(), "gateway_") {
 			return ep
 		}
 	}
@@ -154,7 +160,7 @@ func (sb *sandbox) getEndpointInGWNetwork() *endpoint {
 }
 
 func (ep *endpoint) endpointInGWNetwork() bool {
-	if ep.getNetwork().name == libnGWNetwork && strings.HasPrefix(ep.Name(), "gateway_") {
+	if ep.getNetwork().name == ep.getNetwork().ctrlr.DefaultGwNetworkName() && strings.HasPrefix(ep.Name(), "gateway_") {
 		return true
 	}
 	return false
@@ -178,13 +184,17 @@ func (c *controller) defaultGwNetwork() (Network, error) {
 	procGwNetwork <- true
 	defer func() { <-procGwNetwork }()
 
-	n, err := c.NetworkByName(libnGWNetwork)
+	n, err := c.NetworkByName(c.DefaultGwNetworkName())
 	if err != nil {
 		if _, ok := err.(types.NotFoundError); ok {
 			n, err = c.createGWNetwork()
 		}
 	}
 	return n, err
+}
+
+func (c *controller) DefaultGwNetworkName() string {
+	return c.cfg.Daemon.DefaultGwNetwork
 }
 
 // Returns the endpoint which is providing external connectivity to the sandbox

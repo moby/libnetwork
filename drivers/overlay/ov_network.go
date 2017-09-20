@@ -214,8 +214,8 @@ func (d *driver) CreateNetwork(id string, option map[string]interface{}, nInfo d
 	// Make sure no rule is on the way from any stale secure network
 	if !n.secure {
 		for _, vni := range vnis {
-			programMangle(vni, false)
-			programInput(vni, false)
+			programMangle(vni, d.vxlanPort, false)
+			programInput(vni, d.vxlanPort, false)
 		}
 	}
 
@@ -266,8 +266,8 @@ func (d *driver) DeleteNetwork(nid string) error {
 
 	if n.secure {
 		for _, vni := range vnis {
-			programMangle(vni, false)
-			programInput(vni, false)
+			programMangle(vni, d.vxlanPort, false)
+			programInput(vni, d.vxlanPort, false)
 		}
 	}
 
@@ -418,13 +418,13 @@ func populateVNITbl() {
 		})
 }
 
-func networkOnceInit() {
+func (d *driver) networkOnceInit() {
 	populateVNITbl()
 	if hostMode {
 		return
 	}
 
-	err := createVxlan("testvxlan", 1, 0)
+	err := createVxlan("testvxlan", 1, d.vxlanPort, 0)
 	if err != nil {
 		logrus.Errorf("Failed to create testvxlan interface: %v", err)
 		return
@@ -565,7 +565,7 @@ func (n *network) setupSubnetSandbox(s *subnet, brName, vxlanName string) error 
 		return fmt.Errorf("bridge creation in sandbox failed for subnet %q: %v", s.subnetIP.String(), err)
 	}
 
-	err := createVxlan(vxlanName, n.vxlanID(s), n.maxMTU())
+	err := createVxlan(vxlanName, n.vxlanID(s), n.driver.vxlanPort, n.maxMTU())
 	if err != nil {
 		return err
 	}
@@ -665,7 +665,7 @@ func (n *network) initSandbox(restore bool) error {
 	n.initEpoch++
 	n.Unlock()
 
-	networkOnce.Do(networkOnceInit)
+	networkOnce.Do(n.driver.networkOnceInit)
 
 	if !restore {
 		if hostMode {

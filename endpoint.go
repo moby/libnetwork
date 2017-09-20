@@ -587,7 +587,7 @@ func (ep *endpoint) sbJoin(sb *sandbox, options ...EndpointOption) (err error) {
 }
 
 func doUpdateHostsFile(n *network, sb *sandbox) bool {
-	return !n.ingress && n.Name() != libnGWNetwork
+	return !n.ingress && n.Name() != n.ctrlr.DefaultGwNetworkName()
 }
 
 func (ep *endpoint) rename(name string) error {

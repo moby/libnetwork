@@ -123,6 +123,14 @@ func processConfig(cfg *config.Config) []config.Option {
 		options = append(options, config.OptionKVProviderURL(dcfg.Client.Address))
 	}
 
+	if cfg.Daemon.DefaultGwNetwork != "" {
+		options = append(options, config.OptionDefaultGwNetwork(cfg.Daemon.DefaultGwNetwork))
+	}
+
+	if cfg.Daemon.DataDir != "" {
+		options = append(options, config.OptionDataDir(cfg.Daemon.DataDir))
+	}
+
 	dOptions, err := startDiscovery(&cfg.Cluster)
 	if err != nil {
 		logrus.Infof("Skipping discovery : %s", err.Error())

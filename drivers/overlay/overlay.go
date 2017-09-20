@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"sync"
 
 	"github.com/docker/libnetwork/datastore"
@@ -21,16 +22,17 @@ import (
 )
 
 const (
-	networkType   = "overlay"
-	vethPrefix    = "veth"
-	vethLen       = 7
-	vxlanIDStart  = 256
-	vxlanIDEnd    = (1 << 24) - 1
-	vxlanPort     = 4789
-	vxlanEncap    = 50
-	secureOption  = "encrypted"
-	hostAccess    = "hostaccess"
-	hostModeLabel = netlabel.DriverPrefix + "." + networkType + ".hostmode"
+	networkType     = "overlay"
+	vethPrefix      = "veth"
+	vethLen         = 7
+	vxlanIDStart    = 256
+	vxlanIDEnd      = (1 << 24) - 1
+	vxlanEncap      = 50
+	secureOption    = "encrypted"
+	hostAccess      = "hostaccess"
+	hostModeLabel   = netlabel.DriverPrefix + "." + networkType + ".hostmode"
+	vxlanPortLabel  = netlabel.DriverPrefix + "." + networkType + ".vxlan-port"
+	gossipPortLabel = netlabel.DriverPrefix + "." + networkType + ".gossip-port"
 )
 
 var hostMode bool
@@ -57,6 +59,8 @@ type driver struct {
 	keys             []*key
 	peerOpCh         chan *peerOperation
 	peerOpCancel     context.CancelFunc
+	gossipPort       int
+	vxlanPort        int
 	sync.Mutex
 }
 
@@ -71,9 +75,11 @@ func Init(dc driverapi.DriverCallback, config map[string]interface{}) error {
 		peerDb: peerNetworkMap{
 			mp: map[string]*peerMap{},
 		},
-		secMap:   &encrMap{nodes: map[string][]*spi{}},
-		config:   config,
-		peerOpCh: make(chan *peerOperation),
+		secMap:     &encrMap{nodes: map[string][]*spi{}},
+		config:     config,
+		peerOpCh:   make(chan *peerOperation),
+		vxlanPort:  4789,
+		gossipPort: 7946,
 	}
 
 	// Launch the go routine for processing peer operations
@@ -111,6 +117,38 @@ func Init(dc driverapi.DriverCallback, config map[string]interface{}) error {
 
 	if _, ok := config[hostModeLabel]; ok {
 		hostMode = true
+	}
+
+	if port, ok := config[vxlanPortLabel]; ok {
+		switch p := port.(type) {
+		case string:
+			vp, err := strconv.Atoi(p)
+			if err == nil {
+				d.vxlanPort = vp
+			} else {
+				logrus.Errorf("Error parsing VXLANPORT : %s %v", p, err)
+			}
+		case int, int32, int64:
+			d.vxlanPort = p.(int)
+		default:
+			logrus.Errorf("Error parsing VXLANPORT : %v", port)
+		}
+	}
+
+	if port, ok := config[gossipPortLabel]; ok {
+		switch p := port.(type) {
+		case string:
+			gp, err := strconv.Atoi(p)
+			if err == nil {
+				d.gossipPort = gp
+			} else {
+				logrus.Errorf("Error parsing GOSSIPPORT : %s %v", p, err)
+			}
+		case int, int32, int64:
+			d.gossipPort = p.(int)
+		default:
+			logrus.Errorf("Error parsing GOSSIPPORT : %v", port)
+		}
 	}
 
 	if err := d.restoreEndpoints(); err != nil {
