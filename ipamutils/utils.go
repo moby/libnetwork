@@ -87,10 +87,12 @@ func InitAddressPools(list []*PredefinedPools) error {
 			return fmt.Errorf("invalid pools size: %d", p.Size)
 		}
 		switch p.Scope {
-		case "", "local":
+		case "local":
 			localPools = append(localPools, initPools(p.Size, b)...)
 		case "global":
 			globalPools = append(globalPools, initPools(p.Size, b)...)
+		case "":
+			return fmt.Errorf("pool scope is required: should be 'global' or 'local'")
 		default:
 			return fmt.Errorf("invalid pool scope: %s", p.Scope)
 		}
