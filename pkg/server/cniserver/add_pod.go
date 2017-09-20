@@ -106,6 +106,14 @@ func createSandbox(ContainerID, netns string) (string, error) {
 
 func createEndpoint(ContainerID string, netConfig types.NetConf) (client.EndpointInfo, error) {
 	var ep client.EndpointInfo
+	// Create network if it doesnt exist. Need to handle refcount to delete
+	// network on last pod delete. Also handle different network types and option
+	if !networkExists(netConfig.Name) {
+		if err := createNetwork(netConfig.Name, "overlay"); err != nil {
+			return ep, err
+		}
+	}
+
 	sc := client.ServiceCreate{Name: ContainerID, Network: netConfig.Name, DisableResolution: true}
 	obj, _, err := readBody(httpCall("POST", "/services", sc, nil))
 	if err != nil {
@@ -122,4 +130,44 @@ func endpointJoin(sandboxID, endpointID, netns string) (retErr error) {
 	_, _, err := readBody(httpCall("POST", "/services/"+endpointID+"/backend", nc, nil))
 
 	return err
+}
+
+func networkExists(networkName string) bool {
+	fmt.Printf("Check if %s network exists \n", networkName)
+	obj, statusCode, err := readBody(httpCall("GET", "/networks?name="+networkName, nil, nil))
+	if err != nil {
+		fmt.Printf("%s network does not exists \n", networkName)
+		return false
+	}
+	if statusCode != http.StatusOK {
+		fmt.Printf("%s network does not exists \n", networkName)
+		return false
+	}
+	var list []*client.NetworkResource
+	err = json.Unmarshal(obj, &list)
+	if err != nil {
+		return false
+	}
+	fmt.Printf("%s network exists \n", networkName)
+	return (len(list) != 0)
+}
+
+// createNetwork is a very simple utility to create a default network
+// if not present. This needs to be expanded into a more full utility function
+func createNetwork(networkName string, driver string) error {
+	fmt.Printf("Creating a network %s driver: %s \n", networkName, driver)
+	driverOpts := make(map[string]string)
+	driverOpts["hostaccess"] = ""
+	nc := client.NetworkCreate{Name: networkName, NetworkType: driver,
+		DriverOpts: driverOpts}
+	obj, _, err := readBody(httpCall("POST", "/networks", nc, nil))
+	if err != nil {
+		return err
+	}
+	var replyID string
+	err = json.Unmarshal(obj, &replyID)
+	if err != nil {
+		return err
+	}
+	return nil
 }

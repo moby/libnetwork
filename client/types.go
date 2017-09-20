@@ -10,8 +10,8 @@ import (
  Resources
 ************/
 
-// networkResource is the body of the "get network" http response message
-type networkResource struct {
+// NetworkResource is the body of the "get network" http response message
+type NetworkResource struct {
 	Name     string             `json:"name"`
 	ID       string             `json:"id"`
 	Type     string             `json:"type"`
@@ -42,8 +42,8 @@ type ipamConf struct {
 	AuxAddresses  map[string]string
 }
 
-// networkCreate is the expected body of the "create network" http request message
-type networkCreate struct {
+// NetworkCreate is the expected body of the "create network" http request message
+type NetworkCreate struct {
 	Name        string            `json:"name"`
 	ID          string            `json:"id"`
 	NetworkType string            `json:"network_type"`

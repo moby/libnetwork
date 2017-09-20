@@ -85,7 +85,7 @@ func (cli *NetworkCli) CmdNetworkCreate(chain string, args ...string) error {
 	}
 
 	// Construct network create request body
-	nc := networkCreate{Name: cmd.Arg(0), NetworkType: *flDriver, ID: *flID, IPv4Conf: icList, DriverOpts: driverOpts, NetworkOpts: networkOpts}
+	nc := NetworkCreate{Name: cmd.Arg(0), NetworkType: *flDriver, ID: *flID, IPv4Conf: icList, DriverOpts: driverOpts, NetworkOpts: networkOpts}
 	obj, _, err := readBody(cli.call("POST", "/networks", nc, nil))
 	if err != nil {
 		return err
@@ -137,7 +137,7 @@ func (cli *NetworkCli) CmdNetworkLs(chain string, args ...string) error {
 		*last = 1
 	}
 
-	var networkResources []networkResource
+	var networkResources []NetworkResource
 	err = json.Unmarshal(obj, &networkResources)
 	if err != nil {
 		return err
@@ -189,7 +189,7 @@ func (cli *NetworkCli) CmdNetworkInfo(chain string, args ...string) error {
 	if err != nil {
 		return err
 	}
-	networkResource := &networkResource{}
+	networkResource := &NetworkResource{}
 	if err := json.NewDecoder(bytes.NewReader(obj)).Decode(networkResource); err != nil {
 		return err
 	}
@@ -222,7 +222,7 @@ func lookupNetworkID(cli *NetworkCli, nameID string) (string, error) {
 		return "", fmt.Errorf("name query failed for %s due to : statuscode(%d) %v", nameID, statusCode, string(obj))
 	}
 
-	var list []*networkResource
+	var list []*NetworkResource
 	err = json.Unmarshal(obj, &list)
 	if err != nil {
 		return "", err

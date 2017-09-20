@@ -56,7 +56,7 @@ func (l *LibNetCniClient) SetupPod(args *skel.CmdArgs) (*current.Result, error) 
 	log.Infof("Received Setup Pod %+v", args)
 	podNetInfo, err := validatePodNetworkInfo(args)
 	if err != nil {
-		return nil, fmt.Errorf("failed to valid cni arguements, error: %v", err)
+		return nil, fmt.Errorf("failed to valid cni arguments, error: %v", err)
 	}
 	buf, err := json.Marshal(podNetInfo)
 	if err != nil {
@@ -110,7 +110,7 @@ func (l *LibNetCniClient) TearDownPod(args *skel.CmdArgs) error {
 	log.Infof("Received Teardown Pod request %+v", args)
 	podNetInfo, err := validatePodNetworkInfo(args)
 	if err != nil {
-		return fmt.Errorf("failed to valid cni arguements, error: %v", err)
+		return fmt.Errorf("failed to valid cni arguments, error: %v", err)
 	}
 	buf, err := json.Marshal(podNetInfo)
 	if err != nil {

@@ -33,7 +33,7 @@ func lookupServiceID(cli *NetworkCli, nwName, svNameID string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	var nwList []networkResource
+	var nwList []NetworkResource
 	if err = json.Unmarshal(obj, &nwList); err != nil {
 		return "", err
 	}
@@ -46,7 +46,7 @@ func lookupServiceID(cli *NetworkCli, nwName, svNameID string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		networkResource := &networkResource{}
+		networkResource := &NetworkResource{}
 		if err := json.NewDecoder(bytes.NewReader(obj)).Decode(networkResource); err != nil {
 			return "", err
 		}

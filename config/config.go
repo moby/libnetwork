@@ -77,6 +77,10 @@ func ParseConfig(tomlCfgFile string) (*Config, error) {
 	if cfg.Cluster.Discovery == "" {
 		cfg.Cluster.Discovery = os.Getenv("DNET_DISCOVERY")
 	}
+	//TODO (ABHI): Handle this better. default to etcd for now
+	if !(strings.Contains(cfg.Cluster.Discovery, "etcd") || strings.Contains(cfg.Cluster.Discovery, "consul")) {
+		cfg.Cluster.Discovery = "etcd://" + cfg.Cluster.Discovery
+	}
 	fmt.Printf("cluster address=%s, discovery=%s \n", cfg.Cluster.Address, cfg.Cluster.Discovery)
 
 	if _, ok := cfg.Scopes[datastore.GlobalScope]; !ok {

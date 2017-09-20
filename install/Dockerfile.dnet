@@ -1,0 +1,13 @@
+FROM ubuntu:16.04
+
+RUN apt-get update \
+    && apt-get install -y\
+        net-tools \
+        iptables \
+ && rm -rf /var/lib/apt/lists/*
+
+COPY bin/dnet /var/libnetwork/bin/
+COPY dnet.sh /var/libnetwork/
+COPY config.toml /var/libnetwork/config/
+
+ENTRYPOINT ["/var/libnetwork/dnet.sh"]

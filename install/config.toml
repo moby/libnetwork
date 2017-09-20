@@ -1,0 +1,9 @@
+title = "LibNetwork Configuration file"
+
+[daemon]
+  debug = true
+  labels = ["com.docker.network.driver.overlay.hostmode=true"]
+[cluster]
+  discovery = ""
+[datastore]
+  embedded = false
