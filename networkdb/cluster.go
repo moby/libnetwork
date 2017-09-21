@@ -162,7 +162,7 @@ func (nDB *NetworkDB) clusterInit() error {
 		interval time.Duration
 		fn       func()
 	}{
-		{reapPeriod, nDB.reapState},
+		{reapPeriod, nDB.reapTableEntries},
 		{config.GossipInterval, nDB.gossip},
 		{config.PushPullInterval, nDB.bulkSyncTables},
 		{retryInterval, nDB.reconnectNode},
@@ -297,67 +297,53 @@ func (nDB *NetworkDB) reconnectNode() {
 // For timing the entry deletion in the repaer APIs that doesn't use monotonic clock
 // source (time.Now, Sub etc.) should be avoided. Hence we use reapTime in every
 // entry which is set initially to reapInterval and decremented by reapPeriod every time
-// the reaper runs. NOTE nDB.reapTableEntries updates the reapTime with a readlock. This
-// is safe as long as no other concurrent path touches the reapTime field.
-func (nDB *NetworkDB) reapState() {
-	nDB.reapNetworks()
-	nDB.reapTableEntries()
-}
-
-func (nDB *NetworkDB) reapNetworks() {
-	nDB.Lock()
-	for _, nn := range nDB.networks {
-		for id, n := range nn {
-			if n.leaving {
-				if n.reapTime <= 0 {
-					delete(nn, id)
-					continue
-				}
-				n.reapTime -= reapPeriod
-			}
-		}
-	}
-	nDB.Unlock()
-}
-
+// the reaper runs.
 func (nDB *NetworkDB) reapTableEntries() {
-	var paths []string
-
+	var nodeNetworks []string
+	// This is best effort, if the list of network changes will be picked up in the next cycle
 	nDB.RLock()
-	nDB.indexes[byTable].Walk(func(path string, v interface{}) bool {
-		entry, ok := v.(*entry)
-		if !ok {
-			return false
-		}
-
-		if !entry.deleting {
-			return false
-		}
-		if entry.reapTime > 0 {
-			entry.reapTime -= reapPeriod
-			return false
-		}
-		paths = append(paths, path)
-		return false
-	})
+	for nid := range nDB.networks[nDB.config.NodeName] {
+		nodeNetworks = append(nodeNetworks, nid)
+	}
 	nDB.RUnlock()
 
-	nDB.Lock()
-	for _, path := range paths {
-		params := strings.Split(path[1:], "/")
-		tname := params[0]
-		nid := params[1]
-		key := params[2]
+	cycleStart := time.Now()
+	// In order to avoid blocking the database for a long time, apply the garbage collection logic by network
+	// The lock is taken at the beginning of the cycle and the deletion is inline
+	for _, nid := range nodeNetworks {
+		nDB.Lock()
+		nDB.indexes[byNetwork].WalkPrefix(fmt.Sprintf("/%s", nid), func(path string, v interface{}) bool {
+			// timeCompensation compensate in case the lock took some time to be released
+			timeCompensation := time.Since(cycleStart)
+			entry, ok := v.(*entry)
+			if !ok || !entry.deleting {
+				return false
+			}
 
-		if _, ok := nDB.indexes[byTable].Delete(fmt.Sprintf("/%s/%s/%s", tname, nid, key)); !ok {
-			logrus.Errorf("Could not delete entry in table %s with network id %s and key %s as it does not exist", tname, nid, key)
-		}
+			// In this check we are adding an extra 1 second to guarantee that when the number is truncated to int32 to fit the packet
+			// for the tableEvent the number is always strictly > 1 and never 0
+			if entry.reapTime > reapPeriod+timeCompensation+time.Second {
+				entry.reapTime -= reapPeriod + timeCompensation
+				return false
+			}
 
-		if _, ok := nDB.indexes[byNetwork].Delete(fmt.Sprintf("/%s/%s/%s", nid, tname, key)); !ok {
-			logrus.Errorf("Could not delete entry in network %s with table name %s and key %s as it does not exist", nid, tname, key)
-		}
+			params := strings.Split(path[1:], "/")
+			nid := params[0]
+			tname := params[1]
+			key := params[2]
+
+			okTable, okNetwork := nDB.deleteEntry(nid, tname, key)
+			if !okTable {
+				logrus.Errorf("Table tree delete failed, entry with key:%s does not exists in the table:%s network:%s", key, tname, nid)
+			}
+			if !okNetwork {
+				logrus.Errorf("Network tree delete failed, entry with key:%s does not exists in the network:%s table:%s", key, nid, tname)
+			}
+
+			return false
+		})
+		nDB.Unlock()
 	}
-	nDB.Unlock()
 }
 
 func (nDB *NetworkDB) gossip() {
@@ -406,8 +392,9 @@ func (nDB *NetworkDB) gossip() {
 		// Collect stats and print the queue info, note this code is here also to have a view of the queues empty
 		network.qMessagesSent += len(msgs)
 		if printStats {
-			logrus.Infof("NetworkDB stats - Queue net:%s qLen:%d netPeers:%d netMsg/s:%d",
-				nid, broadcastQ.NumQueued(), broadcastQ.NumNodes(), network.qMessagesSent/int((nDB.config.StatsPrintPeriod/time.Second)))
+			logrus.Infof("NetworkDB stats - net:%s Entries:%d Queue qLen:%d netPeers:%d netMsg/s:%d",
+				nid, network.entriesNumber, broadcastQ.NumQueued(), broadcastQ.NumNodes(),
+				network.qMessagesSent/int((nDB.config.StatsPrintPeriod/time.Second)))
 			network.qMessagesSent = 0
 		}
 
@@ -572,6 +559,8 @@ func (nDB *NetworkDB) bulkSyncNode(networks []string, node string, unsolicited b
 				TableName: params[1],
 				Key:       params[2],
 				Value:     entry.value,
+				// The duration in second is a float that below would be truncated
+				ResidualReapTime: int32(entry.reapTime.Seconds()),
 			}
 
 			msg, err := encodeMessage(MessageTypeTableEvent, &tEvent)

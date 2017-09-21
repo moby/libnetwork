@@ -141,6 +141,11 @@ type network struct {
 
 	// Number of gossip messages sent related to this network during the last stats collection period
 	qMessagesSent int
+
+	// Number of entries on the network. This value is the sum of all the entries of all the tables of a specific network.
+	// Its use is for statistics purposes. It keep tracks of database size and is printed per network every StatsPrintPeriod
+	// interval
+	entriesNumber int
 }
 
 // Config represents the configuration of the networdb instance and
@@ -338,8 +343,7 @@ func (nDB *NetworkDB) CreateEntry(tname, nid, key string, value []byte) error {
 	}
 
 	nDB.Lock()
-	nDB.indexes[byTable].Insert(fmt.Sprintf("/%s/%s/%s", tname, nid, key), entry)
-	nDB.indexes[byNetwork].Insert(fmt.Sprintf("/%s/%s/%s", nid, tname, key), entry)
+	nDB.createOrUpdateEntry(nid, tname, key, entry)
 	nDB.Unlock()
 
 	return nil
@@ -365,8 +369,7 @@ func (nDB *NetworkDB) UpdateEntry(tname, nid, key string, value []byte) error {
 	}
 
 	nDB.Lock()
-	nDB.indexes[byTable].Insert(fmt.Sprintf("/%s/%s/%s", tname, nid, key), entry)
-	nDB.indexes[byNetwork].Insert(fmt.Sprintf("/%s/%s/%s", nid, tname, key), entry)
+	nDB.createOrUpdateEntry(nid, tname, key, entry)
 	nDB.Unlock()
 
 	return nil
@@ -410,8 +413,7 @@ func (nDB *NetworkDB) DeleteEntry(tname, nid, key string) error {
 	}
 
 	nDB.Lock()
-	nDB.indexes[byTable].Insert(fmt.Sprintf("/%s/%s/%s", tname, nid, key), entry)
-	nDB.indexes[byNetwork].Insert(fmt.Sprintf("/%s/%s/%s", nid, tname, key), entry)
+	nDB.createOrUpdateEntry(nid, tname, key, entry)
 	nDB.Unlock()
 
 	return nil
@@ -451,54 +453,51 @@ func (nDB *NetworkDB) deleteNodeNetworkEntries(nid, node string) {
 	// Indicates if the delete is triggered for the local node
 	isNodeLocal := node == nDB.config.NodeName
 
-	nDB.indexes[byNetwork].WalkPrefix(fmt.Sprintf("/%s", nid),
-		func(path string, v interface{}) bool {
-			oldEntry := v.(*entry)
-			params := strings.Split(path[1:], "/")
-			nid := params[0]
-			tname := params[1]
-			key := params[2]
+	nDB.indexes[byNetwork].WalkPrefix(fmt.Sprintf("/%s", nid), func(path string, v interface{}) bool {
+		oldEntry := v.(*entry)
+		params := strings.Split(path[1:], "/")
+		nid := params[0]
+		tname := params[1]
+		key := params[2]
 
-			// If the entry is owned by a remote node and this node is not leaving the network
-			if oldEntry.node != node && !isNodeLocal {
-				// Don't do anything because the event is triggered for a node that does not own this entry
-				return false
-			}
-
-			// If this entry is already marked for deletion and this node is not leaving the network
-			if oldEntry.deleting && !isNodeLocal {
-				// Don't do anything this entry will be already garbage collected using the old reapTime
-				return false
-			}
-
-			entry := &entry{
-				ltime:    oldEntry.ltime,
-				node:     node,
-				value:    oldEntry.value,
-				deleting: true,
-				reapTime: reapInterval,
-			}
-
-			// we arrived at this point in 2 cases:
-			// 1) this entry is owned by the node that is leaving the network
-			// 2) the local node is leaving the network
-			if oldEntry.node == node {
-				if isNodeLocal {
-					// TODO fcrisciani: this can be removed if there is no way to leave the network
-					// without doing a delete of all the objects
-					entry.ltime++
-				}
-				nDB.indexes[byTable].Insert(fmt.Sprintf("/%s/%s/%s", tname, nid, key), entry)
-				nDB.indexes[byNetwork].Insert(fmt.Sprintf("/%s/%s/%s", nid, tname, key), entry)
-			} else {
-				// the local node is leaving the network, all the entries of remote nodes can be safely removed
-				nDB.indexes[byTable].Delete(fmt.Sprintf("/%s/%s/%s", tname, nid, key))
-				nDB.indexes[byNetwork].Delete(fmt.Sprintf("/%s/%s/%s", nid, tname, key))
-			}
-
-			nDB.broadcaster.Write(makeEvent(opDelete, tname, nid, key, entry.value))
+		// If the entry is owned by a remote node and this node is not leaving the network
+		if oldEntry.node != node && !isNodeLocal {
+			// Don't do anything because the event is triggered for a node that does not own this entry
 			return false
-		})
+		}
+
+		// If this entry is already marked for deletion and this node is not leaving the network
+		if oldEntry.deleting && !isNodeLocal {
+			// Don't do anything this entry will be already garbage collected using the old reapTime
+			return false
+		}
+
+		entry := &entry{
+			ltime:    oldEntry.ltime,
+			node:     oldEntry.node,
+			value:    oldEntry.value,
+			deleting: true,
+			reapTime: reapInterval,
+		}
+
+		// we arrived at this point in 2 cases:
+		// 1) this entry is owned by the node that is leaving the network
+		// 2) the local node is leaving the network
+		if oldEntry.node == node {
+			if isNodeLocal {
+				// TODO fcrisciani: this can be removed if there is no way to leave the network
+				// without doing a delete of all the objects
+				entry.ltime++
+			}
+			nDB.createOrUpdateEntry(nid, tname, key, entry)
+		} else {
+			// the local node is leaving the network, all the entries of remote nodes can be safely removed
+			nDB.deleteEntry(nid, tname, key)
+		}
+
+		nDB.broadcaster.Write(makeEvent(opDelete, tname, nid, key, entry.value))
+		return false
+	})
 }
 
 func (nDB *NetworkDB) deleteNodeTableEntries(node string) {
@@ -513,8 +512,7 @@ func (nDB *NetworkDB) deleteNodeTableEntries(node string) {
 		nid := params[1]
 		key := params[2]
 
-		nDB.indexes[byTable].Delete(fmt.Sprintf("/%s/%s/%s", tname, nid, key))
-		nDB.indexes[byNetwork].Delete(fmt.Sprintf("/%s/%s/%s", nid, tname, key))
+		nDB.deleteEntry(nid, tname, key)
 
 		nDB.broadcaster.Write(makeEvent(opDelete, tname, nid, key, oldEntry.value))
 		return false
@@ -558,15 +556,25 @@ func (nDB *NetworkDB) JoinNetwork(nid string) error {
 		nodeNetworks = make(map[string]*network)
 		nDB.networks[nDB.config.NodeName] = nodeNetworks
 	}
-	nodeNetworks[nid] = &network{id: nid, ltime: ltime}
-	nodeNetworks[nid].tableBroadcasts = &memberlist.TransmitLimitedQueue{
-		NumNodes: func() int {
-			nDB.RLock()
-			defer nDB.RUnlock()
-			return len(nDB.networkNodes[nid])
-		},
-		RetransmitMult: 4,
+	n, ok := nodeNetworks[nid]
+	var entries int
+	if ok {
+		entries = n.entriesNumber
 	}
+	nodeNetworks[nid] = &network{
+		id:            nid,
+		ltime:         ltime,
+		entriesNumber: entries,
+		tableBroadcasts: &memberlist.TransmitLimitedQueue{
+			NumNodes: func() int {
+				nDB.RLock()
+				defer nDB.RUnlock()
+				return len(nDB.networkNodes[nid])
+			},
+			RetransmitMult: 4,
+		},
+	}
+
 	nDB.addNetworkNode(nid, nDB.config.NodeName)
 	networkNodes := nDB.networkNodes[nid]
 	nDB.Unlock()
@@ -613,10 +621,10 @@ func (nDB *NetworkDB) LeaveNetwork(nid string) error {
 	if !ok {
 		return fmt.Errorf("could not find network %s while trying to leave", nid)
 	}
-
-	n.ltime = ltime
-	n.reapTime = reapInterval
+	// notify whoever has still a reference to this network that the node is leaving
 	n.leaving = true
+	delete(nodeNetworks, nid)
+
 	return nil
 }
 
@@ -678,4 +686,34 @@ func (nDB *NetworkDB) updateLocalNetworkTime() {
 	for _, n := range nDB.networks[nDB.config.NodeName] {
 		n.ltime = ltime
 	}
+}
+
+// createOrUpdateEntry this function handles the creation or update of entries into the local
+// tree store. It is also used to keep in sync the entries number of the network (all tables are aggregated)
+func (nDB *NetworkDB) createOrUpdateEntry(nid, tname, key string, entry interface{}) (bool, bool) {
+	_, okTable := nDB.indexes[byTable].Insert(fmt.Sprintf("/%s/%s/%s", tname, nid, key), entry)
+	_, okNetwork := nDB.indexes[byNetwork].Insert(fmt.Sprintf("/%s/%s/%s", nid, tname, key), entry)
+	if !okNetwork {
+		// Add only if it is an insert not an update
+		n, ok := nDB.networks[nDB.config.NodeName][nid]
+		if ok {
+			n.entriesNumber++
+		}
+	}
+	return okTable, okNetwork
+}
+
+// deleteEntry this function handles the deletion of entries into the local tree store.
+// It is also used to keep in sync the entries number of the network (all tables are aggregated)
+func (nDB *NetworkDB) deleteEntry(nid, tname, key string) (bool, bool) {
+	_, okTable := nDB.indexes[byTable].Delete(fmt.Sprintf("/%s/%s/%s", tname, nid, key))
+	_, okNetwork := nDB.indexes[byNetwork].Delete(fmt.Sprintf("/%s/%s/%s", nid, tname, key))
+	if okNetwork {
+		// Remove only if the delete is successful
+		n, ok := nDB.networks[nDB.config.NodeName][nid]
+		if ok {
+			n.entriesNumber--
+		}
+	}
+	return okTable, okNetwork
 }
