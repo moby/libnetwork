@@ -162,7 +162,7 @@ func (nDB *NetworkDB) clusterInit() error {
 		interval time.Duration
 		fn       func()
 	}{
-		{reapPeriod, nDB.reapState},
+		{reapPeriod, nDB.reapTableEntries},
 		{config.GossipInterval, nDB.gossip},
 		{config.PushPullInterval, nDB.bulkSyncTables},
 		{retryInterval, nDB.reconnectNode},
@@ -297,29 +297,7 @@ func (nDB *NetworkDB) reconnectNode() {
 // For timing the entry deletion in the repaer APIs that doesn't use monotonic clock
 // source (time.Now, Sub etc.) should be avoided. Hence we use reapTime in every
 // entry which is set initially to reapInterval and decremented by reapPeriod every time
-// the reaper runs. NOTE nDB.reapTableEntries updates the reapTime with a readlock. This
-// is safe as long as no other concurrent path touches the reapTime field.
-func (nDB *NetworkDB) reapState() {
-	nDB.reapNetworks()
-	nDB.reapTableEntries()
-}
-
-func (nDB *NetworkDB) reapNetworks() {
-	nDB.Lock()
-	for _, nn := range nDB.networks {
-		for id, n := range nn {
-			if n.leaving {
-				if n.reapTime <= 0 {
-					delete(nn, id)
-					continue
-				}
-				n.reapTime -= reapPeriod
-			}
-		}
-	}
-	nDB.Unlock()
-}
-
+// the reaper runs.
 func (nDB *NetworkDB) reapTableEntries() {
 	var nodeNetworks []string
 	// This is best effort, if the list of network changes will be picked up in the next cycle
