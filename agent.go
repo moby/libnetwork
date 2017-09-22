@@ -274,12 +274,12 @@ func (c *controller) agentInit(listenAddr, bindAddrOrInterface, advertiseAddr st
 	nodeName := hostname + "-" + stringid.TruncateID(stringid.GenerateRandomID())
 	logrus.Info("Gossip cluster hostname ", nodeName)
 
-	nDB, err := networkdb.New(&networkdb.Config{
-		BindAddr:      listenAddr,
-		AdvertiseAddr: advertiseAddr,
-		NodeName:      nodeName,
-		Keys:          keys,
-	})
+	netDBConf := networkdb.DefaultConfig()
+	netDBConf.NodeName = nodeName
+	netDBConf.BindAddr = listenAddr
+	netDBConf.AdvertiseAddr = advertiseAddr
+	netDBConf.Keys = keys
+	nDB, err := networkdb.New(netDBConf)
 
 	if err != nil {
 		return err
@@ -373,15 +373,11 @@ func (c *controller) agentClose() {
 
 	agent.Lock()
 	for _, cancelFuncs := range agent.driverCancelFuncs {
-		for _, cancel := range cancelFuncs {
-			cancelList = append(cancelList, cancel)
-		}
+		cancelList = append(cancelList, cancelFuncs...)
 	}
 
 	// Add also the cancel functions for the network db
-	for _, cancel := range agent.coreCancelFuncs {
-		cancelList = append(cancelList, cancel)
-	}
+	cancelList = append(cancelList, agent.coreCancelFuncs...)
 	agent.Unlock()
 
 	for _, cancel := range cancelList {
@@ -514,7 +510,6 @@ func (ep *endpoint) addServiceInfoToCluster(sb *sandbox) error {
 				return err
 			}
 		}
-
 		buf, err := proto.Marshal(&EndpointRecord{
 			Name:         ep.Name(),
 			ServiceName:  ep.svcName,
@@ -528,7 +523,6 @@ func (ep *endpoint) addServiceInfoToCluster(sb *sandbox) error {
 		if err != nil {
 			return err
 		}
-
 		if agent != nil {
 			if err := agent.networkDB.CreateEntry("endpoint_table", n.ID(), ep.ID(), buf); err != nil {
 				logrus.Warnf("addServiceInfoToCluster NetworkDB CreateEntry failed for %s %s err:%s", ep.id, n.id, err)
@@ -758,13 +752,13 @@ func (c *controller) handleEpTableEvent(ev events.Event) {
 		if svcID != "" {
 			// This is a remote task part of a service
 			if err := c.addServiceBinding(svcName, svcID, nid, eid, containerName, vip, ingressPorts, serviceAliases, taskAliases, ip, "handleEpTableEvent"); err != nil {
-				logrus.Errorf("failed adding service binding for %s epRec:%v err:%s", eid, epRec, err)
+				logrus.Errorf("failed adding service binding for %s epRec:%v err:%v", eid, epRec, err)
 				return
 			}
 		} else {
 			// This is a remote container simply attached to an attachable network
 			if err := c.addContainerNameResolution(nid, eid, containerName, taskAliases, ip, "handleEpTableEvent"); err != nil {
-				logrus.Errorf("failed adding service binding for %s epRec:%v err:%s", eid, epRec, err)
+				logrus.Errorf("failed adding container name resolution for %s epRec:%v err:%v", eid, epRec, err)
 			}
 		}
 	} else {
@@ -772,13 +766,13 @@ func (c *controller) handleEpTableEvent(ev events.Event) {
 		if svcID != "" {
 			// This is a remote task part of a service
 			if err := c.rmServiceBinding(svcName, svcID, nid, eid, containerName, vip, ingressPorts, serviceAliases, taskAliases, ip, "handleEpTableEvent", true); err != nil {
-				logrus.Errorf("failed removing service binding for %s epRec:%v err:%s", eid, epRec, err)
+				logrus.Errorf("failed removing service binding for %s epRec:%v err:%v", eid, epRec, err)
 				return
 			}
 		} else {
 			// This is a remote container simply attached to an attachable network
 			if err := c.delContainerNameResolution(nid, eid, containerName, taskAliases, ip, "handleEpTableEvent"); err != nil {
-				logrus.Errorf("failed adding service binding for %s epRec:%v err:%s", eid, epRec, err)
+				logrus.Errorf("failed removing container name resolution for %s epRec:%v err:%v", eid, epRec, err)
 			}
 		}
 	}

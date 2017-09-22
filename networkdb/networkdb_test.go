@@ -3,6 +3,7 @@ package networkdb
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"sync/atomic"
@@ -21,6 +22,7 @@ var (
 )
 
 func TestMain(m *testing.M) {
+	ioutil.WriteFile("/proc/sys/net/ipv6/conf/lo/disable_ipv6", []byte{'0', '\n'}, 0644)
 	logrus.SetLevel(logrus.ErrorLevel)
 	os.Exit(m.Run())
 }
@@ -28,10 +30,10 @@ func TestMain(m *testing.M) {
 func createNetworkDBInstances(t *testing.T, num int, namePrefix string) []*NetworkDB {
 	var dbs []*NetworkDB
 	for i := 0; i < num; i++ {
-		db, err := New(&Config{
-			NodeName: fmt.Sprintf("%s%d", namePrefix, i+1),
-			BindPort: int(atomic.AddInt32(&dbPort, 1)),
-		})
+		conf := DefaultConfig()
+		conf.NodeName = fmt.Sprintf("%s%d", namePrefix, i+1)
+		conf.BindPort = int(atomic.AddInt32(&dbPort, 1))
+		db, err := New(conf)
 		require.NoError(t, err)
 
 		if i != 0 {
@@ -53,7 +55,9 @@ func closeNetworkDBInstances(dbs []*NetworkDB) {
 
 func (db *NetworkDB) verifyNodeExistence(t *testing.T, node string, present bool) {
 	for i := 0; i < 80; i++ {
+		db.RLock()
 		_, ok := db.nodes[node]
+		db.RUnlock()
 		if present && ok {
 			return
 		}
@@ -70,7 +74,10 @@ func (db *NetworkDB) verifyNodeExistence(t *testing.T, node string, present bool
 
 func (db *NetworkDB) verifyNetworkExistence(t *testing.T, node string, id string, present bool) {
 	for i := 0; i < 80; i++ {
-		if nn, nnok := db.networks[node]; nnok {
+		db.RLock()
+		nn, nnok := db.networks[node]
+		db.RUnlock()
+		if nnok {
 			n, ok := nn[id]
 			if present && ok {
 				return
@@ -426,7 +433,7 @@ func TestNetworkDBCRUDMediumCluster(t *testing.T) {
 		dbs[i].verifyEntryExistence(t, "test_table", "network1", "test_key", "", false)
 	}
 
-	log.Printf("Closing DB instances...")
+	log.Print("Closing DB instances...")
 	closeNetworkDBInstances(dbs)
 }
 
@@ -466,6 +473,9 @@ func TestNetworkDBNodeJoinLeaveIteration(t *testing.T) {
 	if len(dbs[0].networkNodes["network1"]) != 2 {
 		t.Fatalf("The networkNodes list has to have be 2 instead of %d - %v", len(dbs[0].networkNodes["network1"]), dbs[0].networkNodes["network1"])
 	}
+	if n, ok := dbs[0].networks[dbs[0].config.NodeName]["network1"]; !ok || n.leaving {
+		t.Fatalf("The network should not be marked as leaving:%t", n.leaving)
+	}
 
 	// Wait for the propagation on db[1]
 	for i := 0; i < maxRetry; i++ {
@@ -476,6 +486,9 @@ func TestNetworkDBNodeJoinLeaveIteration(t *testing.T) {
 	}
 	if len(dbs[1].networkNodes["network1"]) != 2 {
 		t.Fatalf("The networkNodes list has to have be 2 instead of %d - %v", len(dbs[1].networkNodes["network1"]), dbs[1].networkNodes["network1"])
+	}
+	if n, ok := dbs[1].networks[dbs[1].config.NodeName]["network1"]; !ok || n.leaving {
+		t.Fatalf("The network should not be marked as leaving:%t", n.leaving)
 	}
 
 	// Try a quick leave/join

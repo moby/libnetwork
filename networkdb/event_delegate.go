@@ -22,6 +22,7 @@ func (e *eventDelegate) broadcastNodeEvent(addr net.IP, op opType) {
 }
 
 func (e *eventDelegate) NotifyJoin(mn *memberlist.Node) {
+	logrus.Infof("Node %s/%s, joined gossip cluster", mn.Name, mn.Addr)
 	e.broadcastNodeEvent(mn.Addr, opCreate)
 	e.nDB.Lock()
 	// In case the node is rejoining after a failure or leave,
@@ -37,6 +38,7 @@ func (e *eventDelegate) NotifyJoin(mn *memberlist.Node) {
 
 	e.nDB.nodes[mn.Name] = &node{Node: *mn}
 	e.nDB.Unlock()
+	logrus.Infof("Node %s/%s, added to nodes list", mn.Name, mn.Addr)
 }
 
 func (e *eventDelegate) NotifyLeave(mn *memberlist.Node) {

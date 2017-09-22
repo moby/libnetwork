@@ -1,9 +1,9 @@
 package networkdb
 
 import (
-	"fmt"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/gogo/protobuf/proto"
@@ -15,6 +15,25 @@ type delegate struct {
 
 func (d *delegate) NodeMeta(limit int) []byte {
 	return []byte{}
+}
+
+func (nDB *NetworkDB) getNode(nEvent *NodeEvent) *node {
+	nDB.Lock()
+	defer nDB.Unlock()
+
+	for _, nodes := range []map[string]*node{
+		nDB.failedNodes,
+		nDB.leftNodes,
+		nDB.nodes,
+	} {
+		if n, ok := nodes[nEvent.NodeName]; ok {
+			if n.ltime >= nEvent.LTime {
+				return nil
+			}
+			return n
+		}
+	}
+	return nil
 }
 
 func (nDB *NetworkDB) checkAndGetNode(nEvent *NodeEvent) *node {
@@ -63,7 +82,28 @@ func (nDB *NetworkDB) purgeSameNode(n *node) {
 }
 
 func (nDB *NetworkDB) handleNodeEvent(nEvent *NodeEvent) bool {
-	n := nDB.checkAndGetNode(nEvent)
+	// Update our local clock if the received messages has newer
+	// time.
+	nDB.networkClock.Witness(nEvent.LTime)
+
+	n := nDB.getNode(nEvent)
+	if n == nil {
+		return false
+	}
+	// If its a node leave event for a manager and this is the only manager we
+	// know of we want the reconnect logic to kick in. In a single manager
+	// cluster manager's gossip can't be bootstrapped unless some other node
+	// connects to it.
+	if len(nDB.bootStrapIP) == 1 && nEvent.Type == NodeEventTypeLeave {
+		for _, ip := range nDB.bootStrapIP {
+			if ip.Equal(n.Addr) {
+				n.ltime = nEvent.LTime
+				return true
+			}
+		}
+	}
+
+	n = nDB.checkAndGetNode(nEvent)
 	if n == nil {
 		return false
 	}
@@ -74,13 +114,18 @@ func (nDB *NetworkDB) handleNodeEvent(nEvent *NodeEvent) bool {
 	switch nEvent.Type {
 	case NodeEventTypeJoin:
 		nDB.Lock()
+		_, found := nDB.nodes[n.Name]
 		nDB.nodes[n.Name] = n
 		nDB.Unlock()
+		if !found {
+			logrus.Infof("Node join event for %s/%s", n.Name, n.Addr)
+		}
 		return true
 	case NodeEventTypeLeave:
 		nDB.Lock()
 		nDB.leftNodes[n.Name] = n
 		nDB.Unlock()
+		logrus.Infof("Node leave event for %s/%s", n.Name, n.Addr)
 		return true
 	}
 
@@ -120,7 +165,7 @@ func (nDB *NetworkDB) handleNetworkEvent(nEvent *NetworkEvent) bool {
 		n.ltime = nEvent.LTime
 		n.leaving = nEvent.Type == NetworkEventTypeLeave
 		if n.leaving {
-			n.reapTime = reapInterval
+			n.reapTime = reapNetworkInterval
 
 			// The remote node is leaving the network, but not the gossip cluster.
 			// Mark all its entries in deleted state, this will guarantee that
@@ -153,8 +198,7 @@ func (nDB *NetworkDB) handleNetworkEvent(nEvent *NetworkEvent) bool {
 }
 
 func (nDB *NetworkDB) handleTableEvent(tEvent *TableEvent) bool {
-	// Update our local clock if the received messages has newer
-	// time.
+	// Update our local clock if the received messages has newer time.
 	nDB.tableClock.Witness(tEvent.LTime)
 
 	// Ignore the table events for networks that are in the process of going away
@@ -190,20 +234,26 @@ func (nDB *NetworkDB) handleTableEvent(tEvent *TableEvent) bool {
 		node:     tEvent.NodeName,
 		value:    tEvent.Value,
 		deleting: tEvent.Type == TableEventTypeDelete,
+		reapTime: time.Duration(tEvent.ResidualReapTime) * time.Second,
 	}
 
-	if e.deleting {
-		e.reapTime = reapInterval
+	// All the entries marked for deletion should have a reapTime set greater than 0
+	// This case can happen if the cluster is running different versions of the engine where the old version does not have the
+	// field. If that is not the case, this can be a BUG
+	if e.deleting && e.reapTime == 0 {
+		logrus.Warnf("handleTableEvent object %+v has a 0 reapTime, is the cluster running the same docker engine version?", tEvent)
+		e.reapTime = reapEntryInterval
 	}
 
 	nDB.Lock()
-	nDB.indexes[byTable].Insert(fmt.Sprintf("/%s/%s/%s", tEvent.TableName, tEvent.NetworkID, tEvent.Key), e)
-	nDB.indexes[byNetwork].Insert(fmt.Sprintf("/%s/%s/%s", tEvent.NetworkID, tEvent.TableName, tEvent.Key), e)
+	nDB.createOrUpdateEntry(tEvent.NetworkID, tEvent.TableName, tEvent.Key, e)
 	nDB.Unlock()
 
 	if err != nil && tEvent.Type == TableEventTypeDelete {
-		// If it is a delete event and we didn't have the entry here don't repropagate
-		return true
+		// If it is a delete event and we did not have a state for it, don't propagate to the application
+		// If the residual reapTime is lower or equal to 1/6 of the total reapTime don't bother broadcasting it around
+		// most likely the cluster is already aware of it, if not who will sync with this node will catch the state too.
+		return e.reapTime > reapPeriod/6
 	}
 
 	var op opType
@@ -258,22 +308,17 @@ func (nDB *NetworkDB) handleTableMessage(buf []byte, isBulkSync bool) {
 		n, ok := nDB.networks[nDB.config.NodeName][tEvent.NetworkID]
 		nDB.RUnlock()
 
-		if !ok {
+		// if the network is not there anymore, OR we are leaving the network OR the broadcast queue is not present
+		if !ok || n.leaving || n.tableBroadcasts == nil {
 			return
 		}
 
-		broadcastQ := n.tableBroadcasts
-
-		if broadcastQ == nil {
-			return
-		}
-
-		broadcastQ.QueueBroadcast(&tableEventMessage{
+		n.tableBroadcasts.QueueBroadcast(&tableEventMessage{
 			msg:   buf,
 			id:    tEvent.NetworkID,
 			tname: tEvent.TableName,
 			key:   tEvent.Key,
-			node:  nDB.config.NodeName,
+			node:  tEvent.NodeName,
 		})
 	}
 }
