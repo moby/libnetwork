@@ -30,10 +30,10 @@ func TestMain(m *testing.M) {
 func createNetworkDBInstances(t *testing.T, num int, namePrefix string) []*NetworkDB {
 	var dbs []*NetworkDB
 	for i := 0; i < num; i++ {
-		db, err := New(&Config{
-			NodeName: fmt.Sprintf("%s%d", namePrefix, i+1),
-			BindPort: int(atomic.AddInt32(&dbPort, 1)),
-		})
+		conf := DefaultConfig()
+		conf.NodeName = fmt.Sprintf("%s%d", namePrefix, i+1)
+		conf.BindPort = int(atomic.AddInt32(&dbPort, 1))
+		db, err := New(conf)
 		require.NoError(t, err)
 
 		if i != 0 {
@@ -473,6 +473,9 @@ func TestNetworkDBNodeJoinLeaveIteration(t *testing.T) {
 	if len(dbs[0].networkNodes["network1"]) != 2 {
 		t.Fatalf("The networkNodes list has to have be 2 instead of %d - %v", len(dbs[0].networkNodes["network1"]), dbs[0].networkNodes["network1"])
 	}
+	if n, ok := dbs[0].networks[dbs[0].config.NodeName]["network1"]; !ok || n.leaving {
+		t.Fatalf("The network should not be marked as leaving:%t", n.leaving)
+	}
 
 	// Wait for the propagation on db[1]
 	for i := 0; i < maxRetry; i++ {
@@ -483,6 +486,9 @@ func TestNetworkDBNodeJoinLeaveIteration(t *testing.T) {
 	}
 	if len(dbs[1].networkNodes["network1"]) != 2 {
 		t.Fatalf("The networkNodes list has to have be 2 instead of %d - %v", len(dbs[1].networkNodes["network1"]), dbs[1].networkNodes["network1"])
+	}
+	if n, ok := dbs[1].networks[dbs[1].config.NodeName]["network1"]; !ok || n.leaving {
+		t.Fatalf("The network should not be marked as leaving:%t", n.leaving)
 	}
 
 	// Try a quick leave/join
