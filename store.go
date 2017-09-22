@@ -60,8 +60,8 @@ func (c *controller) closeStores() {
 }
 
 func (c *controller) getStore(scope string) datastore.DataStore {
-	c.Lock()
-	defer c.Unlock()
+	c.RLock()
+	defer c.RUnlock()
 
 	for _, store := range c.stores {
 		if store.Scope() == scope {
@@ -73,8 +73,8 @@ func (c *controller) getStore(scope string) datastore.DataStore {
 }
 
 func (c *controller) getStores() []datastore.DataStore {
-	c.Lock()
-	defer c.Unlock()
+	c.RLock()
+	defer c.RUnlock()
 
 	return c.stores
 }
@@ -271,8 +271,8 @@ type netWatch struct {
 }
 
 func (c *controller) getLocalEps(nw *netWatch) []*endpoint {
-	c.Lock()
-	defer c.Unlock()
+	c.RLock()
+	defer c.RUnlock()
 
 	var epl []*endpoint
 	for _, ep := range nw.localEps {
@@ -361,9 +361,9 @@ func (c *controller) processEndpointCreate(nmap map[string]*netWatch, ep *endpoi
 		return
 	}
 
-	c.Lock()
+	c.RLock()
 	nw, ok := nmap[n.ID()]
-	c.Unlock()
+	c.RUnlock()
 
 	if ok {
 		// Update the svc db for the local endpoint join right away
