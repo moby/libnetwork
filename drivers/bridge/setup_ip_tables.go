@@ -173,11 +173,7 @@ func setupIPTablesInternal(bridgeIface string, addr net.Addr, icc, ipmasq, hairp
 	}
 
 	// Set Accept on incoming packets for existing connections.
-	if err := programChainRule(inRule, "ACCEPT INCOMING", enable); err != nil {
-		return err
-	}
-
-	return nil
+	return programChainRule(inRule, "ACCEPT INCOMING", enable)
 }
 
 func programChainRule(rule iptRule, ruleDescr string, insert bool) error {
@@ -348,8 +344,5 @@ func setupInternalNetworkRules(bridgeIface string, addr net.Addr, icc, insert bo
 		return err
 	}
 	// Set Inter Container Communication.
-	if err := setIcc(bridgeIface, icc, insert); err != nil {
-		return err
-	}
-	return nil
+	return setIcc(bridgeIface, icc, insert)
 }

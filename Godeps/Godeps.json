@@ -292,7 +292,7 @@
 		},
 		{
 			"ImportPath": "github.com/hashicorp/memberlist",
-			"Rev": "88ac4de0d1a0ca6def284b571342db3b777a4c37"
+			"Rev": "ce8abaa0c60c2d6bee7219f5ddf500e0a1457b28"
 		},
 		{
 			"ImportPath": "github.com/hashicorp/serf/coordinate",
