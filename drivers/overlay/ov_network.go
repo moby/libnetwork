@@ -715,15 +715,16 @@ func (n *network) initSandbox(restore bool) error {
 func (n *network) watchMiss(nlSock *nl.NetlinkSocket) {
 	t := time.Now()
 	for {
+		n.Lock()
+		nlFd := nlSock.GetFd()
+		n.Unlock()
+		if nlFd == -1 {
+			// The netlink socket got closed, simply exit to not leak this goroutine
+			return
+		}
+
 		msgs, err := nlSock.Receive()
 		if err != nil {
-			n.Lock()
-			nlFd := nlSock.GetFd()
-			n.Unlock()
-			if nlFd == -1 {
-				// The netlink socket got closed, simply exit to not leak this goroutine
-				return
-			}
 			logrus.Errorf("Failed to receive from netlink: %v ", err)
 			continue
 		}
