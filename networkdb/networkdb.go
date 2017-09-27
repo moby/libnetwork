@@ -261,6 +261,8 @@ func (nDB *NetworkDB) Close() {
 	if err := nDB.clusterLeave(); err != nil {
 		logrus.Errorf("Could not close DB %s: %v", nDB.config.NodeName, err)
 	}
+
+	nDB.broadcaster.Close()
 }
 
 // ClusterPeers returns all the gossip cluster peers.
