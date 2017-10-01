@@ -74,3 +74,16 @@ func (i *Idm) GetIDInRange(start, end uint64) (uint64, error) {
 func (i *Idm) Release(id uint64) {
 	i.handle.Unset(id - i.start)
 }
+
+// GetAllocatedList return the list off ids currently allocated
+func (i *Idm) GetAllocatedList() []uint64 {
+	var list []uint64
+
+	for j := uint64(0); j < i.end-i.start; j++ {
+		if i.handle.IsSet(j) {
+			list = append(list, j+i.start)
+		}
+	}
+
+	return list
+}
