@@ -258,7 +258,6 @@ func (c *ChainInfo) Forward(action Action, ip net.IP, port int, proto, destAddr 
 	}
 
 	args = []string{
-		"!", "-i", bridgeName,
 		"-o", bridgeName,
 		"-p", proto,
 		"-d", destAddr,

@@ -67,7 +67,6 @@ func TestForward(t *testing.T) {
 	}
 
 	filterRule := []string{
-		"!", "-i", bridgeName,
 		"-o", bridgeName,
 		"-d", dstAddr,
 		"-p", proto,
