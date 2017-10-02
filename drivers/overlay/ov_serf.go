@@ -120,9 +120,9 @@ func (d *driver) processEvent(u serf.UserEvent) {
 
 	switch action {
 	case "join":
-		d.peerAdd(nid, eid, net.ParseIP(ipStr), net.IPMask(net.ParseIP(maskStr).To4()), mac, net.ParseIP(vtepStr), false, false, false)
+		d.peerAdd(nid, eid, net.ParseIP(ipStr), mac, net.ParseIP(vtepStr), false, false, false)
 	case "leave":
-		d.peerDelete(nid, eid, net.ParseIP(ipStr), net.IPMask(net.ParseIP(maskStr).To4()), mac, net.ParseIP(vtepStr), false)
+		d.peerDelete(nid, eid, net.ParseIP(ipStr), mac, net.ParseIP(vtepStr), false)
 	}
 }
 
@@ -140,8 +140,8 @@ func (d *driver) processQuery(q *serf.Query) {
 		return
 	}
 
-	logrus.Debugf("Sending peer query resp mac %v, mask %s, vtep %s", pKey.peerMac, net.IP(pEntry.peerIPMask).String(), pEntry.vtep)
-	q.Respond([]byte(fmt.Sprintf("%s %s %s", pKey.peerMac.String(), net.IP(pEntry.peerIPMask).String(), pEntry.vtep.String())))
+	logrus.Debugf("Sending peer query resp mac %v, vtep %s", pKey.peerMac, pEntry.vtep)
+	q.Respond([]byte(fmt.Sprintf("%s %s", pKey.peerMac.String(), pEntry.vtep.String())))
 }
 
 func (d *driver) resolvePeer(nid string, peerIP net.IP) (net.HardwareAddr, net.IPMask, net.IP, error) {

@@ -146,7 +146,7 @@ func (d *driver) restoreEndpoints() error {
 		}
 		n.addEndpoint(ep)
 
-		s := n.getSubnetforIP(ep.addr)
+		s := n.getSubnetforIP(ep.addr.IP)
 		if s == nil {
 			return fmt.Errorf("could not find subnet for endpoint %s", ep.id)
 		}
@@ -170,7 +170,7 @@ func (d *driver) restoreEndpoints() error {
 		}
 
 		n.incEndpointCount()
-		d.peerAdd(ep.nid, ep.id, ep.addr.IP, ep.addr.Mask, ep.mac, net.ParseIP(d.advertiseAddress), false, false, true)
+		d.peerAdd(ep.nid, ep.id, ep.addr.IP, ep.mac, net.ParseIP(d.advertiseAddress), false, false, true)
 	}
 	return nil
 }

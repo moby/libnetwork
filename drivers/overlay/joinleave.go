@@ -38,7 +38,7 @@ func (d *driver) Join(nid, eid string, sboxKey string, jinfo driverapi.JoinInfo,
 		return fmt.Errorf("cannot join secure network: required modules to install IPSEC rules are missing on host")
 	}
 
-	s := n.getSubnetforIP(ep.addr)
+	s := n.getSubnetforIP(ep.addr.IP)
 	if s == nil {
 		return fmt.Errorf("could not find subnet for endpoint %s", eid)
 	}
@@ -120,7 +120,7 @@ func (d *driver) Join(nid, eid string, sboxKey string, jinfo driverapi.JoinInfo,
 		}
 	}
 
-	d.peerAdd(nid, eid, ep.addr.IP, ep.addr.Mask, ep.mac, net.ParseIP(d.advertiseAddress), false, false, true)
+	d.peerAdd(nid, eid, ep.addr.IP, ep.mac, net.ParseIP(d.advertiseAddress), false, false, true)
 
 	if err = d.checkEncryption(nid, nil, n.vxlanID(s), true, true); err != nil {
 		logrus.Warn(err)
@@ -200,11 +200,11 @@ func (d *driver) EventNotify(etype driverapi.EventType, nid, tableName, key stri
 	}
 
 	if etype == driverapi.Delete {
-		d.peerDelete(nid, eid, addr.IP, addr.Mask, mac, vtep, false)
+		d.peerDelete(nid, eid, addr.IP, mac, vtep, false)
 		return
 	}
 
-	d.peerAdd(nid, eid, addr.IP, addr.Mask, mac, vtep, false, false, false)
+	d.peerAdd(nid, eid, addr.IP, mac, vtep, false, false, false)
 }
 
 // Leave method is invoked when a Sandbox detaches from an endpoint.
@@ -232,7 +232,7 @@ func (d *driver) Leave(nid, eid string) error {
 		}
 	}
 
-	d.peerDelete(nid, eid, ep.addr.IP, ep.addr.Mask, ep.mac, net.ParseIP(d.advertiseAddress), true)
+	d.peerDelete(nid, eid, ep.addr.IP, ep.mac, net.ParseIP(d.advertiseAddress), true)
 
 	n.leaveSandbox()
 
