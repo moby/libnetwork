@@ -162,7 +162,7 @@ func (d *driver) restoreEndpoints() error {
 		Ifaces := make(map[string][]osl.IfaceOption)
 		vethIfaceOption := make([]osl.IfaceOption, 1)
 		vethIfaceOption = append(vethIfaceOption, n.sbox.InterfaceOptions().Master(s.brName))
-		Ifaces[fmt.Sprintf("%s+%s", "veth", "veth")] = vethIfaceOption
+		Ifaces["veth+veth"] = vethIfaceOption
 
 		err := n.sbox.Restore(Ifaces, nil, nil, nil)
 		if err != nil {
@@ -170,7 +170,7 @@ func (d *driver) restoreEndpoints() error {
 		}
 
 		n.incEndpointCount()
-		d.peerAdd(ep.nid, ep.id, ep.addr.IP, ep.addr.Mask, ep.mac, net.ParseIP(d.advertiseAddress), true, false, false, true)
+		d.peerAdd(ep.nid, ep.id, ep.addr.IP, ep.addr.Mask, ep.mac, net.ParseIP(d.advertiseAddress), false, false, true)
 	}
 	return nil
 }
@@ -262,7 +262,7 @@ func (d *driver) nodeJoin(advertiseAddress, bindAddress string, self bool) {
 		d.Unlock()
 
 		// If containers are already running on this network update the
-		// advertiseaddress in the peerDB
+		// advertise address in the peerDB
 		d.localJoinOnce.Do(func() {
 			d.peerDBUpdateSelf()
 		})
@@ -270,7 +270,7 @@ func (d *driver) nodeJoin(advertiseAddress, bindAddress string, self bool) {
 		// If there is no cluster store there is no need to start serf.
 		if d.store != nil {
 			if err := validateSelf(advertiseAddress); err != nil {
-				logrus.Warnf("%s", err.Error())
+				logrus.Warn(err.Error())
 			}
 			err := d.serfInit()
 			if err != nil {
