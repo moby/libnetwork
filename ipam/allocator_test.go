@@ -1,58 +1,26 @@
 package ipam
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"math/rand"
 	"net"
 	"strconv"
 	"testing"
 	"time"
 
-	"github.com/docker/libkv/store"
-	"github.com/docker/libkv/store/boltdb"
 	"github.com/docker/libnetwork/bitseq"
-	"github.com/docker/libnetwork/datastore"
 	"github.com/docker/libnetwork/ipamapi"
 	"github.com/docker/libnetwork/ipamutils"
-	_ "github.com/docker/libnetwork/testutils"
+	"github.com/docker/libnetwork/testutils"
 	"github.com/docker/libnetwork/types"
 )
 
-const (
-	defaultPrefix = "/tmp/libnetwork/test/ipam"
-)
-
-func init() {
-	boltdb.Register()
-}
-
-// OptionBoltdbWithRandomDBFile function returns a random dir for local store backend
-func randomLocalStore() (datastore.DataStore, error) {
-	tmp, err := ioutil.TempFile("", "libnetwork-")
-	if err != nil {
-		return nil, fmt.Errorf("Error creating temp file: %v", err)
-	}
-	if err := tmp.Close(); err != nil {
-		return nil, fmt.Errorf("Error closing temp file: %v", err)
-	}
-	return datastore.NewDataStore(datastore.LocalScope, &datastore.ScopeCfg{
-		Client: datastore.ScopeClientCfg{
-			Provider: "boltdb",
-			Address:  defaultPrefix + tmp.Name(),
-			Config: &store.Config{
-				Bucket:            "libnetwork",
-				ConnectionTimeout: 3 * time.Second,
-			},
-		},
-	})
-}
-
 func getAllocator() (*Allocator, error) {
 	ipamutils.InitNetworks()
-	ds, err := randomLocalStore()
+	ds, err := testutils.RandomLocalStore("ipam")
 	if err != nil {
 		return nil, err
 	}
@@ -779,6 +747,62 @@ func TestRequestSyntaxCheck(t *testing.T) {
 	}
 }
 
+func TestDuplicateIP(t *testing.T) {
+	a, err := getAllocator()
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.addrSpaces["dup"] = &addrSpace{
+		id:      dsConfigKey + "/" + "dup",
+		ds:      a.addrSpaces[localAddressSpace].ds,
+		alloc:   a.addrSpaces[localAddressSpace].alloc,
+		scope:   a.addrSpaces[localAddressSpace].scope,
+		subnets: map[SubnetKey]*PoolData{},
+	}
+
+	poolID, _, _, err := a.RequestPool("dup", "55.1.0.0/16", "55.1.1.0/24", nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan []*net.IPNet)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	for i := 0; i < 3; i++ {
+		go func(ctx context.Context, poolID string, i int) {
+			ipList := []*net.IPNet{}
+			var err error
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+					if err != nil {
+						done <- ipList
+					}
+					var c *net.IPNet
+					if c, _, err = a.RequestAddress(poolID, nil, nil); err == nil {
+						ipList = append(ipList, c)
+					}
+				}
+			}
+		}(ctx, poolID, i)
+	}
+	ipList := []*net.IPNet{}
+	for i := 0; i < 3; i++ {
+		ipList = append(ipList, <-done...)
+	}
+
+	//Verify duplicate IP
+	ipMap := make(map[string]bool)
+	for _, ip := range ipList {
+		if _, ok := ipMap[ip.String()]; ok {
+			t.Fatalf("duplicate ip -----> %s", ip.String())
+		}
+	}
+}
+
 func TestRequest(t *testing.T) {
 	// Request N addresses from different size subnets, verifying last request
 	// returns expected address. Internal subnet host size is Allocator's default, 16
@@ -981,7 +1005,7 @@ func TestAllocateRandomDeallocate(t *testing.T) {
 }
 
 func testAllocateRandomDeallocate(t *testing.T, pool, subPool string, num int) {
-	ds, err := randomLocalStore()
+	ds, err := testutils.RandomLocalStore("ipam")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1050,7 +1074,7 @@ func testAllocateRandomDeallocate(t *testing.T, pool, subPool string, num int) {
 
 func TestRetrieveFromStore(t *testing.T) {
 	num := 200
-	ds, err := randomLocalStore()
+	ds, err := testutils.RandomLocalStore("ipam")
 	if err != nil {
 		t.Fatal(err)
 	}

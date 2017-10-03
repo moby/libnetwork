@@ -2,15 +2,18 @@ package datastore
 
 import (
 	"encoding/json"
+	"flag"
 	"reflect"
 	"testing"
 
 	"github.com/docker/libnetwork/options"
-	_ "github.com/docker/libnetwork/testutils"
 	"github.com/stretchr/testify/assert"
 )
 
-var dummyKey = "dummy"
+var (
+	dummyKey           = "dummy"
+	runningInContainer = flag.Bool("incontainer", false, "Indicates if the test is running in a container")
+)
 
 // NewCustomDataStore can be used by other Tests in order to use custom datastore
 func NewTestDataStore() DataStore {
