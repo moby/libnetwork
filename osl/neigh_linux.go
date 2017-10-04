@@ -9,17 +9,6 @@ import (
 	"github.com/vishvananda/netlink"
 )
 
-// NeighborSearchError indicates that the neighbor is already present
-type NeighborSearchError struct {
-	ip      net.IP
-	mac     net.HardwareAddr
-	present bool
-}
-
-func (n NeighborSearchError) Error() string {
-	return fmt.Sprintf("Search neighbor failed for IP %v, mac %v, present in db:%t", n.ip, n.mac, n.present)
-}
-
 // NeighOption is a function option type to set interface options
 type NeighOption func(nh *neigh)
 
@@ -52,7 +41,7 @@ func (n *networkNamespace) DeleteNeighbor(dstIP net.IP, dstMac net.HardwareAddr,
 
 	nh := n.findNeighbor(dstIP, dstMac)
 	if nh == nil {
-		return NeighborSearchError{dstIP, dstMac, false}
+		return fmt.Errorf("could not find the neighbor entry to delete")
 	}
 
 	if osDelete {
@@ -116,27 +105,26 @@ func (n *networkNamespace) DeleteNeighbor(dstIP net.IP, dstMac net.HardwareAddr,
 		}
 	}
 	n.Unlock()
-	logrus.Debugf("Neighbor entry deleted for IP %v, mac %v osDelete:%t", dstIP, dstMac, osDelete)
+	logrus.Debugf("Neighbor entry deleted for IP %v, mac %v", dstIP, dstMac)
 
 	return nil
 }
 
 func (n *networkNamespace) AddNeighbor(dstIP net.IP, dstMac net.HardwareAddr, force bool, options ...NeighOption) error {
 	var (
-		iface                  netlink.Link
-		err                    error
-		neighborAlreadyPresent bool
+		iface netlink.Link
+		err   error
 	)
 
 	// If the namespace already has the neighbor entry but the AddNeighbor is called
 	// because of a miss notification (force flag) program the kernel anyway.
 	nh := n.findNeighbor(dstIP, dstMac)
 	if nh != nil {
-		neighborAlreadyPresent = true
-		logrus.Warnf("Neighbor entry already present for IP %v, mac %v neighbor:%+v forceUpdate:%t", dstIP, dstMac, nh, force)
 		if !force {
-			return NeighborSearchError{dstIP, dstMac, true}
+			logrus.Warnf("Neighbor entry already present for IP %v, mac %v", dstIP, dstMac)
+			return nil
 		}
+		logrus.Warnf("Force kernel update, Neighbor entry already present for IP %v, mac %v", dstIP, dstMac)
 	}
 
 	nh = &neigh{
@@ -160,7 +148,8 @@ func (n *networkNamespace) AddNeighbor(dstIP net.IP, dstMac net.HardwareAddr, fo
 	if nh.linkDst != "" {
 		iface, err = nlh.LinkByName(nh.linkDst)
 		if err != nil {
-			return fmt.Errorf("could not find interface with destination name %s: %v", nh.linkDst, err)
+			return fmt.Errorf("could not find interface with destination name %s: %v",
+				nh.linkDst, err)
 		}
 	}
 
@@ -180,17 +169,13 @@ func (n *networkNamespace) AddNeighbor(dstIP net.IP, dstMac net.HardwareAddr, fo
 	}
 
 	if err := nlh.NeighSet(nlnh); err != nil {
-		return fmt.Errorf("could not add neighbor entry:%+v error:%v", nlnh, err)
-	}
-
-	if neighborAlreadyPresent {
-		return nil
+		return fmt.Errorf("could not add neighbor entry: %v", err)
 	}
 
 	n.Lock()
 	n.neighbors = append(n.neighbors, nh)
 	n.Unlock()
-	logrus.Debugf("Neighbor entry added for IP:%v, mac:%v on ifc:%s", dstIP, dstMac, nh.linkName)
+	logrus.Debugf("Neighbor entry added for IP %v, mac %v", dstIP, dstMac)
 
 	return nil
 }
