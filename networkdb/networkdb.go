@@ -496,10 +496,7 @@ func (nDB *NetworkDB) deleteNodeNetworkEntries(nid, node string) {
 				nDB.deleteEntry(nid, tname, key)
 			}
 
-			// Notify to the upper layer only entries not already marked for deletion
-			if !oldEntry.deleting {
-				nDB.broadcaster.Write(makeEvent(opDelete, tname, nid, key, entry.value))
-			}
+			nDB.broadcaster.Write(makeEvent(opDelete, tname, nid, key, entry.value))
 			return false
 		})
 }

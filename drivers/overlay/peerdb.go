@@ -9,7 +9,6 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/libnetwork/common"
-	"github.com/docker/libnetwork/osl"
 )
 
 const ovPeerTable = "overlay_peer_table"
@@ -23,45 +22,16 @@ type peerEntry struct {
 	eid        string
 	vtep       net.IP
 	peerIPMask net.IPMask
+	inSandbox  bool
 	isLocal    bool
-}
-
-func (p *peerEntry) MarshalDB() peerEntryDB {
-	return peerEntryDB{
-		eid:        p.eid,
-		vtep:       p.vtep.String(),
-		peerIPMask: p.peerIPMask.String(),
-		isLocal:    p.isLocal,
-	}
-}
-
-// This the structure saved into the set (SetMatrix), due to the implementation of it
-// the value inserted in the set has to be Hashable so the []byte had to be converted into
-// strings
-type peerEntryDB struct {
-	eid        string
-	vtep       string
-	peerIPMask string
-	isLocal    bool
-}
-
-func (p *peerEntryDB) UnMarshalDB() peerEntry {
-	return peerEntry{
-		eid:        p.eid,
-		vtep:       net.ParseIP(p.vtep),
-		peerIPMask: net.IPMask(net.ParseIP(p.peerIPMask)),
-		isLocal:    p.isLocal,
-	}
 }
 
 type peerMap struct {
-	// set of peerEntry, note they have to be objects and not pointers to maintain the proper equality checks
-	mp common.SetMatrix
+	mp map[string]peerEntry
 	sync.Mutex
 }
 
 type peerNetworkMap struct {
-	// map with key peerKey
 	mp map[string]*peerMap
 	sync.Mutex
 }
@@ -84,7 +54,11 @@ func (pKey *peerKey) Scan(state fmt.ScanState, verb rune) error {
 	}
 
 	pKey.peerMac, err = net.ParseMAC(string(macB))
-	return err
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (d *driver) peerDbWalk(f func(string, *peerKey, *peerEntry) bool) error {
@@ -113,13 +87,10 @@ func (d *driver) peerDbNetworkWalk(nid string, f func(*peerKey, *peerEntry) bool
 	}
 
 	mp := map[string]peerEntry{}
+
 	pMap.Lock()
-	for _, pKeyStr := range pMap.mp.Keys() {
-		entryDBList, ok := pMap.mp.Get(pKeyStr)
-		if ok {
-			peerEntryDB := entryDBList[0].(peerEntryDB)
-			mp[pKeyStr] = peerEntryDB.UnMarshalDB()
-		}
+	for pKeyStr, pEntry := range pMap.mp {
+		mp[pKeyStr] = pEntry
 	}
 	pMap.Unlock()
 
@@ -136,38 +107,45 @@ func (d *driver) peerDbNetworkWalk(nid string, f func(*peerKey, *peerEntry) bool
 	return nil
 }
 
-func (d *driver) peerDbSearch(nid string, peerIP net.IP) (*peerKey, *peerEntry, error) {
-	var pKeyMatched *peerKey
-	var pEntryMatched *peerEntry
+func (d *driver) peerDbSearch(nid string, peerIP net.IP) (net.HardwareAddr, net.IPMask, net.IP, error) {
+	var (
+		peerMac    net.HardwareAddr
+		vtep       net.IP
+		peerIPMask net.IPMask
+		found      bool
+	)
+
 	err := d.peerDbNetworkWalk(nid, func(pKey *peerKey, pEntry *peerEntry) bool {
 		if pKey.peerIP.Equal(peerIP) {
-			pKeyMatched = pKey
-			pEntryMatched = pEntry
-			return true
+			peerMac = pKey.peerMac
+			peerIPMask = pEntry.peerIPMask
+			vtep = pEntry.vtep
+			found = true
+			return found
 		}
 
-		return false
+		return found
 	})
 
 	if err != nil {
-		return nil, nil, fmt.Errorf("peerdb search for peer ip %q failed: %v", peerIP, err)
+		return nil, nil, nil, fmt.Errorf("peerdb search for peer ip %q failed: %v", peerIP, err)
 	}
 
-	if pKeyMatched == nil || pEntryMatched == nil {
-		return nil, nil, fmt.Errorf("peer ip %q not found in peerdb", peerIP)
+	if !found {
+		return nil, nil, nil, fmt.Errorf("peer ip %q not found in peerdb", peerIP)
 	}
 
-	return pKeyMatched, pEntryMatched, nil
+	return peerMac, peerIPMask, vtep, nil
 }
 
 func (d *driver) peerDbAdd(nid, eid string, peerIP net.IP, peerIPMask net.IPMask,
-	peerMac net.HardwareAddr, vtep net.IP, isLocal bool) (bool, int) {
+	peerMac net.HardwareAddr, vtep net.IP, isLocal bool) {
 
 	d.peerDb.Lock()
 	pMap, ok := d.peerDb.mp[nid]
 	if !ok {
 		d.peerDb.mp[nid] = &peerMap{
-			mp: common.NewSetMatrix(),
+			mp: make(map[string]peerEntry),
 		}
 
 		pMap = d.peerDb.mp[nid]
@@ -187,24 +165,18 @@ func (d *driver) peerDbAdd(nid, eid string, peerIP net.IP, peerIPMask net.IPMask
 	}
 
 	pMap.Lock()
-	defer pMap.Unlock()
-	b, i := pMap.mp.Insert(pKey.String(), pEntry.MarshalDB())
-	if i != 1 {
-		// Transient case, there is more than one endpoint that is using the same IP,MAC pair
-		s, _ := pMap.mp.String(pKey.String())
-		logrus.Warnf("peerDbAdd transient condition - Key:%s cardinality:%d db state:%s", pKey.String(), i, s)
-	}
-	return b, i
+	pMap.mp[pKey.String()] = pEntry
+	pMap.Unlock()
 }
 
 func (d *driver) peerDbDelete(nid, eid string, peerIP net.IP, peerIPMask net.IPMask,
-	peerMac net.HardwareAddr, vtep net.IP, isLocal bool) (bool, int) {
+	peerMac net.HardwareAddr, vtep net.IP) peerEntry {
 
 	d.peerDb.Lock()
 	pMap, ok := d.peerDb.mp[nid]
 	if !ok {
 		d.peerDb.Unlock()
-		return false, 0
+		return peerEntry{}
 	}
 	d.peerDb.Unlock()
 
@@ -213,22 +185,22 @@ func (d *driver) peerDbDelete(nid, eid string, peerIP net.IP, peerIPMask net.IPM
 		peerMac: peerMac,
 	}
 
-	pEntry := peerEntry{
-		eid:        eid,
-		vtep:       vtep,
-		peerIPMask: peerIPMask,
-		isLocal:    isLocal,
+	pMap.Lock()
+
+	pEntry, ok := pMap.mp[pKey.String()]
+	if ok {
+		// Mismatched endpoint ID(possibly outdated). Do not
+		// delete peerdb
+		if pEntry.eid != eid {
+			pMap.Unlock()
+			return pEntry
+		}
 	}
 
-	pMap.Lock()
-	defer pMap.Unlock()
-	b, i := pMap.mp.Remove(pKey.String(), pEntry.MarshalDB())
-	if i != 0 {
-		// Transient case, there is more than one endpoint that is using the same IP,MAC pair
-		s, _ := pMap.mp.String(pKey.String())
-		logrus.Warnf("peerDbDelete transient condition - Key:%s cardinality:%d db state:%s", pKey.String(), i, s)
-	}
-	return b, i
+	delete(pMap.mp, pKey.String())
+	pMap.Unlock()
+
+	return pEntry
 }
 
 // The overlay uses a lazy initialization approach, this means that when a network is created
@@ -252,7 +224,6 @@ const (
 	peerOperationINIT peerOperationType = iota
 	peerOperationADD
 	peerOperationDELETE
-	peerOperationFLUSH
 )
 
 type peerOperation struct {
@@ -263,6 +234,7 @@ type peerOperation struct {
 	peerIPMask net.IPMask
 	peerMac    net.HardwareAddr
 	vtepIP     net.IP
+	updateDB   bool
 	l2Miss     bool
 	l3Miss     bool
 	localPeer  bool
@@ -280,11 +252,9 @@ func (d *driver) peerOpRoutine(ctx context.Context, ch chan *peerOperation) {
 			case peerOperationINIT:
 				err = d.peerInitOp(op.networkID)
 			case peerOperationADD:
-				err = d.peerAddOp(op.networkID, op.endpointID, op.peerIP, op.peerIPMask, op.peerMac, op.vtepIP, op.l2Miss, op.l3Miss, true, op.localPeer)
+				err = d.peerAddOp(op.networkID, op.endpointID, op.peerIP, op.peerIPMask, op.peerMac, op.vtepIP, op.updateDB, op.l2Miss, op.l3Miss, op.localPeer)
 			case peerOperationDELETE:
-				err = d.peerDeleteOp(op.networkID, op.endpointID, op.peerIP, op.peerIPMask, op.peerMac, op.vtepIP, op.localPeer)
-			case peerOperationFLUSH:
-				err = d.peerFlushOp(op.networkID)
+				err = d.peerDeleteOp(op.networkID, op.endpointID, op.peerIP, op.peerIPMask, op.peerMac, op.vtepIP, op.updateDB)
 			}
 			if err != nil {
 				logrus.Warnf("Peer operation failed:%s op:%v", err, op)
@@ -309,14 +279,15 @@ func (d *driver) peerInitOp(nid string) error {
 			return false
 		}
 
-		d.peerAddOp(nid, pEntry.eid, pKey.peerIP, pEntry.peerIPMask, pKey.peerMac, pEntry.vtep, false, false, false, pEntry.isLocal)
+		d.peerAddOp(nid, pEntry.eid, pKey.peerIP, pEntry.peerIPMask, pKey.peerMac, pEntry.vtep, false, false, false, false)
 		// return false to loop on all entries
 		return false
 	})
 }
 
 func (d *driver) peerAdd(nid, eid string, peerIP net.IP, peerIPMask net.IPMask,
-	peerMac net.HardwareAddr, vtep net.IP, l2Miss, l3Miss, localPeer bool) {
+	peerMac net.HardwareAddr, vtep net.IP, updateDb, l2Miss, l3Miss, localPeer bool) {
+	callerName := common.CallerName(1)
 	d.peerOpCh <- &peerOperation{
 		opType:     peerOperationADD,
 		networkID:  nid,
@@ -325,33 +296,26 @@ func (d *driver) peerAdd(nid, eid string, peerIP net.IP, peerIPMask net.IPMask,
 		peerIPMask: peerIPMask,
 		peerMac:    peerMac,
 		vtepIP:     vtep,
+		updateDB:   updateDb,
 		l2Miss:     l2Miss,
 		l3Miss:     l3Miss,
 		localPeer:  localPeer,
-		callerName: common.CallerName(1),
+		callerName: callerName,
 	}
 }
 
 func (d *driver) peerAddOp(nid, eid string, peerIP net.IP, peerIPMask net.IPMask,
-	peerMac net.HardwareAddr, vtep net.IP, l2Miss, l3Miss, updateDB, localPeer bool) error {
+	peerMac net.HardwareAddr, vtep net.IP, updateDb, l2Miss, l3Miss, updateOnlyDB bool) error {
 
 	if err := validateID(nid, eid); err != nil {
 		return err
 	}
 
-	var dbEntries int
-	var inserted bool
-	if updateDB {
-		inserted, dbEntries = d.peerDbAdd(nid, eid, peerIP, peerIPMask, peerMac, vtep, localPeer)
-		if !inserted {
-			logrus.Warnf("Entry already present in db: nid:%s eid:%s peerIP:%v peerMac:%v isLocal:%t vtep:%v",
-				nid, eid, peerIP, peerMac, localPeer, vtep)
+	if updateDb {
+		d.peerDbAdd(nid, eid, peerIP, peerIPMask, peerMac, vtep, false)
+		if updateOnlyDB {
+			return nil
 		}
-	}
-
-	// Local peers do not need any further configuration
-	if localPeer {
-		return nil
 	}
 
 	n := d.network(nid)
@@ -391,26 +355,21 @@ func (d *driver) peerAddOp(nid, eid string, peerIP net.IP, peerIPMask net.IPMask
 
 	// Add neighbor entry for the peer IP
 	if err := sbox.AddNeighbor(peerIP, peerMac, l3Miss, sbox.NeighborOptions().LinkName(s.vxlanName)); err != nil {
-		if _, ok := err.(osl.NeighborSearchError); ok && dbEntries > 1 {
-			// We are in the transient case so only the first configuration is programmed into the kernel
-			// Upon deletion if the active configuration is deleted the next one from the database will be restored
-			// Note we are skipping also the next configuration
-			return nil
-		}
-		return fmt.Errorf("could not add neighbor entry for nid:%s eid:%s into the sandbox:%v", nid, eid, err)
+		return fmt.Errorf("could not add neighbor entry into the sandbox: %v", err)
 	}
 
 	// Add fdb entry to the bridge for the peer mac
 	if err := sbox.AddNeighbor(vtep, peerMac, l2Miss, sbox.NeighborOptions().LinkName(s.vxlanName),
 		sbox.NeighborOptions().Family(syscall.AF_BRIDGE)); err != nil {
-		return fmt.Errorf("could not add fdb entry for nid:%s eid:%s into the sandbox:%v", nid, eid, err)
+		return fmt.Errorf("could not add fdb entry into the sandbox: %v", err)
 	}
 
 	return nil
 }
 
 func (d *driver) peerDelete(nid, eid string, peerIP net.IP, peerIPMask net.IPMask,
-	peerMac net.HardwareAddr, vtep net.IP, localPeer bool) {
+	peerMac net.HardwareAddr, vtep net.IP, updateDb bool) {
+	callerName := common.CallerName(1)
 	d.peerOpCh <- &peerOperation{
 		opType:     peerOperationDELETE,
 		networkID:  nid,
@@ -419,22 +378,21 @@ func (d *driver) peerDelete(nid, eid string, peerIP net.IP, peerIPMask net.IPMas
 		peerIPMask: peerIPMask,
 		peerMac:    peerMac,
 		vtepIP:     vtep,
-		callerName: common.CallerName(1),
-		localPeer:  localPeer,
+		updateDB:   updateDb,
+		callerName: callerName,
 	}
 }
 
 func (d *driver) peerDeleteOp(nid, eid string, peerIP net.IP, peerIPMask net.IPMask,
-	peerMac net.HardwareAddr, vtep net.IP, localPeer bool) error {
+	peerMac net.HardwareAddr, vtep net.IP, updateDb bool) error {
 
 	if err := validateID(nid, eid); err != nil {
 		return err
 	}
 
-	deleted, dbEntries := d.peerDbDelete(nid, eid, peerIP, peerIPMask, peerMac, vtep, localPeer)
-	if !deleted {
-		logrus.Warnf("Entry was not in db: nid:%s eid:%s peerIP:%v peerMac:%v isLocal:%t vtep:%v",
-			nid, eid, peerIP, peerMac, localPeer, vtep)
+	var pEntry peerEntry
+	if updateDb {
+		pEntry = d.peerDbDelete(nid, eid, peerIP, peerIPMask, peerMac, vtep)
 	}
 
 	n := d.network(nid)
@@ -447,59 +405,30 @@ func (d *driver) peerDeleteOp(nid, eid string, peerIP net.IP, peerIPMask net.IPM
 		return nil
 	}
 
-	if err := d.checkEncryption(nid, vtep, 0, localPeer, false); err != nil {
+	// Delete fdb entry to the bridge for the peer mac only if the
+	// entry existed in local peerdb. If it is a stale delete
+	// request, still call DeleteNeighbor but only to cleanup any
+	// leftover sandbox neighbor cache and not actually delete the
+	// kernel state.
+	if (eid == pEntry.eid && vtep.Equal(pEntry.vtep)) ||
+		(eid != pEntry.eid && !vtep.Equal(pEntry.vtep)) {
+		if err := sbox.DeleteNeighbor(vtep, peerMac,
+			eid == pEntry.eid && vtep.Equal(pEntry.vtep)); err != nil {
+			return fmt.Errorf("could not delete fdb entry into the sandbox: %v", err)
+		}
+	}
+
+	// Delete neighbor entry for the peer IP
+	if eid == pEntry.eid {
+		if err := sbox.DeleteNeighbor(peerIP, peerMac, true); err != nil {
+			return fmt.Errorf("could not delete neighbor entry into the sandbox: %v", err)
+		}
+	}
+
+	if err := d.checkEncryption(nid, vtep, 0, false, false); err != nil {
 		logrus.Warn(err)
 	}
 
-	// Local peers do not have any local configuration to delete
-	if !localPeer {
-		// Remove fdb entry to the bridge for the peer mac
-		if err := sbox.DeleteNeighbor(vtep, peerMac, true); err != nil {
-			if _, ok := err.(osl.NeighborSearchError); ok && dbEntries > 0 {
-				// We fall in here if there is a transient state and if the neighbor that is being deleted
-				// was never been configured into the kernel (we allow only 1 configuration at the time per <ip,mac> mapping)
-				return nil
-			}
-			return fmt.Errorf("could not delete fdb entry for nid:%s eid:%s into the sandbox:%v", nid, eid, err)
-		}
-
-		// Delete neighbor entry for the peer IP
-		if err := sbox.DeleteNeighbor(peerIP, peerMac, true); err != nil {
-			return fmt.Errorf("could not delete neighbor entry for nid:%s eid:%s into the sandbox:%v", nid, eid, err)
-		}
-	}
-
-	if dbEntries == 0 {
-		return nil
-	}
-
-	// If there is still an entry into the database and the deletion went through without errors means that there is now no
-	// configuration active in the kernel.
-	// Restore one configuration for the <ip,mac> directly from the database, note that is guaranteed that there is one
-	peerKey, peerEntry, err := d.peerDbSearch(nid, peerIP)
-	if err != nil {
-		logrus.Errorf("peerDeleteOp unable to restore a configuration for nid:%s ip:%v mac:%v err:%s", nid, peerIP, peerMac, err)
-		return err
-	}
-	return d.peerAddOp(nid, peerEntry.eid, peerIP, peerEntry.peerIPMask, peerKey.peerMac, peerEntry.vtep, false, false, false, peerEntry.isLocal)
-}
-
-func (d *driver) peerFlush(nid string) {
-	d.peerOpCh <- &peerOperation{
-		opType:     peerOperationFLUSH,
-		networkID:  nid,
-		callerName: common.CallerName(1),
-	}
-}
-
-func (d *driver) peerFlushOp(nid string) error {
-	d.peerDb.Lock()
-	defer d.peerDb.Unlock()
-	_, ok := d.peerDb.mp[nid]
-	if !ok {
-		return fmt.Errorf("Unable to find the peerDB for nid:%s", nid)
-	}
-	delete(d.peerDb.mp, nid)
 	return nil
 }
 
