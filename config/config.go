@@ -9,11 +9,13 @@ import (
 	"github.com/docker/docker/pkg/plugingetter"
 	"github.com/docker/go-connections/tlsconfig"
 	"github.com/docker/libkv/store"
+	"github.com/sirupsen/logrus"
+
 	"github.com/docker/libnetwork/cluster"
 	"github.com/docker/libnetwork/datastore"
 	"github.com/docker/libnetwork/netlabel"
 	"github.com/docker/libnetwork/osl"
-	"github.com/sirupsen/logrus"
+	"github.com/docker/libnetwork/provider"
 )
 
 const (
@@ -34,6 +36,7 @@ type Config struct {
 type DaemonCfg struct {
 	Debug                  bool
 	Experimental           bool
+	Provider               provider.DnetProvider
 	DataDir                string
 	DefaultNetwork         string
 	DefaultGwNetwork       string
@@ -76,10 +79,6 @@ func ParseConfig(tomlCfgFile string) (*Config, error) {
 	}
 	if cfg.Cluster.Discovery == "" {
 		cfg.Cluster.Discovery = os.Getenv("DNET_DISCOVERY")
-	}
-	//TODO (ABHI): Handle this better. default to etcd for now
-	if !(strings.Contains(cfg.Cluster.Discovery, "etcd") || strings.Contains(cfg.Cluster.Discovery, "consul")) {
-		cfg.Cluster.Discovery = "etcd://" + cfg.Cluster.Discovery
 	}
 
 	if _, ok := cfg.Scopes[datastore.GlobalScope]; !ok {

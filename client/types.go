@@ -35,7 +35,9 @@ type SandboxResource struct {
 /***********
   Body types
   ************/
-type ipamConf struct {
+
+// IPAMConf is the ipam configution used during network create
+type IPAMConf struct {
 	PreferredPool string
 	SubPool       string
 	Gateway       string
@@ -47,7 +49,7 @@ type NetworkCreate struct {
 	Name        string            `json:"name"`
 	ID          string            `json:"id"`
 	NetworkType string            `json:"network_type"`
-	IPv4Conf    []ipamConf        `json:"ipv4_configuration"`
+	IPv4Conf    []IPAMConf        `json:"ipv4_configuration"`
 	DriverOpts  map[string]string `json:"driver_opts"`
 	NetworkOpts map[string]string `json:"network_opts"`
 }
@@ -102,7 +104,7 @@ type sandboxParentUpdate struct {
 	Address     string `json:"address"`
 }
 
-// endpointInfo contants the endpoint info for http response message on endpoint creation
+// EndpointInfo contants the endpoint info for http response message on endpoint creation
 type EndpointInfo struct {
 	ID          string           `json:"id"`
 	Address     net.IPNet        `json:"address"`

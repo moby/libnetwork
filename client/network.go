@@ -71,9 +71,9 @@ func (cli *NetworkCli) CmdNetworkCreate(chain string, args ...string) error {
 		}
 	}
 
-	var icList []ipamConf
+	var icList []IPAMConf
 	if *flSubnet != "" {
-		ic := ipamConf{
+		ic := IPAMConf{
 			PreferredPool: *flSubnet,
 		}
 

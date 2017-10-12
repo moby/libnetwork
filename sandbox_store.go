@@ -210,7 +210,6 @@ func (c *controller) sandboxCleanup(activeSandboxes map[string]interface{}) {
 
 	for _, kvo := range kvol {
 		sbs := kvo.(*sbState)
-
 		sb := &sandbox{
 			id:                 sbs.ID,
 			controller:         sbs.c,
@@ -244,10 +243,19 @@ func (c *controller) sandboxCleanup(activeSandboxes map[string]interface{}) {
 			create = !sb.config.useDefaultSandBox
 			heap.Init(&sb.endpoints)
 		}
-		sb.osSbox, err = osl.NewSandbox(sb.Key(), create, isRestore)
-		if err != nil {
-			logrus.Errorf("failed to create osl sandbox while trying to restore sandbox %s%s: %v", sb.ID()[0:7], msg, err)
-			continue
+		logrus.Debugf("Sandbox restore isRestore:%+v Key:%v,create:%v", isRestore, sb.Key(), create)
+		if sb.config.useExternalKey {
+			sb.osSbox, err = osl.GetSandboxForExternalKey(sb.config.externalKey, sb.Key())
+			if err != nil {
+				logrus.Errorf("failed to get sandbox for external key: %v", err)
+			}
+		} else {
+			osSbox, err := osl.NewSandbox(sb.Key(), create, isRestore)
+			if err != nil {
+				logrus.Errorf("failed to create osl sandbox while trying to restore sandbox %s%s: %v", sb.ID()[0:7], msg, err)
+				continue
+			}
+			sb.osSbox = osSbox
 		}
 
 		c.Lock()

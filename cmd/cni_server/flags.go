@@ -5,8 +5,9 @@ import (
 	"os"
 
 	"github.com/codegangsta/cli"
-	cniserver "github.com/docker/libnetwork/pkg/server/cniserver"
 	"github.com/sirupsen/logrus"
+
+	cniserver "github.com/docker/libnetwork/provider/cni/server"
 )
 
 var (
@@ -42,13 +43,14 @@ func processFlags(c *cli.Context) error {
 
 	cniService, err := cniserver.NewCniService(c.String("sock"), c.String("dnet-address"), c.String("dnet-port"))
 	if err != nil {
-		return fmt.Errorf("faile to create cni service: %v", err)
+		return fmt.Errorf("failed to create cni service: %v", err)
 	}
 	serverCloseChan := make(chan struct{})
-	if err := cniService.InitCniService(serverCloseChan); err != nil {
-		fmt.Printf("Failed to initialize CNI server: \n", err)
+	if err := cniService.Init(serverCloseChan); err != nil {
+		logrus.Errorf("Failed to initialize CNI server: %v", err)
 		os.Exit(1)
 	}
+	// Wait on till the server closes
 	<-serverCloseChan
 	return nil
 }

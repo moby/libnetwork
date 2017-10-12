@@ -96,12 +96,6 @@ type serviceDelete struct {
 	Force bool   `json:"force"`
 }
 
-// extraHost represents the extra host object
-type extraHost struct {
-	Name    string `json:"name"`
-	Address string `json:"address"`
-}
-
 // endpointInfo contants the endpoint info for https response message on endpoint creation
 type endpointInfo struct {
 	ID          string           `json:"id"`
@@ -110,6 +104,28 @@ type endpointInfo struct {
 	MacAddress  net.HardwareAddr `json:"mac_address"`
 	Gateway     net.IP           `json:"gateway"`
 	GatewayIPv6 net.IP           `json:"gateway_ipv6"`
+}
+
+// extraHost represents the extra host object
+type extraHost struct {
+	Name    string `json:"name"`
+	Address string `json:"address"`
+}
+
+// SandboxMetadata holds the metadata related to sandox (config)
+type SandboxMetadata struct {
+	ContainerID       string                `json:"container_id"`
+	HostName          string                `json:"host_name"`
+	DomainName        string                `json:"domain_name"`
+	HostsPath         string                `json:"hosts_path"`
+	ResolvConfPath    string                `json:"resolv_conf_path"`
+	DNS               []string              `json:"dns"`
+	ExtraHosts        []extraHost           `json:"extra_hosts"`
+	UseExternalKey    bool                  `json:"use_external_key"`
+	UseDefaultSandbox bool                  `json:"use_default_sandbox"`
+	ExposedPorts      []types.TransportPort `json:"exposed_ports"`
+	PortMapping       []types.PortBinding   `json:"port_mapping"`
+	ExternalKey       string                `json:"external_key"`
 }
 
 func getEndpointInfo(ep libnetwork.Endpoint) endpointInfo {

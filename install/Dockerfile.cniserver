@@ -9,6 +9,5 @@ RUN apt-get update \
 COPY bin/cniserver /var/libnetwork/bin/
 COPY cniserver.sh /var/libnetwork/
 COPY bin/cnictl /var/libnetwork/bin/
-COPY net.conf  /var/libnetwork/config/
 
 ENTRYPOINT ["/var/libnetwork/cniserver.sh"]

@@ -128,6 +128,7 @@ type containerConfig struct {
 	generic           map[string]interface{}
 	useDefaultSandBox bool
 	useExternalKey    bool
+	externalKey       string
 	prio              int // higher the value, more the priority
 	exposedPorts      []types.TransportPort
 }
@@ -650,6 +651,7 @@ func (sb *sandbox) SetKey(basePath string) error {
 
 	sb.Lock()
 	sb.osSbox = osSbox
+	sb.config.externalKey = basePath
 	sb.Unlock()
 
 	// If the resolver was setup before stop it and set it up in the
@@ -1093,6 +1095,14 @@ func OptionUseDefaultSandbox() SandboxOption {
 func OptionUseExternalKey() SandboxOption {
 	return func(sb *sandbox) {
 		sb.config.useExternalKey = true
+	}
+}
+
+// OptionExternalKey function returns an option setter for using external key namespace
+// instead of creating one.
+func OptionExternalKey(key string) SandboxOption {
+	return func(sb *sandbox) {
+		sb.config.externalKey = key
 	}
 }
 

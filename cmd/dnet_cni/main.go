@@ -6,23 +6,24 @@ import (
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
 	"github.com/containernetworking/cni/pkg/version"
-	"github.com/docker/libnetwork/pkg/cniapi"
 	log "github.com/sirupsen/logrus"
+
+	"github.com/docker/libnetwork/provider/cni/cniapi"
 )
 
 func cmdAdd(args *skel.CmdArgs) error {
 	c := cniapi.NewDnetCniClient()
-	result, err := c.SetupPod(args)
+	result, err := c.AddWorkload(args)
 	if err != nil {
-		return fmt.Errorf("failed to setup Pod: %v", err)
+		return fmt.Errorf("failed to add workload: %v", err)
 	}
 	return types.PrintResult(result, version.Current())
 }
 
 func cmdDel(args *skel.CmdArgs) error {
 	c := cniapi.NewDnetCniClient()
-	if err := c.TearDownPod(args); err != nil {
-		return fmt.Errorf("failed to tear down pod: %v", err)
+	if err := c.DeleteWorkload(args); err != nil {
+		return fmt.Errorf("failed to delete workload: %v", err)
 	}
 	return nil
 }

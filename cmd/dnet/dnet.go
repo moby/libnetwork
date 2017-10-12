@@ -16,12 +16,15 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/codegangsta/cli"
+	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/opts"
 	"github.com/docker/docker/pkg/discovery"
 	"github.com/docker/docker/pkg/reexec"
-
-	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/pkg/term"
+	"github.com/gorilla/mux"
+	"github.com/sirupsen/logrus"
+	"golang.org/x/net/context"
+
 	"github.com/docker/libnetwork"
 	"github.com/docker/libnetwork/api"
 	"github.com/docker/libnetwork/cluster"
@@ -31,10 +34,9 @@ import (
 	"github.com/docker/libnetwork/netlabel"
 	"github.com/docker/libnetwork/netutils"
 	"github.com/docker/libnetwork/options"
+	"github.com/docker/libnetwork/provider"
+	"github.com/docker/libnetwork/provider/cni/cniapi"
 	"github.com/docker/libnetwork/types"
-	"github.com/gorilla/mux"
-	"github.com/sirupsen/logrus"
-	"golang.org/x/net/context"
 )
 
 const (
@@ -43,11 +45,12 @@ const (
 	// DefaultHTTPPort is the default http port used by dnet
 	DefaultHTTPPort = 2389
 	// DefaultUnixSocket exported
-	DefaultUnixSocket = "/var/run/dnet.sock"
-	cfgFileEnv        = "LIBNETWORK_CFG"
-	defaultCfgFile    = "/etc/default/libnetwork.toml"
-	defaultHeartbeat  = time.Duration(10) * time.Second
-	ttlFactor         = 2
+	DefaultUnixSocket      = "/var/run/dnet.sock"
+	cfgFileEnv             = "LIBNETWORK_CFG"
+	defaultCfgFile         = "/etc/default/libnetwork.toml"
+	defaultHeartbeat       = time.Duration(10) * time.Second
+	ttlFactor              = 2
+	defaultProviderTimeout = 120 // default time to fetch state from provider
 )
 
 var epConn *dnetConnection
@@ -130,18 +133,21 @@ func processConfig(cfg *config.Config) ([]config.Option, error) {
 	}
 
 	// Retry discovery for 2 minutes before exiting
-	for {
-		select {
-		case <-time.After(2 * time.Minute):
-			return nil, fmt.Errorf("failed to initialize discovery")
-		default:
-			dOptions, err := startDiscovery(&cfg.Cluster)
-			if err == nil {
-				options = append(options, dOptions...)
-				return options, nil
+	if cfg.Cluster.Discovery != "" {
+		for {
+			select {
+			case <-time.After(2 * time.Minute):
+				return nil, fmt.Errorf("failed to initialize discovery")
+			default:
+				dOptions, err := startDiscovery(&cfg.Cluster)
+				if err == nil {
+					options = append(options, dOptions...)
+					return options, nil
+				}
 			}
 		}
 	}
+	return options, nil
 }
 
 func startDiscovery(cfg *config.ClusterCfg) ([]config.Option, error) {
@@ -241,7 +247,7 @@ func createDefaultNetwork(c libnetwork.NetworkController) {
 }
 
 type dnetConnection struct {
-	conn          *netutils.HttpConnection
+	conn          *netutils.HTTPConnection
 	Orchestration *NetworkOrchestration
 	configEvent   chan cluster.ConfigEventType
 }
@@ -254,7 +260,8 @@ type NetworkOrchestration struct {
 	Peer    string
 }
 
-func (d *dnetConnection) dnetDaemon(cfgFile string) error {
+func (d *dnetConnection) dnetDaemon(cfgFile string, provider string) error {
+	logrus.Infof("Starting DnetDaemon")
 	if err := startTestDriver(); err != nil {
 		return fmt.Errorf("failed to start test driver: %v", err)
 	}
@@ -264,10 +271,14 @@ func (d *dnetConnection) dnetDaemon(cfgFile string) error {
 	if err == nil {
 		cOptions, err = processConfig(cfg)
 		if err != nil {
-			fmt.Errorf("failed to process config: %v", err)
+			return fmt.Errorf("failed to process config: %v", err)
 		}
 	} else {
-		logrus.Errorf("failed to parse config: %v", err)
+		return fmt.Errorf("failed to parse config: %v", err)
+	}
+
+	if provider != "" {
+		cfg.Daemon.Provider = attachDnetProvider(provider)
 	}
 
 	bridgeConfig := options.Generic{
@@ -279,9 +290,19 @@ func (d *dnetConnection) dnetDaemon(cfgFile string) error {
 
 	cOptions = append(cOptions, config.OptionDriverConfig("bridge", bridgeOption))
 
+	// If this is a restore ,then fetch active sandboxes from api server.
+	if cfg.Daemon.Provider != nil {
+		sbOptions, err := fetchActiveSandboxes(cfg.Daemon.Provider)
+		if err != nil {
+			return err
+		}
+		if sbOptions != nil {
+			cOptions = append(cOptions, sbOptions)
+		}
+	}
 	controller, err := libnetwork.New(cOptions...)
 	if err != nil {
-		fmt.Println("Error starting dnetDaemon :", err)
+		fmt.Println("Error starting DnetDaemon :", err)
 		return err
 	}
 	controller.SetClusterProvider(d)
@@ -440,7 +461,7 @@ func newDnetConnection(val string) (*dnetConnection, error) {
 	}
 
 	return &dnetConnection{
-		&netutils.HttpConnection{
+		&netutils.HTTPConnection{
 			Proto: protoAddrParts[0],
 			Addr:  protoAddrParts[1],
 		},
@@ -459,4 +480,35 @@ func ipamOption(bridgeName string) libnetwork.NetworkOption {
 		return libnetwork.NetworkOptionIpam("default", "", []*libnetwork.IpamConf{ipamV4Conf}, nil, nil)
 	}
 	return nil
+}
+
+func attachDnetProvider(provider string) provider.DnetProvider {
+	switch provider {
+	case "cni":
+		return cniapi.NewDnetCniClient()
+	default:
+		return nil
+	}
+}
+
+func fetchActiveSandboxes(provider provider.DnetProvider) (config.Option, error) {
+	x := time.Duration(2 * time.Second)
+	var err error
+	var sbOptions map[string]interface{}
+	for x < defaultProviderTimeout {
+		sbOptions, err = provider.FetchActiveSandboxes()
+		if err == nil {
+			goto success
+		}
+		logrus.Errorf("Retry:failed to fetch active sandbox: %b", err)
+		time.Sleep(x * time.Second)
+		x = x * 2
+	}
+	return nil, fmt.Errorf("failed to fetch active sandbox: %b", err)
+success:
+	logrus.Infof("Active sandboxes are: {%+v}", sbOptions)
+	if len(sbOptions) != 0 {
+		return config.OptionActiveSandboxes(sbOptions), nil
+	}
+	return nil, nil
 }

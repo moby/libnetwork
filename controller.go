@@ -190,13 +190,11 @@ func New(cfgOptions ...config.Option) (NetworkController, error) {
 	if err := c.initStores(); err != nil {
 		return nil, err
 	}
-
 	c.initDefaultGwNetwork()
 	drvRegistry, err := drvregistry.New(c.getStore(datastore.LocalScope), c.getStore(datastore.GlobalScope), c.RegisterDriver, nil, c.cfg.PluginGetter)
 	if err != nil {
 		return nil, err
 	}
-
 	for _, i := range getInitializers(c.cfg.Daemon.Experimental) {
 		var dcfg map[string]interface{}
 
@@ -236,7 +234,6 @@ func New(cfgOptions ...config.Option) (NetworkController, error) {
 	c.sandboxCleanup(c.cfg.ActiveSandboxes)
 	c.cleanupLocalEndpoints()
 	c.networkCleanup()
-
 	if err := c.startExternalKeyListener(); err != nil {
 		return nil, err
 	}

@@ -44,7 +44,7 @@ func (d *driver) Join(nid, eid string, sboxKey string, jinfo driverapi.JoinInfo,
 		return fmt.Errorf("could not find subnet for endpoint %s", eid)
 	}
 
-	if n.hostAccess && s.gwIP == nil {
+	if s.gwIP == nil {
 		gwIP, err := jinfo.RequestAddress(s.subnetIP)
 		if err != nil {
 			logrus.Errorf("RequestAddress failed %s %v", s.subnetIP.String(), err)
@@ -245,13 +245,8 @@ func (d *driver) Leave(nid, eid string, linfo driverapi.LeaveInfo) error {
 		}
 	}
 
-<<<<<<< 0cea43c346ddc660804aa04ad19eac5811d704e5
 	d.peerDelete(nid, eid, ep.addr.IP, ep.addr.Mask, ep.mac, net.ParseIP(d.advertiseAddress), true)
-=======
 	n.leaveSandbox(linfo)
->>>>>>> Make use of the RequestAddress feature for hostAccess overlay network
-
-	n.leaveSandbox()
 
 	return nil
 }

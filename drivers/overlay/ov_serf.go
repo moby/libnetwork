@@ -102,7 +102,7 @@ func (d *driver) notifyEvent(event ovNotify) {
 	if !nw.hostAccess {
 		return
 	}
-	var snet *subnet = nil
+	var snet *subnet
 	for _, s := range nw.subnets {
 		if s.subnetIP.Contains(ep.addr.IP) {
 			snet = s

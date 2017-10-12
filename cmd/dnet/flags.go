@@ -33,6 +33,10 @@ var (
 			Value: "/etc/default/libnetwork.toml",
 			Usage: "Configuration file",
 		},
+		cli.StringFlag{
+			Name:  "p, -provider-interface",
+			Usage: "Provider for Dnet. Accepted values cni",
+		},
 	}
 )
 
@@ -75,7 +79,9 @@ func processFlags(c *cli.Context) error {
 	}
 
 	if c.Bool("d") {
-		err = epConn.dnetDaemon(c.String("c"))
+		cfgFile := c.String("c")
+		provider := c.String("p")
+		err = epConn.dnetDaemon(cfgFile, provider)
 		if err != nil {
 			logrus.Errorf("dnet Daemon exited with an error : %v", err)
 			os.Exit(1)

@@ -29,7 +29,7 @@ func cniApp(stdout, stderr io.Writer) error {
 	app.Usage = "A cni side car for libnetwork daemon."
 	app.Flags = cniserverFlags
 	app.Before = processFlags
-	//app.Commands = cniCommands
+	//app.Commands = cniCommands // TODO: Add cni commands to improve debuggability
 
 	app.Run(os.Args)
 	return nil

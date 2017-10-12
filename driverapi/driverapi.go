@@ -154,6 +154,7 @@ type JoinInfo interface {
 	AddTableEntry(tableName string, key string, value []byte) error
 }
 
+// LeaveInfo interface for object release during sandbox detach
 type LeaveInfo interface {
 	// ReleaseAddress frees up allocated IP
 	ReleaseAddress(net.IP) error

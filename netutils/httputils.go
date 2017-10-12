@@ -9,16 +9,16 @@ import (
 	"net/http"
 )
 
-// HttpConnection holds the protocol and address info for http connection
-type HttpConnection struct {
+// HTTPConnection holds the protocol and address info for http connection
+type HTTPConnection struct {
 	// Proto holds the client protocol i.e. unix.
 	Proto string
 	// Addr holds the client address.
 	Addr string
 }
 
-// HttpCall is used to make a http call using httpconnection information
-func (h *HttpConnection) HttpCall(method, path string, data interface{}, headers map[string][]string) (io.ReadCloser, http.Header, int, error) {
+// HTTPCall is used to make a http call using httpconnection information
+func (h *HTTPConnection) HTTPCall(method, path string, data interface{}, headers map[string][]string) (io.ReadCloser, http.Header, int, error) {
 	var in io.Reader
 	in, err := encodeData(data)
 	if err != nil {
@@ -34,7 +34,6 @@ func (h *HttpConnection) HttpCall(method, path string, data interface{}, headers
 
 	req.URL.Host = h.Addr
 	req.URL.Scheme = "http"
-	fmt.Printf("Requesting http: %+v", req)
 	httpClient := &http.Client{}
 	resp, err := httpClient.Do(req)
 	statusCode := -1
@@ -87,6 +86,7 @@ func encodeData(data interface{}) (*bytes.Buffer, error) {
 	return params, nil
 }
 
+// ReadBody reads http body from stream
 func ReadBody(stream io.ReadCloser, hdr http.Header, statusCode int, err error) ([]byte, int, error) {
 	if stream != nil {
 		defer stream.Close()
