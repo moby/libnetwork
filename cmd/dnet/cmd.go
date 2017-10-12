@@ -3,14 +3,12 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io"
-	"io/ioutil"
-	"net/http"
 	"os"
 
 	"github.com/codegangsta/cli"
 	"github.com/docker/docker/pkg/term"
 	"github.com/docker/libnetwork/client"
+	"github.com/docker/libnetwork/netutils"
 )
 
 var (
@@ -49,7 +47,7 @@ func runContainerCreate(c *cli.Context) {
 	}
 
 	sc := client.SandboxCreate{ContainerID: c.Args()[0]}
-	obj, _, err := readBody(epConn.httpCall("POST", "/sandboxes", sc, nil))
+	obj, _, err := netutils.ReadBody(epConn.conn.HttpCall("POST", "/sandboxes", sc, nil))
 	if err != nil {
 		fmt.Printf("POST failed during create container: %v\n", err)
 		os.Exit(1)
@@ -74,7 +72,7 @@ func runContainerRm(c *cli.Context) {
 		os.Exit(1)
 	}
 
-	obj, _, err := readBody(epConn.httpCall("GET", "/sandboxes?partial-container-id="+c.Args()[0], nil, nil))
+	obj, _, err := netutils.ReadBody(epConn.conn.HttpCall("GET", "/sandboxes?partial-container-id="+c.Args()[0], nil, nil))
 	if err != nil {
 		fmt.Printf("GET failed during container id lookup: %v\n", err)
 		os.Exit(1)
@@ -91,7 +89,7 @@ func runContainerRm(c *cli.Context) {
 		os.Exit(1)
 	}
 
-	_, _, err = readBody(epConn.httpCall("DELETE", "/sandboxes/"+sbList[0].ID, nil, nil))
+	_, _, err = netutils.ReadBody(epConn.conn.HttpCall("DELETE", "/sandboxes/"+sbList[0].ID, nil, nil))
 	if err != nil {
 		fmt.Printf("DELETE of sandbox id %s failed: %v", sbList[0].ID, err)
 		os.Exit(1)
@@ -100,7 +98,7 @@ func runContainerRm(c *cli.Context) {
 
 func runDockerCommand(c *cli.Context, cmd string) {
 	_, stdout, stderr := term.StdStreams()
-	oldcli := client.NewNetworkCli(stdout, stderr, epConn.httpCall)
+	oldcli := client.NewNetworkCli(stdout, stderr, epConn.conn.HttpCall)
 	var args []string
 	args = append(args, cmd)
 	if c.Bool("h") {
@@ -129,18 +127,4 @@ func createDockerCommand(cmd string) cli.Command {
 			},
 		},
 	}
-}
-
-func readBody(stream io.ReadCloser, hdr http.Header, statusCode int, err error) ([]byte, int, error) {
-	if stream != nil {
-		defer stream.Close()
-	}
-	if err != nil {
-		return nil, statusCode, err
-	}
-	body, err := ioutil.ReadAll(stream)
-	if err != nil {
-		return nil, -1, err
-	}
-	return body, statusCode, nil
 }

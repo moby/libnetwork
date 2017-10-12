@@ -16,13 +16,13 @@ import (
 )
 
 const (
-	AddPodUrl         = "/AddPod"
-	DelPodUrl         = "/DelPod"
-	LibnetworkCNISock = "/var/run/cni-libnetwork.sock"
-	PluginPath        = "/run/libnetwork"
+	AddPodUrl   = "/AddPod"
+	DelPodUrl   = "/DelPod"
+	DnetCNISock = "/var/run/cniserver.sock"
+	PluginPath  = "/run/libnetwork"
 )
 
-type LibNetCniClient struct {
+type DnetCniClient struct {
 	url        string
 	httpClient *http.Client
 }
@@ -35,12 +35,12 @@ type CniInfo struct {
 }
 
 func unixDial(proto, addr string) (conn net.Conn, err error) {
-	sock := LibnetworkCNISock
+	sock := DnetCNISock
 	return net.Dial("unix", sock)
 }
 
-func NewLibNetCniClient() *LibNetCniClient {
-	c := new(LibNetCniClient)
+func NewDnetCniClient() *DnetCniClient {
+	c := new(DnetCniClient)
 	c.url = "http://localhost"
 	c.httpClient = &http.Client{
 		Transport: &http.Transport{
@@ -51,7 +51,7 @@ func NewLibNetCniClient() *LibNetCniClient {
 }
 
 // SetupPod setups up the sandbox and endpoint for the infra container in a pod
-func (l *LibNetCniClient) SetupPod(args *skel.CmdArgs) (*current.Result, error) {
+func (l *DnetCniClient) SetupPod(args *skel.CmdArgs) (*current.Result, error) {
 	var data current.Result
 	log.Infof("Received Setup Pod %+v", args)
 	podNetInfo, err := validatePodNetworkInfo(args)
@@ -106,7 +106,7 @@ func (l *LibNetCniClient) SetupPod(args *skel.CmdArgs) (*current.Result, error) 
 
 // TearDownPod tears the sandbox and endpoint created for the infra
 // container in the pod.
-func (l *LibNetCniClient) TearDownPod(args *skel.CmdArgs) error {
+func (l *DnetCniClient) TearDownPod(args *skel.CmdArgs) error {
 	log.Infof("Received Teardown Pod request %+v", args)
 	podNetInfo, err := validatePodNetworkInfo(args)
 	if err != nil {

@@ -7,10 +7,11 @@ import (
 	"net/http"
 
 	"github.com/docker/libnetwork/client"
+	"github.com/docker/libnetwork/netutils"
 	"github.com/docker/libnetwork/pkg/cniapi"
 )
 
-func deletePod(w http.ResponseWriter, r *http.Request, vars map[string]string) (interface{}, error) {
+func deletePod(w http.ResponseWriter, r *http.Request, c *CniService, vars map[string]string) (interface{}, error) {
 	//TODO: need to explore force cleanup and test for parallel delete pods
 	cniInfo := cniapi.CniInfo{}
 
@@ -25,53 +26,53 @@ func deletePod(w http.ResponseWriter, r *http.Request, vars map[string]string) (
 	fmt.Printf("Received delete pod request %+v", cniInfo)
 
 	//Gather sandboxID and the endpointID
-	sbID, err := lookupSandboxID(cniInfo.ContainerID)
+	sbID, err := c.lookupSandboxID(cniInfo.ContainerID)
 	if err != nil {
 		return nil, fmt.Errorf("sandbox lookup failed for containerID %q , error:%v", cniInfo.ContainerID, err)
 	}
-	epID, err := lookupEndpointID(cniInfo.ContainerID)
+	epID, err := c.lookupEndpointID(cniInfo.ContainerID)
 	if err != nil {
 		return nil, fmt.Errorf("endpoint lookup failed for containerID %q, error:%v", cniInfo.ContainerID, err)
 	}
 
-	if err = endpointLeave(sbID, epID); err != nil {
+	if err = c.endpointLeave(sbID, epID); err != nil {
 		return nil, fmt.Errorf("failed to leave endpoint from sandbox for container:%q,sandbox:%q,endpoint:%q, error:%v", cniInfo.ContainerID, sbID, epID, err)
 	}
 
-	if err = deleteEndpoint(epID); err != nil {
+	if err = c.deleteEndpoint(epID); err != nil {
 		return nil, fmt.Errorf("failed to delete endpoint %q for container %q,, error:%v",
 			epID, cniInfo.ContainerID, err)
 	}
 
-	if err = deleteSandbox(sbID); err != nil {
+	if err = c.deleteSandbox(sbID); err != nil {
 		return nil, fmt.Errorf("failed to delete sandbox %q for container %q, error:%v", sbID, cniInfo.ContainerID, err)
 	}
-	delete(cniService.endpointIDStore, epID)
-	delete(cniService.sandboxIDStore, sbID)
+	delete(c.endpointIDStore, epID)
+	delete(c.sandboxIDStore, sbID)
 	return nil, nil
 }
 
-func endpointLeave(sandboxID, endpointID string) error {
-	_, _, err := readBody(httpCall("DELETE", "/services/"+endpointID+"/backend/"+sandboxID, nil, nil))
+func (c *CniService) endpointLeave(sandboxID, endpointID string) error {
+	_, _, err := netutils.ReadBody(c.dnetConn.HttpCall("DELETE", "/services/"+endpointID+"/backend/"+sandboxID, nil, nil))
 	return err
 }
 
-func deleteSandbox(sandboxID string) error {
-	_, _, err := readBody(httpCall("DELETE", "/sandboxes/"+sandboxID, nil, nil))
+func (c *CniService) deleteSandbox(sandboxID string) error {
+	_, _, err := netutils.ReadBody(c.dnetConn.HttpCall("DELETE", "/sandboxes/"+sandboxID, nil, nil))
 	return err
 }
 
-func deleteEndpoint(endpointID string) error {
+func (c *CniService) deleteEndpoint(endpointID string) error {
 	sd := client.ServiceDelete{Name: endpointID, Force: true}
-	_, _, err := readBody(httpCall("DELETE", "/services/"+endpointID, sd, nil))
+	_, _, err := netutils.ReadBody(c.dnetConn.HttpCall("DELETE", "/services/"+endpointID, sd, nil))
 	return err
 }
 
-func lookupSandboxID(containerID string) (string, error) {
-	if id, ok := cniService.sandboxIDStore[containerID]; ok {
+func (c *CniService) lookupSandboxID(containerID string) (string, error) {
+	if id, ok := c.sandboxIDStore[containerID]; ok {
 		return id, nil
 	}
-	obj, _, err := readBody(httpCall("GET", fmt.Sprintf("/sandboxes?partial-container-id=%s", containerID), nil, nil))
+	obj, _, err := netutils.ReadBody(c.dnetConn.HttpCall("GET", fmt.Sprintf("/sandboxes?partial-container-id=%s", containerID), nil, nil))
 	if err != nil {
 		return "", err
 	}
@@ -86,12 +87,12 @@ func lookupSandboxID(containerID string) (string, error) {
 		return "", fmt.Errorf("sandbox not found")
 	}
 
-	cniService.sandboxIDStore[containerID] = sandboxList[0].ID
+	c.sandboxIDStore[containerID] = sandboxList[0].ID
 	return sandboxList[0].ID, nil
 }
 
-func lookupEndpointID(containerID string) (string, error) {
-	if id, ok := cniService.endpointIDStore[containerID]; ok {
+func (c *CniService) lookupEndpointID(containerID string) (string, error) {
+	if id, ok := c.endpointIDStore[containerID]; ok {
 		return id, nil
 	}
 	return "", fmt.Errorf("endpoint not found")

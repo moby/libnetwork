@@ -1,8 +1,6 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -96,10 +94,10 @@ func (d *dnetConnection) parseConfig(cfgFile string) (*config.Config, error) {
 	return config.ParseConfig(cfgFile)
 }
 
-func processConfig(cfg *config.Config) []config.Option {
+func processConfig(cfg *config.Config) ([]config.Option, error) {
 	options := []config.Option{}
 	if cfg == nil {
-		return options
+		return options, nil
 	}
 
 	dn := "bridge"
@@ -131,14 +129,19 @@ func processConfig(cfg *config.Config) []config.Option {
 		options = append(options, config.OptionDataDir(cfg.Daemon.DataDir))
 	}
 
-	dOptions, err := startDiscovery(&cfg.Cluster)
-	if err != nil {
-		logrus.Infof("Skipping discovery : %s", err.Error())
-	} else {
-		options = append(options, dOptions...)
+	// Retry discovery for 2 minutes before exiting
+	for {
+		select {
+		case <-time.After(2 * time.Minute):
+			return nil, fmt.Errorf("failed to initialize discovery")
+		default:
+			dOptions, err := startDiscovery(&cfg.Cluster)
+			if err == nil {
+				options = append(options, dOptions...)
+				return options, nil
+			}
+		}
 	}
-
-	return options
 }
 
 func startDiscovery(cfg *config.ClusterCfg) ([]config.Option, error) {
@@ -238,10 +241,7 @@ func createDefaultNetwork(c libnetwork.NetworkController) {
 }
 
 type dnetConnection struct {
-	// proto holds the client protocol i.e. unix.
-	proto string
-	// addr holds the client address.
-	addr          string
+	conn          *netutils.HttpConnection
 	Orchestration *NetworkOrchestration
 	configEvent   chan cluster.ConfigEventType
 }
@@ -262,9 +262,12 @@ func (d *dnetConnection) dnetDaemon(cfgFile string) error {
 	cfg, err := d.parseConfig(cfgFile)
 	var cOptions []config.Option
 	if err == nil {
-		cOptions = processConfig(cfg)
+		cOptions, err = processConfig(cfg)
+		if err != nil {
+			fmt.Errorf("failed to process config: %v", err)
+		}
 	} else {
-		logrus.Errorf("Error parsing config %v", err)
+		logrus.Errorf("failed to parse config: %v", err)
 	}
 
 	bridgeConfig := options.Generic{
@@ -306,7 +309,7 @@ func (d *dnetConnection) dnetDaemon(cfgFile string) error {
 	handleSignals(controller)
 	setupDumpStackTrap()
 
-	return http.ListenAndServe(d.addr, r)
+	return http.ListenAndServe(d.conn.Addr, r)
 }
 
 func (d *dnetConnection) IsManager() bool {
@@ -436,76 +439,14 @@ func newDnetConnection(val string) (*dnetConnection, error) {
 		return nil, errors.New("dnet currently only supports tcp transport")
 	}
 
-	return &dnetConnection{protoAddrParts[0], protoAddrParts[1], &NetworkOrchestration{}, make(chan cluster.ConfigEventType, 10)}, nil
-}
-
-func (d *dnetConnection) httpCall(method, path string, data interface{}, headers map[string][]string) (io.ReadCloser, http.Header, int, error) {
-	var in io.Reader
-	in, err := encodeData(data)
-	if err != nil {
-		return nil, nil, -1, err
-	}
-
-	req, err := http.NewRequest(method, fmt.Sprintf("%s", path), in)
-	if err != nil {
-		return nil, nil, -1, err
-	}
-
-	setupRequestHeaders(method, data, req, headers)
-
-	req.URL.Host = d.addr
-	req.URL.Scheme = "http"
-	fmt.Printf("Requesting http: %+v", req)
-	httpClient := &http.Client{}
-	resp, err := httpClient.Do(req)
-	statusCode := -1
-	if resp != nil {
-		statusCode = resp.StatusCode
-	}
-	if err != nil {
-		return nil, nil, statusCode, fmt.Errorf("error when trying to connect: %v", err)
-	}
-
-	if statusCode < 200 || statusCode >= 400 {
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			return nil, nil, statusCode, err
-		}
-		return nil, nil, statusCode, fmt.Errorf("error : %s", bytes.TrimSpace(body))
-	}
-
-	return resp.Body, resp.Header, statusCode, nil
-}
-
-func setupRequestHeaders(method string, data interface{}, req *http.Request, headers map[string][]string) {
-	if data != nil {
-		if headers == nil {
-			headers = make(map[string][]string)
-		}
-		headers["Content-Type"] = []string{"application/json"}
-	}
-
-	expectedPayload := (method == "POST" || method == "PUT")
-
-	if expectedPayload && req.Header.Get("Content-Type") == "" {
-		req.Header.Set("Content-Type", "text/plain")
-	}
-
-	if headers != nil {
-		for k, v := range headers {
-			req.Header[k] = v
-		}
-	}
-}
-
-func encodeData(data interface{}) (*bytes.Buffer, error) {
-	params := bytes.NewBuffer(nil)
-	if data != nil {
-		if err := json.NewEncoder(params).Encode(data); err != nil {
-			return nil, err
-		}
-	}
-	return params, nil
+	return &dnetConnection{
+		&netutils.HttpConnection{
+			Proto: protoAddrParts[0],
+			Addr:  protoAddrParts[1],
+		},
+		&NetworkOrchestration{},
+		make(chan cluster.ConfigEventType, 10),
+	}, nil
 }
 
 func ipamOption(bridgeName string) libnetwork.NetworkOption {

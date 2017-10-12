@@ -11,23 +11,23 @@ import (
 )
 
 func cmdAdd(args *skel.CmdArgs) error {
-	libClient := cniapi.NewLibNetCniClient()
-	result, err := libClient.SetupPod(args)
+	c := cniapi.NewDnetCniClient()
+	result, err := c.SetupPod(args)
 	if err != nil {
-		return fmt.Errorf("Failed to setup Pod , %v", err)
+		return fmt.Errorf("failed to setup Pod: %v", err)
 	}
 	return types.PrintResult(result, version.Current())
 }
 
 func cmdDel(args *skel.CmdArgs) error {
-	libClient := cniapi.NewLibNetCniClient()
-	if err := libClient.TearDownPod(args); err != nil {
-		return fmt.Errorf("Failed to tear down pod, %v", err)
+	c := cniapi.NewDnetCniClient()
+	if err := c.TearDownPod(args); err != nil {
+		return fmt.Errorf("failed to tear down pod: %v", err)
 	}
 	return nil
 }
 
 func main() {
-	log.Infof("Starting Libnetwork CNI plugin")
+	log.Infof("Dnet CNI plugin")
 	skel.PluginMain(cmdAdd, cmdDel, version.PluginSupports("", "0.1.0", "0.2.0", version.Current()))
 }
