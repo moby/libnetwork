@@ -35,8 +35,8 @@ var mockContainerID = "2a3456789"
 var mockSandboxID = "2b3456789"
 
 func setupMockHTTPCallback() {
-	var list []networkResource
-	nw := networkResource{Name: mockNwName, ID: mockNwID}
+	var list []NetworkResource
+	nw := NetworkResource{Name: mockNwName, ID: mockNwID}
 	mockNwJSON, _ = json.Marshal(nw)
 	list = append(list, nw)
 	mockNwListJSON, _ = json.Marshal(list)

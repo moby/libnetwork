@@ -11,7 +11,6 @@ import (
 
 	"github.com/docker/docker/opts"
 	"github.com/docker/docker/pkg/stringid"
-	"github.com/docker/libnetwork"
 	flag "github.com/docker/libnetwork/client/mflag"
 	"github.com/docker/libnetwork/netutils"
 )
@@ -180,13 +179,13 @@ func (cli *NetworkCli) CmdServicePublish(chain string, args ...string) error {
 		return err
 	}
 
-	var ep libnetwork.Endpoint
+	var ep EndpointInfo
 	err = json.Unmarshal(obj, &ep)
 	if err != nil {
 		return err
 	}
 
-	fmt.Fprintf(cli.out, "%s\n", ep.ID())
+	fmt.Fprintf(cli.out, "%s\n", ep.ID)
 	return nil
 }
 

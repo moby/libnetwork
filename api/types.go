@@ -96,7 +96,7 @@ type serviceDelete struct {
 	Force bool   `json:"force"`
 }
 
-// endpointInfo contants the endpoint info for https response message on endpoint creation
+// endpointInfo represents the endpoint info for https response message on endpoint creation
 type endpointInfo struct {
 	ID          string           `json:"id"`
 	Address     net.IPNet        `json:"address"`
