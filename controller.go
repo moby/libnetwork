@@ -336,6 +336,7 @@ func (c *controller) clusterAgentInit() {
 			// should still be present when cleaning up
 			// service bindings
 			c.agentClose()
+			c.cleanupServiceDiscovery("")
 			c.cleanupServiceBindings("")
 
 			c.clearIngress(true)
