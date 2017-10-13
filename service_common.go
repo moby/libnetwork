@@ -280,8 +280,7 @@ func (c *controller) addServiceBinding(svcName, svcID, nID, eID, containerName s
 
 	ok, entries := s.assignIPToEndpoint(ip.String(), eID)
 	if !ok || entries > 1 {
-		setStr, b := s.printIPToEndpoint(ip.String())
-		logrus.Warnf("addServiceBinding %s possible trainsient state ok:%t entries:%d set:%t %s", eID, ok, entries, b, setStr)
+		logrus.Warnf("addServiceBinding %s possible transient state ok:%t entries:%d", eID, ok, entries)
 	}
 
 	// Add loadbalancer service and backend in all sandboxes in
@@ -348,8 +347,7 @@ func (c *controller) rmServiceBinding(svcName, svcID, nID, eID, containerName st
 
 	ok, entries := s.removeIPToEndpoint(ip.String(), eID)
 	if !ok || entries > 0 {
-		setStr, b := s.printIPToEndpoint(ip.String())
-		logrus.Warnf("rmServiceBinding %s possible trainsient state ok:%t entries:%d set:%t %s", eID, ok, entries, b, setStr)
+		logrus.Warnf("rmServiceBinding %s possible transient state ok:%t entries:%d", eID, ok, entries)
 	}
 
 	// Remove loadbalancer service(if needed) and backend in all
