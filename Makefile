@@ -36,6 +36,7 @@ build-local:
 	@mkdir -p "bin"
 	go build -tags experimental -o "bin/dnet" ./cmd/dnet
 	go build -o "bin/docker-proxy" ./cmd/proxy
+	go build -o "bin/libnetwork-setkey" ./cmd/setkey
 
 clean:
 	@echo "🐳 $@"
@@ -68,7 +69,7 @@ check-code: lint gosimple vet ineffassign
 
 check-format: fmt misspell
 
-run-tests:
+run-tests: ./bin/libnetwork-setkey
 	@echo "🐳 Running tests... "
 	@echo "mode: count" > coverage.coverprofile
 	@for dir in $$( ${gnufind} . -maxdepth 10 -not -path './.git*' -not -path '*/_*' -not -path './vendor/*' -type d); do \
@@ -122,10 +123,10 @@ run-tests:
 
 check-local:	check-format check-code run-tests
 
-integration-tests: ./bin/dnet
+integration-tests: ./bin/dnet ./bin/libnetwork-setkey
 	@./test/integration/dnet/run-integration-tests.sh
 
-./bin/dnet:
+./bin/%:
 	make build
 
 coveralls:

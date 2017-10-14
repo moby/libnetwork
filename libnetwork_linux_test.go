@@ -14,7 +14,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/docker/docker/pkg/reexec"
 	"github.com/docker/libnetwork"
 	"github.com/docker/libnetwork/ipamapi"
 	"github.com/docker/libnetwork/netlabel"
@@ -24,6 +23,7 @@ import (
 	"github.com/docker/libnetwork/types"
 	"github.com/opencontainers/runc/libcontainer"
 	"github.com/opencontainers/runc/libcontainer/configs"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
@@ -468,7 +468,7 @@ func externalKeyTest(t *testing.T, reexec bool) {
 	}
 
 	if reexec {
-		err := reexecSetKey("this-must-fail", containerID, controller.ID())
+		err := runSetKey("this-must-fail", containerID, controller.ID())
 		if err == nil {
 			t.Fatalf("SetExternalKey must fail if the corresponding namespace is not created")
 		}
@@ -491,7 +491,7 @@ func externalKeyTest(t *testing.T, reexec bool) {
 	}
 
 	if reexec {
-		err := reexecSetKey("ValidKey", containerID, controller.ID())
+		err := runSetKey("ValidKey", containerID, controller.ID())
 		if err != nil {
 			t.Fatalf("SetExternalKey failed with %v", err)
 		}
@@ -520,12 +520,17 @@ func externalKeyTest(t *testing.T, reexec bool) {
 	checkSandbox(t, ep.Info())
 }
 
-func reexecSetKey(key string, containerID string, controllerID string) error {
+func runSetKey(key string, containerID string, controllerID string) error {
 	var (
 		state libcontainer.State
 		b     []byte
 		err   error
 	)
+
+	cmdPath, err := exec.LookPath("libnetwork-setkey")
+	if err != nil {
+		return errors.Wrap(err, "could not find libnetwork-setkey binary")
+	}
 
 	state.NamespacePaths = make(map[configs.NamespaceType]string)
 	state.NamespacePaths[configs.NamespaceType("NEWNET")] = key
@@ -533,7 +538,7 @@ func reexecSetKey(key string, containerID string, controllerID string) error {
 		return err
 	}
 	cmd := &exec.Cmd{
-		Path:   reexec.Self(),
+		Path:   cmdPath,
 		Args:   append([]string{"libnetwork-setkey"}, containerID, controllerID),
 		Stdin:  strings.NewReader(string(b)),
 		Stdout: os.Stdout,
