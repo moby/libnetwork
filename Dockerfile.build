@@ -1,5 +1,5 @@
 FROM golang:1.8.4
-RUN apt-get update && apt-get -y install iptables kmod
+RUN apt-get update && apt-get -y install iptables
 
 RUN go get github.com/tools/godep \
 		github.com/golang/lint/golint \
