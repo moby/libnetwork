@@ -507,7 +507,7 @@ func (iptable IPTable) RawCombinedOutputNative(args ...string) error {
 
 // ExistChain checks if a chain exists
 func (iptable IPTable) ExistChain(chain string, table Table) bool {
-	if _, err := iptable.Raw("-t", string(table), "-L", chain); err == nil {
+	if _, err := iptable.Raw("-t", string(table), "-nL", chain); err == nil {
 		return true
 	}
 	return false
