@@ -377,9 +377,9 @@ func setupInternalNetworkRules(bridgeIface string, addr net.Addr, icc, insert bo
 	if err := programChainRule(version, inDropRule, "DROP INCOMING", insert); err != nil {
 		return err
 	}
-        if err := programChainRule(version, outDropRule, "DROP OUTGOING", insert); err != nil {
-                return err
-        }
+	if err := programChainRule(version, outDropRule, "DROP OUTGOING", insert); err != nil {
+		return err
+	}
 	// Set Inter Container Communication.
 	return setIcc(version, bridgeIface, icc, insert)
 }
