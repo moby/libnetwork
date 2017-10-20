@@ -13,7 +13,7 @@ import (
 
 var (
 	defaultBindingIP   = net.IPv4(0, 0, 0, 0)
-	defaultBindingIPV6 = net.ParseIP("::1")
+	defaultBindingIPV6 = net.ParseIP("::")
 )
 
 func (n *bridgeNetwork) allocatePorts(ep *bridgeEndpoint, reqDefBindIP net.IP, ulPxyEnabled bool) ([]types.PortBinding, error) {
