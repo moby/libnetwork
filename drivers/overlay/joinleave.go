@@ -6,6 +6,7 @@ import (
 	"syscall"
 
 	"github.com/docker/libnetwork/driverapi"
+	"github.com/docker/libnetwork/netutils"
 	"github.com/docker/libnetwork/ns"
 	"github.com/docker/libnetwork/types"
 	"github.com/gogo/protobuf/proto"
@@ -41,6 +42,15 @@ func (d *driver) Join(nid, eid string, sboxKey string, jinfo driverapi.JoinInfo,
 	s := n.getSubnetforIP(ep.addr)
 	if s == nil {
 		return fmt.Errorf("could not find subnet for endpoint %s", eid)
+	}
+
+	if s.gwIP == nil {
+		gwIP, err := jinfo.RequestAddress(s.subnetIP)
+		if err != nil {
+			logrus.Errorf("RequestAddress failed %s %v", s.subnetIP.String(), err)
+			return err
+		}
+		s.gwIP = gwIP
 	}
 
 	if err := n.obtainVxlanID(s); err != nil {
@@ -121,6 +131,9 @@ func (d *driver) Join(nid, eid string, sboxKey string, jinfo driverapi.JoinInfo,
 	}
 
 	d.peerAdd(nid, eid, ep.addr.IP, ep.addr.Mask, ep.mac, net.ParseIP(d.advertiseAddress), false, false, true)
+	if n.hostAccess {
+		d.peerAdd(nid, eid, s.gwIP.IP, s.gwIP.Mask, netutils.GenerateMACFromIP(s.gwIP.IP), net.ParseIP(d.advertiseAddress), false, false, true)
+	}
 
 	if err = d.checkEncryption(nid, nil, n.vxlanID(s), true, true); err != nil {
 		logrus.Warn(err)
@@ -208,7 +221,7 @@ func (d *driver) EventNotify(etype driverapi.EventType, nid, tableName, key stri
 }
 
 // Leave method is invoked when a Sandbox detaches from an endpoint.
-func (d *driver) Leave(nid, eid string) error {
+func (d *driver) Leave(nid, eid string, linfo driverapi.LeaveInfo) error {
 	if err := validateID(nid, eid); err != nil {
 		return err
 	}
@@ -233,8 +246,7 @@ func (d *driver) Leave(nid, eid string) error {
 	}
 
 	d.peerDelete(nid, eid, ep.addr.IP, ep.addr.Mask, ep.mac, net.ParseIP(d.advertiseAddress), true)
-
-	n.leaveSandbox()
+	n.leaveSandbox(linfo)
 
 	return nil
 }

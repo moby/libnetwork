@@ -646,12 +646,17 @@ func procPublishService(c libnetwork.NetworkController, vars map[string]string, 
 		setFctList = append(setFctList, libnetwork.CreateOptionMyAlias(str))
 	}
 
+	if sp.DisableResolution {
+		setFctList = append(setFctList, libnetwork.CreateOptionDisableResolution())
+	}
+
 	ep, err := n.CreateEndpoint(sp.Name, setFctList...)
 	if err != nil {
 		return "", endpointToService(convertNetworkError(err))
 	}
+	epResp := getEndpointInfo(ep)
 
-	return ep.ID(), &createdResponse
+	return epResp, &createdResponse
 }
 
 func procUnpublishService(c libnetwork.NetworkController, vars map[string]string, body []byte) (interface{}, *responseStatus) {
@@ -708,6 +713,13 @@ func procAttachBackend(c libnetwork.NetworkController, vars map[string]string, b
 		return nil, convertNetworkError(err)
 	}
 
+	if bk.SandboxKey != "" {
+		err = sb.SetKey(bk.SandboxKey)
+		if err != nil {
+			return nil, convertNetworkError(err)
+		}
+	}
+
 	return sb.Key(), &successResponse
 }
 
@@ -727,7 +739,6 @@ func procDetachBackend(c libnetwork.NetworkController, vars map[string]string, b
 	if err != nil {
 		return nil, convertNetworkError(err)
 	}
-
 	return nil, &successResponse
 }
 

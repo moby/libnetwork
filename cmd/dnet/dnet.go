@@ -1,8 +1,6 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -18,12 +16,15 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/codegangsta/cli"
+	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/opts"
 	"github.com/docker/docker/pkg/discovery"
 	"github.com/docker/docker/pkg/reexec"
-
-	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/pkg/term"
+	"github.com/gorilla/mux"
+	"github.com/sirupsen/logrus"
+	"golang.org/x/net/context"
+
 	"github.com/docker/libnetwork"
 	"github.com/docker/libnetwork/api"
 	"github.com/docker/libnetwork/cluster"
@@ -33,23 +34,23 @@ import (
 	"github.com/docker/libnetwork/netlabel"
 	"github.com/docker/libnetwork/netutils"
 	"github.com/docker/libnetwork/options"
+	"github.com/docker/libnetwork/provider"
+	"github.com/docker/libnetwork/provider/cni/cniapi"
 	"github.com/docker/libnetwork/types"
-	"github.com/gorilla/mux"
-	"github.com/sirupsen/logrus"
-	"golang.org/x/net/context"
 )
 
 const (
 	// DefaultHTTPHost is used if only port is provided to -H flag e.g. docker -d -H tcp://:8080
 	DefaultHTTPHost = "0.0.0.0"
 	// DefaultHTTPPort is the default http port used by dnet
-	DefaultHTTPPort = 2385
+	DefaultHTTPPort = 2389
 	// DefaultUnixSocket exported
-	DefaultUnixSocket = "/var/run/dnet.sock"
-	cfgFileEnv        = "LIBNETWORK_CFG"
-	defaultCfgFile    = "/etc/default/libnetwork.toml"
-	defaultHeartbeat  = time.Duration(10) * time.Second
-	ttlFactor         = 2
+	DefaultUnixSocket      = "/var/run/dnet.sock"
+	cfgFileEnv             = "LIBNETWORK_CFG"
+	defaultCfgFile         = "/etc/default/libnetwork.toml"
+	defaultHeartbeat       = time.Duration(10) * time.Second
+	ttlFactor              = 2
+	defaultProviderTimeout = 120 // default time to fetch state from provider
 )
 
 var epConn *dnetConnection
@@ -96,10 +97,10 @@ func (d *dnetConnection) parseConfig(cfgFile string) (*config.Config, error) {
 	return config.ParseConfig(cfgFile)
 }
 
-func processConfig(cfg *config.Config) []config.Option {
+func processConfig(cfg *config.Config) ([]config.Option, error) {
 	options := []config.Option{}
 	if cfg == nil {
-		return options
+		return options, nil
 	}
 
 	dn := "bridge"
@@ -123,14 +124,30 @@ func processConfig(cfg *config.Config) []config.Option {
 		options = append(options, config.OptionKVProviderURL(dcfg.Client.Address))
 	}
 
-	dOptions, err := startDiscovery(&cfg.Cluster)
-	if err != nil {
-		logrus.Infof("Skipping discovery : %s", err.Error())
-	} else {
-		options = append(options, dOptions...)
+	if cfg.Daemon.DefaultGwNetwork != "" {
+		options = append(options, config.OptionDefaultGwNetwork(cfg.Daemon.DefaultGwNetwork))
 	}
 
-	return options
+	if cfg.Daemon.DataDir != "" {
+		options = append(options, config.OptionDataDir(cfg.Daemon.DataDir))
+	}
+
+	// Retry discovery for 2 minutes before exiting
+	if cfg.Cluster.Discovery != "" {
+		for {
+			select {
+			case <-time.After(2 * time.Minute):
+				return nil, fmt.Errorf("failed to initialize discovery")
+			default:
+				dOptions, err := startDiscovery(&cfg.Cluster)
+				if err == nil {
+					options = append(options, dOptions...)
+					return options, nil
+				}
+			}
+		}
+	}
+	return options, nil
 }
 
 func startDiscovery(cfg *config.ClusterCfg) ([]config.Option, error) {
@@ -230,10 +247,7 @@ func createDefaultNetwork(c libnetwork.NetworkController) {
 }
 
 type dnetConnection struct {
-	// proto holds the client protocol i.e. unix.
-	proto string
-	// addr holds the client address.
-	addr          string
+	conn          *netutils.HTTPConnection
 	Orchestration *NetworkOrchestration
 	configEvent   chan cluster.ConfigEventType
 }
@@ -246,7 +260,8 @@ type NetworkOrchestration struct {
 	Peer    string
 }
 
-func (d *dnetConnection) dnetDaemon(cfgFile string) error {
+func (d *dnetConnection) dnetDaemon(cfgFile string, provider string) error {
+	logrus.Infof("Starting DnetDaemon")
 	if err := startTestDriver(); err != nil {
 		return fmt.Errorf("failed to start test driver: %v", err)
 	}
@@ -254,9 +269,16 @@ func (d *dnetConnection) dnetDaemon(cfgFile string) error {
 	cfg, err := d.parseConfig(cfgFile)
 	var cOptions []config.Option
 	if err == nil {
-		cOptions = processConfig(cfg)
+		cOptions, err = processConfig(cfg)
+		if err != nil {
+			return fmt.Errorf("failed to process config: %v", err)
+		}
 	} else {
-		logrus.Errorf("Error parsing config %v", err)
+		return fmt.Errorf("failed to parse config: %v", err)
+	}
+
+	if provider != "" {
+		cfg.Daemon.Provider = attachDnetProvider(provider)
 	}
 
 	bridgeConfig := options.Generic{
@@ -268,9 +290,19 @@ func (d *dnetConnection) dnetDaemon(cfgFile string) error {
 
 	cOptions = append(cOptions, config.OptionDriverConfig("bridge", bridgeOption))
 
+	// If this is a restore ,then fetch active sandboxes from api server.
+	if cfg.Daemon.Provider != nil {
+		sbOptions, err := fetchActiveSandboxes(cfg.Daemon.Provider)
+		if err != nil {
+			return err
+		}
+		if sbOptions != nil {
+			cOptions = append(cOptions, sbOptions)
+		}
+	}
 	controller, err := libnetwork.New(cOptions...)
 	if err != nil {
-		fmt.Println("Error starting dnetDaemon :", err)
+		fmt.Println("Error starting DnetDaemon :", err)
 		return err
 	}
 	controller.SetClusterProvider(d)
@@ -298,7 +330,7 @@ func (d *dnetConnection) dnetDaemon(cfgFile string) error {
 	handleSignals(controller)
 	setupDumpStackTrap()
 
-	return http.ListenAndServe(d.addr, r)
+	return http.ListenAndServe(d.conn.Addr, r)
 }
 
 func (d *dnetConnection) IsManager() bool {
@@ -428,76 +460,14 @@ func newDnetConnection(val string) (*dnetConnection, error) {
 		return nil, errors.New("dnet currently only supports tcp transport")
 	}
 
-	return &dnetConnection{protoAddrParts[0], protoAddrParts[1], &NetworkOrchestration{}, make(chan cluster.ConfigEventType, 10)}, nil
-}
-
-func (d *dnetConnection) httpCall(method, path string, data interface{}, headers map[string][]string) (io.ReadCloser, http.Header, int, error) {
-	var in io.Reader
-	in, err := encodeData(data)
-	if err != nil {
-		return nil, nil, -1, err
-	}
-
-	req, err := http.NewRequest(method, fmt.Sprintf("%s", path), in)
-	if err != nil {
-		return nil, nil, -1, err
-	}
-
-	setupRequestHeaders(method, data, req, headers)
-
-	req.URL.Host = d.addr
-	req.URL.Scheme = "http"
-
-	httpClient := &http.Client{}
-	resp, err := httpClient.Do(req)
-	statusCode := -1
-	if resp != nil {
-		statusCode = resp.StatusCode
-	}
-	if err != nil {
-		return nil, nil, statusCode, fmt.Errorf("error when trying to connect: %v", err)
-	}
-
-	if statusCode < 200 || statusCode >= 400 {
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			return nil, nil, statusCode, err
-		}
-		return nil, nil, statusCode, fmt.Errorf("error : %s", bytes.TrimSpace(body))
-	}
-
-	return resp.Body, resp.Header, statusCode, nil
-}
-
-func setupRequestHeaders(method string, data interface{}, req *http.Request, headers map[string][]string) {
-	if data != nil {
-		if headers == nil {
-			headers = make(map[string][]string)
-		}
-		headers["Content-Type"] = []string{"application/json"}
-	}
-
-	expectedPayload := (method == "POST" || method == "PUT")
-
-	if expectedPayload && req.Header.Get("Content-Type") == "" {
-		req.Header.Set("Content-Type", "text/plain")
-	}
-
-	if headers != nil {
-		for k, v := range headers {
-			req.Header[k] = v
-		}
-	}
-}
-
-func encodeData(data interface{}) (*bytes.Buffer, error) {
-	params := bytes.NewBuffer(nil)
-	if data != nil {
-		if err := json.NewEncoder(params).Encode(data); err != nil {
-			return nil, err
-		}
-	}
-	return params, nil
+	return &dnetConnection{
+		&netutils.HTTPConnection{
+			Proto: protoAddrParts[0],
+			Addr:  protoAddrParts[1],
+		},
+		&NetworkOrchestration{},
+		make(chan cluster.ConfigEventType, 10),
+	}, nil
 }
 
 func ipamOption(bridgeName string) libnetwork.NetworkOption {
@@ -510,4 +480,35 @@ func ipamOption(bridgeName string) libnetwork.NetworkOption {
 		return libnetwork.NetworkOptionIpam("default", "", []*libnetwork.IpamConf{ipamV4Conf}, nil, nil)
 	}
 	return nil
+}
+
+func attachDnetProvider(provider string) provider.DnetProvider {
+	switch provider {
+	case "cni":
+		return cniapi.NewDnetCniClient()
+	default:
+		return nil
+	}
+}
+
+func fetchActiveSandboxes(provider provider.DnetProvider) (config.Option, error) {
+	x := time.Duration(2 * time.Second)
+	var err error
+	var sbOptions map[string]interface{}
+	for x < defaultProviderTimeout {
+		sbOptions, err = provider.FetchActiveSandboxes()
+		if err == nil {
+			goto success
+		}
+		logrus.Errorf("Retry:failed to fetch active sandbox: %b", err)
+		time.Sleep(x * time.Second)
+		x = x * 2
+	}
+	return nil, fmt.Errorf("failed to fetch active sandbox: %b", err)
+success:
+	logrus.Infof("Active sandboxes are: {%+v}", sbOptions)
+	if len(sbOptions) != 0 {
+		return config.OptionActiveSandboxes(sbOptions), nil
+	}
+	return nil, nil
 }

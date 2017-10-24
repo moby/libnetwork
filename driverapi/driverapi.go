@@ -56,7 +56,7 @@ type Driver interface {
 	Join(nid, eid string, sboxKey string, jinfo JoinInfo, options map[string]interface{}) error
 
 	// Leave method is invoked when a Sandbox detaches from an endpoint.
-	Leave(nid, eid string) error
+	Leave(nid, eid string, linfo LeaveInfo) error
 
 	// ProgramExternalConnectivity invokes the driver method which does the necessary
 	// programming to allow the external connectivity dictated by the passed options
@@ -136,6 +136,9 @@ type JoinInfo interface {
 	// SetGateway sets the default IPv4 gateway when a container joins the endpoint.
 	SetGateway(net.IP) error
 
+	// RequestAddress allocates an IP address as required by the driver
+	RequestAddress(*net.IPNet) (*net.IPNet, error)
+
 	// SetGatewayIPv6 sets the default IPv6 gateway when a container joins the endpoint.
 	SetGatewayIPv6(net.IP) error
 
@@ -149,6 +152,12 @@ type JoinInfo interface {
 	// AddTableEntry adds a table entry to the gossip layer
 	// passing the table name, key and an opaque value.
 	AddTableEntry(tableName string, key string, value []byte) error
+}
+
+// LeaveInfo interface for object release during sandbox detach
+type LeaveInfo interface {
+	// ReleaseAddress frees up allocated IP
+	ReleaseAddress(net.IP) error
 }
 
 // DriverCallback provides a Callback interface for Drivers into LibNetwork

@@ -1,0 +1,13 @@
+FROM ubuntu:16.04
+
+RUN apt-get update \
+    && apt-get install -y\
+        net-tools \
+        iptables \
+ && rm -rf /var/lib/apt/lists/*
+
+COPY bin/cniserver /var/libnetwork/bin/
+COPY cniserver.sh /var/libnetwork/
+COPY bin/cnictl /var/libnetwork/bin/
+
+ENTRYPOINT ["/var/libnetwork/cniserver.sh"]

@@ -1,0 +1,11 @@
+title = "LibNetwork Configuration file"
+
+[daemon]
+  debug = true
+  labels = ["com.docker.network.driver.overlay.hostmode=true", "com.docker.network.driver.overlay.vxlan-port=34789", "com.docker.network.driver.overlay.gossip-port=37946"]
+  defaultGwNetwork = "cni-gwbridge"
+  DataDir = "/var/run/libnetwork"
+[cluster]
+  discovery = ""
+[datastore]
+  embedded = false

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -8,11 +9,13 @@ import (
 	"github.com/docker/docker/pkg/plugingetter"
 	"github.com/docker/go-connections/tlsconfig"
 	"github.com/docker/libkv/store"
+	"github.com/sirupsen/logrus"
+
 	"github.com/docker/libnetwork/cluster"
 	"github.com/docker/libnetwork/datastore"
 	"github.com/docker/libnetwork/netlabel"
 	"github.com/docker/libnetwork/osl"
-	"github.com/sirupsen/logrus"
+	"github.com/docker/libnetwork/provider"
 )
 
 const (
@@ -33,8 +36,10 @@ type Config struct {
 type DaemonCfg struct {
 	Debug                  bool
 	Experimental           bool
+	Provider               provider.DnetProvider
 	DataDir                string
 	DefaultNetwork         string
+	DefaultGwNetwork       string
 	DefaultDriver          string
 	Labels                 []string
 	DriverCfg              map[string]interface{}
@@ -69,7 +74,21 @@ func ParseConfig(tomlCfgFile string) (*Config, error) {
 	if _, err := toml.DecodeFile(tomlCfgFile, cfg); err != nil {
 		return nil, err
 	}
+	if cfg.Cluster.Address == "" {
+		cfg.Cluster.Address = os.Getenv("DNET_ADDRESS")
+	}
+	if cfg.Cluster.Discovery == "" {
+		cfg.Cluster.Discovery = os.Getenv("DNET_DISCOVERY")
+	}
 
+	if _, ok := cfg.Scopes[datastore.GlobalScope]; !ok {
+		kvParts := strings.SplitN(cfg.Cluster.Discovery, "://", 2)
+		if len(kvParts) == 2 {
+			gCfg := datastore.ScopeClientCfg{Provider: kvParts[0], Address: kvParts[1]}
+			cfg.Scopes[datastore.GlobalScope] = &datastore.ScopeCfg{gCfg}
+		}
+
+	}
 	cfg.LoadDefaultScopes(cfg.Daemon.DataDir)
 	return cfg, nil
 }
@@ -97,8 +116,14 @@ type Option func(c *Config)
 // OptionDefaultNetwork function returns an option setter for a default network
 func OptionDefaultNetwork(dn string) Option {
 	return func(c *Config) {
-		logrus.Debugf("Option DefaultNetwork: %s", dn)
 		c.Daemon.DefaultNetwork = strings.TrimSpace(dn)
+	}
+}
+
+// OptionDefaultGwNetwork function returns an option setter for a default Gateway network
+func OptionDefaultGwNetwork(dn string) Option {
+	return func(c *Config) {
+		c.Daemon.DefaultGwNetwork = strings.TrimSpace(dn)
 	}
 }
 

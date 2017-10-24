@@ -1,12 +1,20 @@
 title = "LibNetwork Configuration file"
 
 [daemon]
-  debug = false
+  debug = true
+  labels = ["com.docker.network.driver.overlay.hostmode=true", "com.docker.network.driver.overlay.vxlan-port=4790", "com.docker.network.driver.overlay.gossip-port=8000"]
+  defaultGwNetwork = "dnet-gwbridge"
+  DataDir = "/var/run/libnetwork"
 [cluster]
-  discovery = "token://swarm-discovery-token"
-  Address = "Cluster-wide reachable Host IP"
+  discovery = "etcd://192.168.56.101:3379"
+  address = "192.168.56.101"
 [datastore]
   embedded = false
 [datastore.client]
-  provider = "consul"
-  Address = "localhost:8500"
+  provider = "etcd"
+  Address = "192.168.56.101:3379"
+[scopes]
+  [scopes.global]
+      [scopes.global.client]
+            provider = "etcd"
+                  address = "192.168.56.101:3379"

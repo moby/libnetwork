@@ -59,7 +59,7 @@ func (d *driver) Join(nid, eid string, sboxKey string, jinfo driverapi.JoinInfo,
 	return types.NotImplementedErrorf("not implemented")
 }
 
-func (d *driver) Leave(nid, eid string) error {
+func (d *driver) Leave(nid, eid string, linfo driverapi.LeaveInfo) error {
 	return types.NotImplementedErrorf("not implemented")
 }
 

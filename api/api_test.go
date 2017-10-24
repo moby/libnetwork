@@ -821,11 +821,15 @@ func TestProcPublishUnpublishService(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	si, errRsp := procPublishService(c, vars, b)
+	sv, errRsp := procPublishService(c, vars, b)
 	if errRsp != &createdResponse {
 		t.Fatalf("Unexpected failure: %v", errRsp)
 	}
-	sid := i2s(si)
+	ep, ok := sv.(endpointInfo)
+	if !ok {
+		panic(fmt.Sprintf("Failed for %v", sv))
+	}
+	sid := ep.ID
 
 	vars[urlEpID] = ""
 	_, errRsp = procUnpublishService(c, vars, nil)

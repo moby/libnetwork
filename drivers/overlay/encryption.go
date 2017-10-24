@@ -113,13 +113,13 @@ func (d *driver) checkEncryption(nid string, rIP net.IP, vxlanID uint32, isLocal
 
 	if add {
 		for _, rIP := range nodes {
-			if err := setupEncryption(lIP, aIP, rIP, vxlanID, d.secMap, d.keys); err != nil {
+			if err := d.setupEncryption(lIP, aIP, rIP, vxlanID, d.secMap, d.keys); err != nil {
 				logrus.Warnf("Failed to program network encryption between %s and %s: %v", lIP, rIP, err)
 			}
 		}
 	} else {
 		if len(nodes) == 0 {
-			if err := removeEncryption(lIP, rIP, d.secMap); err != nil {
+			if err := d.removeEncryption(lIP, rIP, d.secMap); err != nil {
 				logrus.Warnf("Failed to remove network encryption between %s and %s: %v", lIP, rIP, err)
 			}
 		}
@@ -128,18 +128,18 @@ func (d *driver) checkEncryption(nid string, rIP net.IP, vxlanID uint32, isLocal
 	return nil
 }
 
-func setupEncryption(localIP, advIP, remoteIP net.IP, vni uint32, em *encrMap, keys []*key) error {
+func (d *driver) setupEncryption(localIP, advIP, remoteIP net.IP, vni uint32, em *encrMap, keys []*key) error {
 	logrus.Debugf("Programming encryption for vxlan %d between %s and %s", vni, localIP, remoteIP)
 	rIPs := remoteIP.String()
 
 	indices := make([]*spi, 0, len(keys))
 
-	err := programMangle(vni, true)
+	err := programMangle(vni, d.vxlanPort, true)
 	if err != nil {
 		logrus.Warn(err)
 	}
 
-	err = programInput(vni, true)
+	err = programInput(vni, d.vxlanPort, true)
 	if err != nil {
 		logrus.Warn(err)
 	}
@@ -171,7 +171,7 @@ func setupEncryption(localIP, advIP, remoteIP net.IP, vni uint32, em *encrMap, k
 	return nil
 }
 
-func removeEncryption(localIP, remoteIP net.IP, em *encrMap) error {
+func (d *driver) removeEncryption(localIP, remoteIP net.IP, em *encrMap) error {
 	em.Lock()
 	indices, ok := em.nodes[remoteIP.String()]
 	em.Unlock()
@@ -198,7 +198,7 @@ func removeEncryption(localIP, remoteIP net.IP, em *encrMap) error {
 	return nil
 }
 
-func programMangle(vni uint32, add bool) (err error) {
+func programMangle(vni uint32, vxlanPort int, add bool) (err error) {
 	var (
 		p      = strconv.FormatUint(uint64(vxlanPort), 10)
 		c      = fmt.Sprintf("0>>22&0x3C@12&0xFFFFFF00=%d", int(vni)<<8)
@@ -225,7 +225,7 @@ func programMangle(vni uint32, add bool) (err error) {
 	return
 }
 
-func programInput(vni uint32, add bool) (err error) {
+func programInput(vni uint32, vxlanPort int, add bool) (err error) {
 	var (
 		port       = strconv.FormatUint(uint64(vxlanPort), 10)
 		vniMatch   = fmt.Sprintf("0>>22&0x3C@12&0xFFFFFF00=%d", int(vni)<<8)

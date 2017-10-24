@@ -127,7 +127,7 @@ function start_dnet() {
     name=$(dnet_container_name ${inst} ${store})
 
     hport=$((41000+${inst}-1))
-    cport=2385
+    cport=2389
     hopt=""
 
     while [ -n "$1" ]

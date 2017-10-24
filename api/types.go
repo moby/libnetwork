@@ -1,6 +1,11 @@
 package api
 
-import "github.com/docker/libnetwork/types"
+import (
+	"net"
+
+	"github.com/docker/libnetwork"
+	"github.com/docker/libnetwork/types"
+)
 
 /***********
  Resources
@@ -72,15 +77,17 @@ type sandboxCreate struct {
 
 // endpointJoin represents the expected body of the "join endpoint" or "leave endpoint" http request messages
 type endpointJoin struct {
-	SandboxID string   `json:"sandbox_id"`
-	Aliases   []string `json:"aliases"`
+	SandboxID  string   `json:"sandbox_id"`
+	Aliases    []string `json:"aliases"`
+	SandboxKey string   `json:"sandbox_key"`
 }
 
 // servicePublish represents the body of the "publish service" http request message
 type servicePublish struct {
-	Name      string   `json:"name"`
-	MyAliases []string `json:"my_aliases"`
-	Network   string   `json:"network_name"`
+	Name              string   `json:"name"`
+	MyAliases         []string `json:"my_aliases"`
+	Network           string   `json:"network_name"`
+	DisableResolution bool     `json:"disable_resolution"`
 }
 
 // serviceDelete represents the body of the "unpublish service" http request message
@@ -89,8 +96,55 @@ type serviceDelete struct {
 	Force bool   `json:"force"`
 }
 
+// endpointInfo represents the endpoint info for https response message on endpoint creation
+type endpointInfo struct {
+	ID          string           `json:"id"`
+	Address     net.IPNet        `json:"address"`
+	AddressIPv6 net.IPNet        `json:"address_ipv6"`
+	MacAddress  net.HardwareAddr `json:"mac_address"`
+	Gateway     net.IP           `json:"gateway"`
+	GatewayIPv6 net.IP           `json:"gateway_ipv6"`
+}
+
 // extraHost represents the extra host object
 type extraHost struct {
 	Name    string `json:"name"`
 	Address string `json:"address"`
+}
+
+// SandboxMetadata holds the metadata related to sandox (config)
+type SandboxMetadata struct {
+	ContainerID       string                `json:"container_id"`
+	HostName          string                `json:"host_name"`
+	DomainName        string                `json:"domain_name"`
+	HostsPath         string                `json:"hosts_path"`
+	ResolvConfPath    string                `json:"resolv_conf_path"`
+	DNS               []string              `json:"dns"`
+	ExtraHosts        []extraHost           `json:"extra_hosts"`
+	UseExternalKey    bool                  `json:"use_external_key"`
+	UseDefaultSandbox bool                  `json:"use_default_sandbox"`
+	ExposedPorts      []types.TransportPort `json:"exposed_ports"`
+	PortMapping       []types.PortBinding   `json:"port_mapping"`
+	ExternalKey       string                `json:"external_key"`
+}
+
+func getEndpointInfo(ep libnetwork.Endpoint) endpointInfo {
+	epInfo := endpointInfo{ID: ep.ID()}
+
+	if ipv4 := ep.Info().Iface().Address(); ipv4 != nil {
+		epInfo.Address = *ipv4
+	}
+	if ipv6 := ep.Info().Iface().AddressIPv6(); ipv6 != nil {
+		epInfo.AddressIPv6 = *ipv6
+	}
+	if mac := ep.Info().Iface().MacAddress(); mac != nil {
+		epInfo.MacAddress = mac
+	}
+	if gw := ep.Info().Gateway(); gw != nil {
+		epInfo.Gateway = gw
+	}
+	if gw6 := ep.Info().GatewayIPv6(); gw6 != nil {
+		epInfo.GatewayIPv6 = gw6
+	}
+	return epInfo
 }

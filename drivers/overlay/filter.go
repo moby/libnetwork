@@ -87,7 +87,7 @@ func removeNetworkChain(cname string) error {
 	return setNetworkChain(cname, true)
 }
 
-func setFilters(cname, brName string, remove bool) error {
+func setFilters(cname, brName string, hostAccess bool, remove bool) error {
 	opt := "-I"
 	if remove {
 		opt = "-D"
@@ -117,26 +117,40 @@ func setFilters(cname, brName string, remove bool) error {
 		}
 	}
 
-	exists = iptables.Exists(iptables.Filter, cname, "-i", brName, "-j", "ACCEPT")
+	acceptRule := []string{"-i", brName, "-j", "ACCEPT"}
+	if hostAccess {
+		acceptRule = []string{"-j", "ACCEPT"}
+
+		// Insert/Delete a rule to jump to per-bridge chain for bridge ingress case
+		exists = iptables.Exists(iptables.Filter, globalChain, "-i", brName, "!", "-o", brName, "-j", cname)
+		if (!remove && !exists) || (remove && exists) {
+			if err := iptables.RawCombinedOutput(opt, globalChain, "-i", brName, "!", "-o", brName, "-j", cname); err != nil {
+				return fmt.Errorf("failed to add per-bridge ingress filter rule for bridge %s, network chain %s: %v", brName, cname, err)
+			}
+		}
+	}
+
+	exists = iptables.Exists(iptables.Filter, cname, acceptRule...)
 	if (!remove && exists) || (remove && !exists) {
 		return nil
 	}
 
-	if err := iptables.RawCombinedOutput(opt, cname, "-i", brName, "-j", "ACCEPT"); err != nil {
-		return fmt.Errorf("failed to add overlay filter rile for network chain %s, bridge %s: %v", cname, brName, err)
+	combinedRule := []string{opt, cname}
+	if err := iptables.RawCombinedOutput(append(combinedRule, acceptRule...)...); err != nil {
+		return fmt.Errorf("failed to add overlay filter rile for network chain %s, bridge %s, hostAccess %v: %v", cname, brName, hostAccess, err)
 	}
 
 	return nil
 }
 
-func addFilters(cname, brName string) error {
+func addFilters(cname, brName string, hostAccess bool) error {
 	defer filterWait()()
 
-	return setFilters(cname, brName, false)
+	return setFilters(cname, brName, hostAccess, false)
 }
 
-func removeFilters(cname, brName string) error {
+func removeFilters(cname, brName string, hostAccess bool) error {
 	defer filterWait()()
 
-	return setFilters(cname, brName, true)
+	return setFilters(cname, brName, hostAccess, true)
 }

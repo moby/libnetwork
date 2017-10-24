@@ -54,14 +54,14 @@ func createVethPair() (string, string, error) {
 	return name1, name2, nil
 }
 
-func createVxlan(name string, vni uint32, mtu int) error {
+func createVxlan(name string, vni uint32, port int, mtu int) error {
 	defer osl.InitOSContext()()
 
 	vxlan := &netlink.Vxlan{
 		LinkAttrs: netlink.LinkAttrs{Name: name, MTU: mtu},
 		VxlanId:   int(vni),
 		Learning:  true,
-		Port:      vxlanPort,
+		Port:      int(port),
 		Proxy:     true,
 		L3miss:    true,
 		L2miss:    true,

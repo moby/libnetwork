@@ -653,7 +653,7 @@ func (b *badDriver) EndpointOperInfo(nid, eid string) (map[string]interface{}, e
 func (b *badDriver) Join(nid, eid string, sboxKey string, jinfo driverapi.JoinInfo, options map[string]interface{}) error {
 	return fmt.Errorf("I will not allow any join")
 }
-func (b *badDriver) Leave(nid, eid string) error {
+func (b *badDriver) Leave(nid, eid string, linfo driverapi.LeaveInfo) error {
 	return nil
 }
 func (b *badDriver) DiscoverNew(dType discoverapi.DiscoveryType, data interface{}) error {
