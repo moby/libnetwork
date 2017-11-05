@@ -232,8 +232,7 @@ func Build(path string, dns, dnsSearch, dnsOptions []string, comments string) (*
 				return nil, err
 			}
 		}
-	}
-	else {
+	} else {
 		if _, err := content.WriteString("# This file was created by Docker" + dns + "\n"); err != nil {
 			return nil, err
 		}
