@@ -496,7 +496,10 @@ func (nDB *NetworkDB) deleteNodeNetworkEntries(nid, node string) {
 				nDB.indexes[byNetwork].Delete(fmt.Sprintf("/%s/%s/%s", nid, tname, key))
 			}
 
-			nDB.broadcaster.Write(makeEvent(opDelete, tname, nid, key, entry.value))
+			// Notify to the upper layer only entries not already marked for deletion
+			if !oldEntry.deleting {
+				nDB.broadcaster.Write(makeEvent(opDelete, tname, nid, key, entry.value))
+			}
 			return false
 		})
 }
