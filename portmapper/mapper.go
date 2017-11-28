@@ -137,7 +137,7 @@ func (pm *PortMapper) MapRange(container net.Addr, hostIP net.IP, hostPortStart,
 	}
 
 	containerIP, containerPort := getIPAndPort(m.container)
-	if hostIP.To4() != nil {
+	if hostIP.To4() != nil || hostIP.To16() != nil {
 		if err := pm.forward(iptables.Append, m.proto, hostIP, allocatedHostPort, containerIP.String(), containerPort); err != nil {
 			return nil, err
 		}
@@ -156,11 +156,13 @@ func (pm *PortMapper) MapRange(container net.Addr, hostIP net.IP, hostPortStart,
 		return nil
 	}
 
-	if err := m.userlandProxy.Start(); err != nil {
-		if err := cleanup(); err != nil {
-			return nil, fmt.Errorf("Error during port allocation cleanup: %v", err)
+	if hostIP.To4() != nil {
+		if err := m.userlandProxy.Start(); err != nil {
+			if err := cleanup(); err != nil {
+				return nil, fmt.Errorf("Error during port allocation cleanup: %v", err)
+			}
+			return nil, err
 		}
-		return nil, err
 	}
 
 	pm.currentMappings[key] = m

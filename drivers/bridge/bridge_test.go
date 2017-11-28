@@ -465,7 +465,8 @@ func TestCreateMultipleNetworks(t *testing.T) {
 }
 
 func verifyV4INCEntries(networks map[string]*bridgeNetwork, numEntries int, t *testing.T) {
-	out, err := iptables.Raw("-nvL", IsolationChain)
+	iptable := iptables.GetIptable(iptables.IPv4)
+	out, err := iptable.Raw("-nvL", IsolationChain)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -714,6 +715,7 @@ func TestLinkContainers(t *testing.T) {
 	}
 
 	d := newDriver()
+	iptable := iptables.GetIptable(iptables.IPv4)
 
 	config := &configuration{
 		EnableIPTables: true,
@@ -789,7 +791,7 @@ func TestLinkContainers(t *testing.T) {
 		t.Fatalf("Failed to program external connectivity: %v", err)
 	}
 
-	out, err := iptables.Raw("-L", DockerChain)
+	out, err := iptable.Raw("-L", DockerChain)
 	for _, pm := range exposedPorts {
 		regex := fmt.Sprintf("%s dpt:%d", pm.Proto.String(), pm.Port)
 		re := regexp.MustCompile(regex)
@@ -815,7 +817,7 @@ func TestLinkContainers(t *testing.T) {
 		t.Fatal("Failed to unlink ep1 and ep2")
 	}
 
-	out, err = iptables.Raw("-L", DockerChain)
+	out, err = iptable.Raw("-L", DockerChain)
 	for _, pm := range exposedPorts {
 		regex := fmt.Sprintf("%s dpt:%d", pm.Proto.String(), pm.Port)
 		re := regexp.MustCompile(regex)
@@ -843,7 +845,7 @@ func TestLinkContainers(t *testing.T) {
 	}
 	err = d.ProgramExternalConnectivity("net1", "ep2", sbOptions)
 	if err != nil {
-		out, err = iptables.Raw("-L", DockerChain)
+		out, err = iptable.Raw("-L", DockerChain)
 		for _, pm := range exposedPorts {
 			regex := fmt.Sprintf("%s dpt:%d", pm.Proto.String(), pm.Port)
 			re := regexp.MustCompile(regex)
@@ -997,18 +999,25 @@ func TestCleanupIptableRules(t *testing.T) {
 		{Name: DockerChain, Table: iptables.Filter},
 		{Name: IsolationChain, Table: iptables.Filter},
 	}
-	if _, _, _, err := setupIPChains(&configuration{EnableIPTables: true}); err != nil {
-		t.Fatalf("Error setting up ip chains: %v", err)
-	}
-	for _, chainInfo := range bridgeChain {
-		if !iptables.ExistChain(chainInfo.Name, chainInfo.Table) {
-			t.Fatalf("iptables chain %s of %s table should have been created", chainInfo.Name, chainInfo.Table)
+
+	ipVersions := []iptables.IPVersion{iptables.IPv4, iptables.IPv6}
+
+	for _, version := range ipVersions {
+		if _, _, _, err := setupIPChains(&configuration{EnableIPTables: true}, version); err != nil {
+			t.Fatalf("Error setting up ip chains for %s: %v", version, err)
 		}
-	}
-	removeIPChains()
-	for _, chainInfo := range bridgeChain {
-		if iptables.ExistChain(chainInfo.Name, chainInfo.Table) {
-			t.Fatalf("iptables chain %s of %s table should have been deleted", chainInfo.Name, chainInfo.Table)
+
+		iptable := iptables.GetIptable(version)
+		for _, chainInfo := range bridgeChain {
+			if !iptable.ExistChain(chainInfo.Name, chainInfo.Table) {
+				t.Fatalf("iptables version %s chain %s of %s table should have been created", version, chainInfo.Name, chainInfo.Table)
+			}
+		}
+		removeIPChains(version)
+		for _, chainInfo := range bridgeChain {
+			if iptable.ExistChain(chainInfo.Name, chainInfo.Table) {
+				t.Fatalf("iptables version %s chain %s of %s table should have been deleted", version, chainInfo.Name, chainInfo.Table)
+			}
 		}
 	}
 }
