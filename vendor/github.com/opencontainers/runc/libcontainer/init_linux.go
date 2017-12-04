@@ -62,6 +62,8 @@ type initConfig struct {
 	ContainerId      string                `json:"containerid"`
 	Rlimits          []configs.Rlimit      `json:"rlimits"`
 	CreateConsole    bool                  `json:"create_console"`
+	ConsoleWidth     uint16                `json:"console_width"`
+	ConsoleHeight    uint16                `json:"console_height"`
 	Rootless         bool                  `json:"rootless"`
 }
 
@@ -171,12 +173,25 @@ func setupConsole(socket *os.File, config *initConfig, mount bool) error {
 	// however, that setupUser (specifically fixStdioPermissions) *will* change
 	// the UID owner of the console to be the user the process will run as (so
 	// they can actually control their console).
-	console, slavePath, err := console.NewPty()
+
+	pty, slavePath, err := console.NewPty()
 	if err != nil {
 		return err
 	}
+
+	if config.ConsoleHeight != 0 && config.ConsoleWidth != 0 {
+		err = pty.Resize(console.WinSize{
+			Height: config.ConsoleHeight,
+			Width:  config.ConsoleWidth,
+		})
+
+		if err != nil {
+			return err
+		}
+	}
+
 	// After we return from here, we don't need the console anymore.
-	defer console.Close()
+	defer pty.Close()
 
 	// Mount the console inside our rootfs.
 	if mount {
@@ -185,7 +200,7 @@ func setupConsole(socket *os.File, config *initConfig, mount bool) error {
 		}
 	}
 	// While we can access console.master, using the API is a good idea.
-	if err := utils.SendFd(socket, console.Name(), console.Fd()); err != nil {
+	if err := utils.SendFd(socket, pty.Name(), pty.Fd()); err != nil {
 		return err
 	}
 	// Now, dup over all the things.
@@ -333,14 +348,6 @@ func fixStdioPermissions(config *initConfig, u *user.ExecUser) error {
 			continue
 		}
 
-		// Skip chown if s.Gid is actually an unmapped gid in the host. While
-		// this is a bit dodgy if it just so happens that the console _is_
-		// owned by overflow_gid, there's no way for us to disambiguate this as
-		// a userspace program.
-		if _, err := config.Config.HostGID(int(s.Gid)); err != nil {
-			continue
-		}
-
 		// We only change the uid owner (as it is possible for the mount to
 		// prefer a different gid, and there's no reason for us to change it).
 		// The reason why we don't just leave the default uid=X mount setup is
@@ -348,6 +355,15 @@ func fixStdioPermissions(config *initConfig, u *user.ExecUser) error {
 		// this code, you couldn't effectively run as a non-root user inside a
 		// container and also have a console set up.
 		if err := unix.Fchown(int(fd), u.Uid, int(s.Gid)); err != nil {
+			// If we've hit an EINVAL then s.Gid isn't mapped in the user
+			// namespace. If we've hit an EPERM then the inode's current owner
+			// is not mapped in our user namespace (in particular,
+			// privileged_wrt_inode_uidgid() has failed). In either case, we
+			// are in a configuration where it's better for us to just not
+			// touch the stdio rather than bail at this point.
+			if err == unix.EINVAL || err == unix.EPERM {
+				continue
+			}
 			return err
 		}
 	}
