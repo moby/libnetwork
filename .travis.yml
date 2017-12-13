@@ -1,0 +1,17 @@
+language: go
+go:
+  - 1.8.x
+
+go_import_path: github.com/docker/libnetwork
+
+# `make ci` uses Docker
+sudo: required
+services:
+  - docker
+
+before_install:
+  - sudo modprobe ip_vs
+
+script:
+  - make build
+  - make check
