@@ -17,7 +17,7 @@ func (d *delegate) NodeMeta(limit int) []byte {
 	return []byte{}
 }
 
-func (nDB *NetworkDB) getNode(nEvent *NodeEvent) *node {
+func (nDB *NetworkDB) getNode(nEvent *NodeEvent) (bool, *node) {
 	nDB.Lock()
 	defer nDB.Unlock()
 
@@ -28,12 +28,13 @@ func (nDB *NetworkDB) getNode(nEvent *NodeEvent) *node {
 	} {
 		if n, ok := nodes[nEvent.NodeName]; ok {
 			if n.ltime >= nEvent.LTime {
-				return nil
+				return false, nil
 			}
-			return n
+			_, active := nDB.nodes[nEvent.NodeName]
+			return active, n
 		}
 	}
-	return nil
+	return false, nil
 }
 
 func (nDB *NetworkDB) checkAndGetNode(nEvent *NodeEvent) *node {
@@ -86,7 +87,7 @@ func (nDB *NetworkDB) handleNodeEvent(nEvent *NodeEvent) bool {
 	// time.
 	nDB.networkClock.Witness(nEvent.LTime)
 
-	n := nDB.getNode(nEvent)
+	active, n := nDB.getNode(nEvent)
 	if n == nil {
 		return false
 	}
@@ -114,10 +115,9 @@ func (nDB *NetworkDB) handleNodeEvent(nEvent *NodeEvent) bool {
 	switch nEvent.Type {
 	case NodeEventTypeJoin:
 		nDB.Lock()
-		_, found := nDB.nodes[n.Name]
 		nDB.nodes[n.Name] = n
 		nDB.Unlock()
-		if !found {
+		if !active {
 			logrus.Infof("Node join event for %s/%s", n.Name, n.Addr)
 		}
 		return true
@@ -141,6 +141,12 @@ func (nDB *NetworkDB) handleNetworkEvent(nEvent *NetworkEvent) bool {
 	defer nDB.Unlock()
 
 	if nEvent.NodeName == nDB.config.NodeName {
+		return false
+	}
+
+	// If the node is not known from memberlist we cannot process save any state of it else if it actually
+	// dies we won't receive any notification and we will remain stuck with it
+	if _, ok := nDB.nodes[nEvent.NodeName]; !ok {
 		return false
 	}
 
@@ -490,7 +496,7 @@ func (d *delegate) MergeRemoteState(buf []byte, isJoin bool) {
 	var gMsg GossipMessage
 	err := proto.Unmarshal(buf, &gMsg)
 	if err != nil {
-		logrus.Errorf("Error unmarshalling push pull messsage: %v", err)
+		logrus.Errorf("Error unmarshalling push pull message: %v", err)
 		return
 	}
 
