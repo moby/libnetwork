@@ -382,7 +382,11 @@ func (a *Allocator) getPredefineds(as string) []*net.IPNet {
 }
 
 func (a *Allocator) getPredefinedPool(as string, ipV6 bool) (*net.IPNet, error) {
-	var v ipVersion
+	var (
+		v         ipVersion
+		supported bool
+	)
+
 	v = v4
 	if ipV6 {
 		v = v6
@@ -401,6 +405,7 @@ func (a *Allocator) getPredefinedPool(as string, ipV6 bool) (*net.IPNet, error) 
 		if v != getAddressVersion(nw.IP) {
 			continue
 		}
+		supported = true
 		aSpace.Lock()
 		_, ok := aSpace.subnets[SubnetKey{AddressSpace: as, Subnet: nw.String()}]
 		aSpace.Unlock()
@@ -411,6 +416,10 @@ func (a *Allocator) getPredefinedPool(as string, ipV6 bool) (*net.IPNet, error) 
 		if !aSpace.contains(as, nw) {
 			return nw, nil
 		}
+	}
+
+	if !supported {
+		return nil, ipamapi.ErrNotSupported
 	}
 
 	return nil, types.NotFoundErrorf("could not find an available, non-overlapping IPv%d address pool among the defaults to assign to the network", v)
