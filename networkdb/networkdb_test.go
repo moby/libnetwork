@@ -104,6 +104,9 @@ func (db *NetworkDB) verifyNetworkExistence(t *testing.T, node string, id string
 		}
 
 		time.Sleep(50 * time.Millisecond)
+		if i == 79 {
+			logrus.Errorf("Network existence failed for node %s nnok:%t nn:%v", node, nnok, nn)
+		}
 	}
 
 	assert.Fail(t, "Network existence verification failed")
@@ -128,6 +131,9 @@ func (db *NetworkDB) verifyEntryExistence(t *testing.T, tname, nid, key, value s
 		}
 
 		time.Sleep(50 * time.Millisecond)
+		if i == 79 {
+			logrus.Errorf("Entry existence failed for node %s err:%t entry:%v", db.config.NodeName, err, entry)
+		}
 	}
 
 	assert.Fail(t, fmt.Sprintf("Entry existence verification test failed for %v(%v)", db.config.Hostname, db.config.NodeID))
