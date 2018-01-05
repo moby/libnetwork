@@ -154,18 +154,14 @@ func (nDB *NetworkDB) handleTableEvent(tEvent *TableEvent) bool {
 	// Ignore the table events for networks that are in the process of going away
 	nDB.RLock()
 	networks := nDB.networks[nDB.config.NodeID]
-	network, ok := networks[tEvent.NetworkID]
+	network, okNetwork := networks[tEvent.NetworkID]
 	// Check if the owner of the event is still part of the network
-	nodes := nDB.networkNodes[tEvent.NetworkID]
 	var nodePresent bool
-	for _, node := range nodes {
-		if node == tEvent.NodeName {
-			nodePresent = true
-			break
-		}
+	if nodes, ok := nDB.networkNodes[tEvent.NetworkID]; ok {
+		_, nodePresent = nodes[tEvent.NodeName]
 	}
 	nDB.RUnlock()
-	if !ok || network.leaving || !nodePresent {
+	if !okNetwork || network.leaving || !nodePresent {
 		// I'm out of the network OR the event owner is not anymore part of the network so do not propagate
 		return false
 	}

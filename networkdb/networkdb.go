@@ -64,8 +64,8 @@ type NetworkDB struct {
 	networks map[string]map[string]*network
 
 	// A map of nodes which are participating in a given
-	// network. The key is a network ID.
-	networkNodes map[string][]string
+	// network. The first key is a network ID. The second key is
+	networkNodes map[string]map[string]struct{}
 
 	// A table of ack channels for every node from which we are
 	// waiting for an ack.
@@ -246,7 +246,7 @@ func New(c *Config) (*NetworkDB, error) {
 		nodes:          make(map[string]*node),
 		failedNodes:    make(map[string]*node),
 		leftNodes:      make(map[string]*node),
-		networkNodes:   make(map[string][]string),
+		networkNodes:   make(map[string]map[string]struct{}),
 		bulkSyncAckTbl: make(map[string]chan struct{}),
 		broadcaster:    events.NewBroadcaster(),
 	}
@@ -304,7 +304,7 @@ func (nDB *NetworkDB) Peers(nid string) []PeerInfo {
 	nDB.RLock()
 	defer nDB.RUnlock()
 	peers := make([]PeerInfo, 0, len(nDB.networkNodes[nid]))
-	for _, nodeName := range nDB.networkNodes[nid] {
+	for nodeName := range nDB.networkNodes[nid] {
 		if node, ok := nDB.nodes[nodeName]; ok {
 			peers = append(peers, PeerInfo{
 				Name: node.Name,
@@ -452,17 +452,12 @@ func (nDB *NetworkDB) DeleteEntry(tname, nid, key string) error {
 }
 
 func (nDB *NetworkDB) deleteNodeFromNetworks(deletedNode string) {
-	for nid, nodes := range nDB.networkNodes {
-		updatedNodes := make([]string, 0, len(nodes))
-		for _, node := range nodes {
-			if node == deletedNode {
-				continue
-			}
-
-			updatedNodes = append(updatedNodes, node)
-		}
-
-		nDB.networkNodes[nid] = updatedNodes
+	networks, ok := nDB.networks[deletedNode]
+	if !ok {
+		return
+	}
+	for nid := range networks {
+		nDB.deleteNetworkNode(nid, deletedNode)
 	}
 
 	delete(nDB.networks, deletedNode)
@@ -615,7 +610,10 @@ func (nDB *NetworkDB) JoinNetwork(nid string) error {
 		RetransmitMult: 4,
 	}
 	nDB.addNetworkNode(nid, nDB.config.NodeID)
-	networkNodes := nDB.networkNodes[nid]
+	networkNodes := make([]string, 0, len(nDB.networkNodes[nid]))
+	for k := range nDB.networkNodes[nid] {
+		networkNodes = append(networkNodes, k)
+	}
 	nDB.Unlock()
 
 	if err := nDB.sendNetworkEvent(nid, NetworkEventTypeJoin, ltime); err != nil {
@@ -623,7 +621,7 @@ func (nDB *NetworkDB) JoinNetwork(nid string) error {
 	}
 
 	logrus.Debugf("%v(%v): joined network %s", nDB.config.Hostname, nDB.config.NodeID, nid)
-	if _, err := nDB.bulkSync(networkNodes, true); err != nil {
+	if _, err := nDB.bulkSync(networkNodes); err != nil {
 		logrus.Errorf("Error bulk syncing while joining network %s: %v", nid, err)
 	}
 
@@ -672,32 +670,25 @@ func (nDB *NetworkDB) LeaveNetwork(nid string) error {
 // in the passed network only if it is not already present. Caller
 // should hold the NetworkDB lock while calling this
 func (nDB *NetworkDB) addNetworkNode(nid string, nodeName string) {
-	nodes := nDB.networkNodes[nid]
-	for _, node := range nodes {
-		if node == nodeName {
-			return
-		}
+	nodesMap, ok := nDB.networkNodes[nid]
+	if !ok {
+		nodesMap = make(map[string]struct{})
+		nDB.networkNodes[nid] = nodesMap
 	}
-
-	nDB.networkNodes[nid] = append(nDB.networkNodes[nid], nodeName)
+	if _, ok := nodesMap[nodeName]; !ok {
+		nodesMap[nodeName] = struct{}{}
+	}
 }
 
 // Deletes the node from the list of nodes which participate in the
 // passed network. Caller should hold the NetworkDB lock while calling
 // this
 func (nDB *NetworkDB) deleteNetworkNode(nid string, nodeName string) {
-	nodes, ok := nDB.networkNodes[nid]
-	if !ok || len(nodes) == 0 {
+	nodesNetwork, ok := nDB.networkNodes[nid]
+	if !ok {
 		return
 	}
-	newNodes := make([]string, 0, len(nodes)-1)
-	for _, name := range nodes {
-		if name == nodeName {
-			continue
-		}
-		newNodes = append(newNodes, name)
-	}
-	nDB.networkNodes[nid] = newNodes
+	delete(nodesNetwork, nodeName)
 }
 
 // findCommonnetworks find the networks that both this node and the
@@ -706,7 +697,8 @@ func (nDB *NetworkDB) findCommonNetworks(nodeName string) []string {
 	nDB.RLock()
 	defer nDB.RUnlock()
 
-	var networks []string
+	// create a slice with max capacity, to avoid multiple reallocation
+	networks := make([]string, 0, len(nDB.networks[nDB.config.NodeID]))
 	for nid := range nDB.networks[nDB.config.NodeID] {
 		if n, ok := nDB.networks[nodeName][nid]; ok {
 			if !n.leaving {

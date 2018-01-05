@@ -2,11 +2,9 @@ package networkdb
 
 import (
 	"bytes"
-	"crypto/rand"
 	"encoding/hex"
 	"fmt"
 	"log"
-	"math/big"
 	rnd "math/rand"
 	"net"
 	"strings"
@@ -283,7 +281,7 @@ func (nDB *NetworkDB) reconnectNode() {
 	}
 	nDB.RUnlock()
 
-	node := nodes[randomOffset(len(nodes))]
+	node := nodes[rnd.Int31()%int32(len(nodes))]
 	addr := net.UDPAddr{IP: node.Addr, Port: int(node.Port)}
 
 	if _, err := nDB.memberlist.Join([]string{addr.String()}); err != nil {
@@ -295,7 +293,7 @@ func (nDB *NetworkDB) reconnectNode() {
 	}
 
 	logrus.Debugf("Initiating bulk sync with node %s after reconnect", node.Name)
-	nDB.bulkSync([]string{node.Name}, true)
+	nDB.bulkSync([]string{node.Name})
 }
 
 // For timing the entry deletion in the repaer APIs that doesn't use monotonic clock
@@ -378,7 +376,7 @@ func (nDB *NetworkDB) gossip() {
 	nDB.RLock()
 	thisNodeNetworks := nDB.networks[nDB.config.NodeID]
 	for nid := range thisNodeNetworks {
-		networkNodes[nid] = nDB.networkNodes[nid]
+		networkNodes[nid] = nDB.mRandomNodes(3, nDB.networkNodes[nid])
 	}
 	printStats := time.Since(nDB.lastStatsTimestamp) >= nDB.config.StatsPrintPeriod
 	printHealth := time.Since(nDB.lastHealthTimestamp) >= nDB.config.HealthPrintPeriod
@@ -393,7 +391,6 @@ func (nDB *NetworkDB) gossip() {
 	}
 
 	for nid, nodes := range networkNodes {
-		mNodes := nDB.mRandomNodes(3, nodes)
 		bytesAvail := nDB.config.PacketBufferSize - compoundHeaderOverhead
 
 		nDB.RLock()
@@ -432,7 +429,7 @@ func (nDB *NetworkDB) gossip() {
 		// Create a compound message
 		compound := makeCompoundMessage(msgs)
 
-		for _, node := range mNodes {
+		for _, node := range nodes {
 			nDB.RLock()
 			mnode := nDB.nodes[node]
 			nDB.RUnlock()
@@ -473,7 +470,7 @@ func (nDB *NetworkDB) bulkSyncTables() {
 		networks = networks[1:]
 
 		nDB.RLock()
-		nodes := nDB.networkNodes[nid]
+		nodes := nDB.mRandomNodes(2, nDB.networkNodes[nid])
 		nDB.RUnlock()
 
 		// No peer nodes on this network. Move on.
@@ -481,7 +478,7 @@ func (nDB *NetworkDB) bulkSyncTables() {
 			continue
 		}
 
-		completed, err := nDB.bulkSync(nodes, false)
+		completed, err := nDB.bulkSync(nodes)
 		if err != nil {
 			logrus.Errorf("periodic bulk sync failure for network %s: %v", nid, err)
 			continue
@@ -508,13 +505,7 @@ func (nDB *NetworkDB) bulkSyncTables() {
 	}
 }
 
-func (nDB *NetworkDB) bulkSync(nodes []string, all bool) ([]string, error) {
-	if !all {
-		// Get 2 random nodes. 2nd node will be tried if the bulk sync to
-		// 1st node fails.
-		nodes = nDB.mRandomNodes(2, nodes)
-	}
-
+func (nDB *NetworkDB) bulkSync(nodes []string) ([]string, error) {
 	if len(nodes) == 0 {
 		return nil, nil
 	}
@@ -527,12 +518,7 @@ func (nDB *NetworkDB) bulkSync(nodes []string, all bool) ([]string, error) {
 		}
 		logrus.Debugf("%v(%v): Initiating bulk sync with node %v", nDB.config.Hostname, nDB.config.NodeID, node)
 		networks = nDB.findCommonNetworks(node)
-		err = nDB.bulkSyncNode(networks, node, true)
-		// if its periodic bulksync stop after the first successful sync
-		if !all && err == nil {
-			break
-		}
-		if err != nil {
+		if err = nDB.bulkSyncNode(networks, node, true); err != nil {
 			err = fmt.Errorf("bulk sync to node %s failed: %v", node, err)
 			logrus.Warn(err.Error())
 		}
@@ -649,48 +635,22 @@ func (nDB *NetworkDB) bulkSyncNode(networks []string, node string, unsolicited b
 	return nil
 }
 
-// Returns a random offset between 0 and n
-func randomOffset(n int) int {
-	if n == 0 {
-		return 0
-	}
-
-	val, err := rand.Int(rand.Reader, big.NewInt(int64(n)))
-	if err != nil {
-		logrus.Errorf("Failed to get a random offset: %v", err)
-		return 0
-	}
-
-	return int(val.Int64())
-}
-
 // mRandomNodes is used to select up to m random nodes. It is possible
 // that less than m nodes are returned.
-func (nDB *NetworkDB) mRandomNodes(m int, nodes []string) []string {
-	n := len(nodes)
+func (nDB *NetworkDB) mRandomNodes(m int, nodes map[string]struct{}) []string {
 	mNodes := make([]string, 0, m)
-OUTER:
-	// Probe up to 3*n times, with large n this is not necessary
-	// since k << n, but with small n we want search to be
-	// exhaustive
-	for i := 0; i < 3*n && len(mNodes) < m; i++ {
-		// Get random node
-		idx := randomOffset(n)
-		node := nodes[idx]
 
+	var i int
+	for node := range nodes {
 		if node == nDB.config.NodeID {
 			continue
 		}
 
-		// Check if we have this node already
-		for j := 0; j < len(mNodes); j++ {
-			if node == mNodes[j] {
-				continue OUTER
-			}
-		}
-
-		// Append the node
 		mNodes = append(mNodes, node)
+		i++
+		if i == m {
+			break
+		}
 	}
 
 	return mNodes
