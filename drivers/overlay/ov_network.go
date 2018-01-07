@@ -774,13 +774,13 @@ func (n *network) watchMiss(nlSock *nl.NetlinkSocket) {
 
 			if n.driver.isSerfAlive() {
 				logrus.Debugf("miss notification: dest IP %v, dest MAC %v", ip, mac)
-				mac, IPmask, vtep, err := n.driver.resolvePeer(n.id, ip)
+				mac, _, vtep, err := n.driver.resolvePeer(n.id, ip)
 				if err != nil {
 					logrus.Errorf("could not resolve peer %q: %v", ip, err)
 					continue
 				}
-				n.driver.peerAdd(n.id, "dummy", ip, IPmask, mac, vtep, l2Miss, l3Miss, false)
-			} else if l3Miss && time.Since(t) > time.Second {
+				n.driver.peerAdd(n.id, "dummy", ip, mac, vtep, l2Miss, l3Miss, false)
+			} else if l3Miss && time.Since(t) >= time.Second {
 				// All the local peers will trigger a miss notification but this one is expected and the local container will reply
 				// autonomously to the ARP request
 				// In case the gc_thresh3 values is low kernel might reject new entries during peerAdd. This will trigger the following
@@ -1079,15 +1079,9 @@ func (n *network) contains(ip net.IP) bool {
 }
 
 // getSubnetforIP returns the subnet to which the given IP belongs
-func (n *network) getSubnetforIP(ip *net.IPNet) *subnet {
+func (n *network) getSubnetforIP(ip net.IP) *subnet {
 	for _, s := range n.subnets {
-		// first check if the mask lengths are the same
-		i, _ := s.subnetIP.Mask.Size()
-		j, _ := ip.Mask.Size()
-		if i != j {
-			continue
-		}
-		if s.subnetIP.Contains(ip.IP) {
+		if s.subnetIP.Contains(ip) {
 			return s
 		}
 	}

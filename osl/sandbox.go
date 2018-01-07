@@ -48,7 +48,7 @@ type Sandbox interface {
 	AddNeighbor(dstIP net.IP, dstMac net.HardwareAddr, force bool, option ...NeighOption) error
 
 	// DeleteNeighbor deletes neighbor entry from the sandbox.
-	DeleteNeighbor(dstIP net.IP, dstMac net.HardwareAddr, osDelete bool) error
+	DeleteNeighbor(dstIP net.IP, dstMac net.HardwareAddr) error
 
 	// Returns an interface with methods to set neighbor options.
 	NeighborOptions() NeighborOptionSetter
