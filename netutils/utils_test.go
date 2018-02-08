@@ -251,7 +251,7 @@ func TestNetworkRequest(t *testing.T) {
 	// Add iface and ssert returned address on request
 	createInterface(t, "test", "172.17.42.1/16")
 
-	_, exp, err := net.ParseCIDR("172.18.0.0/16")
+	_, exp, err := net.ParseCIDR("9.0.0.0/16")
 	if err != nil {
 		t.Fatal(err)
 	}
