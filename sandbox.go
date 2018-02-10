@@ -682,11 +682,24 @@ func (sb *sandbox) EnableService() (err error) {
 		}
 	}()
 	for _, ep := range sb.getConnectedEndpoints() {
+		n, err := ep.getNetworkFromStore()
+		if err != nil {
+			return fmt.Errorf("failed to enable service on sandbox:%s,endpoint:%s,err: %v", sb.ID(), ep.Name(), err)
+		}
+
+		ep, err = n.getEndpointFromStore(ep.id)
+		if err != nil {
+			return fmt.Errorf("failed to get endpoint %s from store : %v", ep.Name(), err)
+		}
 		if !ep.isServiceEnabled() {
 			if err := ep.addServiceInfoToCluster(sb); err != nil {
 				return fmt.Errorf("could not update state for endpoint %s into cluster: %v", ep.Name(), err)
 			}
 			ep.enableService()
+
+			if err := n.getController().updateToStore(ep); err != nil {
+				return fmt.Errorf("failed to update store for endpoint %s", ep.Name())
+			}
 		}
 	}
 	logrus.Debugf("EnableService %s DONE", sb.containerID)
@@ -703,11 +716,27 @@ func (sb *sandbox) DisableService() (err error) {
 	}()
 	for _, ep := range sb.getConnectedEndpoints() {
 		if ep.isServiceEnabled() {
+			n, err := ep.getNetworkFromStore()
+			if err != nil {
+				logrus.Warnf("failed tp disable service on sanbox:%s,endpoint:%s,err: %v", sb.ID(), ep.Name(), err)
+				failedEps = append(failedEps, ep.Name())
+				continue
+			}
+			ep, err = n.getEndpointFromStore(ep.id)
+			if err != nil {
+				logrus.Warnf("failed to get endpoint from store : %v", err)
+				continue
+			}
 			if err := ep.deleteServiceInfoFromCluster(sb, "DisableService"); err != nil {
 				failedEps = append(failedEps, ep.Name())
 				logrus.Warnf("failed update state for endpoint %s into cluster: %v", ep.Name(), err)
 			}
 			ep.disableService()
+
+			if err := n.getController().updateToStore(ep); err != nil {
+				failedEps = append(failedEps, ep.Name())
+				logrus.Warnf("failed to update the store on disable service for ep:%s err: %v", ep.ID(), err)
+			}
 		}
 	}
 	logrus.Debugf("DisableService %s DONE", sb.containerID)
