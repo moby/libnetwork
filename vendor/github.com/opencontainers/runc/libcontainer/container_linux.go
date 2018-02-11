@@ -40,6 +40,7 @@ type linuxContainer struct {
 	config               *configs.Config
 	cgroupManager        cgroups.Manager
 	intelRdtManager      intelrdt.Manager
+	initPath             string
 	initArgs             []string
 	initProcess          parentProcess
 	initProcessStartTime uint64
@@ -289,7 +290,7 @@ func (c *linuxContainer) start(process *Process, isInit bool) error {
 	}
 	if err := parent.start(); err != nil {
 		// terminate the process to ensure that it properly is reaped.
-		if err := parent.terminate(); err != nil {
+		if err := ignoreTerminateErrors(parent.terminate()); err != nil {
 			logrus.Warn(err)
 		}
 		return newSystemErrorWithCause(err, "starting container process")
@@ -315,7 +316,7 @@ func (c *linuxContainer) start(process *Process, isInit bool) error {
 			}
 			for i, hook := range c.config.Hooks.Poststart {
 				if err := hook.Run(s); err != nil {
-					if err := parent.terminate(); err != nil {
+					if err := ignoreTerminateErrors(parent.terminate()); err != nil {
 						logrus.Warn(err)
 					}
 					return newSystemErrorWithCausef(err, "running poststart hook %d", i)
@@ -413,7 +414,8 @@ func (c *linuxContainer) newParentProcess(p *Process, doInit bool) (parentProces
 }
 
 func (c *linuxContainer) commandTemplate(p *Process, childPipe *os.File) (*exec.Cmd, error) {
-	cmd := exec.Command(c.initArgs[0], c.initArgs[1:]...)
+	cmd := exec.Command(c.initPath, c.initArgs[1:]...)
+	cmd.Args[0] = c.initArgs[0]
 	cmd.Stdin = p.Stdin
 	cmd.Stdout = p.Stdout
 	cmd.Stderr = p.Stderr
@@ -522,6 +524,8 @@ func (c *linuxContainer) newInitConfig(process *Process) *initConfig {
 		cfg.Rlimits = process.Rlimits
 	}
 	cfg.CreateConsole = process.ConsoleSocket != nil
+	cfg.ConsoleWidth = process.ConsoleWidth
+	cfg.ConsoleHeight = process.ConsoleHeight
 	return cfg
 }
 
@@ -1771,4 +1775,19 @@ func (c *linuxContainer) bootstrapData(cloneFlags uintptr, nsMaps map[configs.Na
 	})
 
 	return bytes.NewReader(r.Serialize()), nil
+}
+
+// ignoreTerminateErrors returns nil if the given err matches an error known
+// to indicate that the terminate occurred successfully or err was nil, otherwise
+// err is returned unaltered.
+func ignoreTerminateErrors(err error) error {
+	if err == nil {
+		return nil
+	}
+	s := err.Error()
+	switch {
+	case strings.Contains(s, "process already finished"), strings.Contains(s, "Wait was already called"):
+		return nil
+	}
+	return err
 }
