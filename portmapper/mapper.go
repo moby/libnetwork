@@ -181,9 +181,14 @@ func (pm *PortMapper) MapRange(container net.Addr, hostIP net.IP, hostPortStart,
 
 	cleanup := func() error {
 		// need to undo the iptables rules before we return
-		m.userlandProxy.Stop()
+		if userlanderr := m.userlandProxy.Stop(); userlanderr != nil {
+			logrus.Errorf("Error on userlandProxy delete: %s", userlanderr)
+		}
 		if hostIP.To4() != nil {
-			pm.forward(iptables.Delete, m.proto, hostIP, allocatedHostPort, containerIP.String(), containerPort)
+			if forwarderr := pm.forward(iptables.Delete, m.proto, hostIP, allocatedHostPort, containerIP.String(), containerPort); forwarderr != nil {
+				logrus.Errorf("Error on iptables delete: %s", forwarderr)
+			}
+
 			if err := pm.Allocator.ReleasePort(hostIP, m.proto, allocatedHostPort); err != nil {
 				return err
 			}
@@ -215,7 +220,9 @@ func (pm *PortMapper) Unmap(host net.Addr) error {
 	}
 
 	if data.userlandProxy != nil {
-		data.userlandProxy.Stop()
+		if err := data.userlandProxy.Stop(); err != nil {
+			logrus.Errorf("Error on userlandProxy delete: %s", err)
+		}
 	}
 
 	delete(pm.currentMappings, key)
