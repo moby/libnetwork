@@ -344,19 +344,16 @@ func (h *Handle) set(ordinal, start, end uint64, any bool, release bool, serial 
 			return ret, err
 		}
 
-		// Create a private copy of h and work on it
-		nh := h.getCopy()
-		h.Unlock()
-
-		nh.head = pushReservation(bytePos, bitPos, nh.head, release)
+		h.head = pushReservation(bytePos, bitPos, h.head, release)
 		if release {
-			nh.unselected++
+			h.unselected++
 		} else {
-			nh.unselected--
+			h.unselected--
 		}
 
-		// Attempt to write private copy to store
-		if err := nh.writeToStore(); err != nil {
+		h.Unlock()
+
+		if err := h.writeToStore(); err != nil {
 			if _, ok := err.(types.RetryError); !ok {
 				return ret, fmt.Errorf("internal failure while setting the bit: %v", err)
 			}
@@ -364,13 +361,6 @@ func (h *Handle) set(ordinal, start, end uint64, any bool, release bool, serial 
 			continue
 		}
 
-		// Previous atomic push was succesfull. Save private copy to local copy
-		h.Lock()
-		defer h.Unlock()
-		h.unselected = nh.unselected
-		h.head = nh.head
-		h.dbExists = nh.dbExists
-		h.dbIndex = nh.dbIndex
 		return ret, nil
 	}
 }
