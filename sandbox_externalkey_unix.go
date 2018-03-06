@@ -133,20 +133,20 @@ func (c *controller) acceptClientConnections(sock string, l net.Listener) {
 			logrus.Errorf("Error accepting connection %v", err)
 			continue
 		}
-		go func() {
-			defer conn.Close()
+		go func(connection net.Conn) {
+			defer connection.Close()
 
-			err := c.processExternalKey(conn)
+			err := c.processExternalKey(connection)
 			ret := success
 			if err != nil {
 				ret = err.Error()
 			}
 
-			_, err = conn.Write([]byte(ret))
+			_, err = connection.Write([]byte(ret))
 			if err != nil {
 				logrus.Errorf("Error returning to the client %v", err)
 			}
-		}()
+		}(conn)
 	}
 }
 
