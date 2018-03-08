@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"net"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -30,7 +31,10 @@ func init() {
 }
 
 // OptionBoltdbWithRandomDBFile function returns a random dir for local store backend
-func randomLocalStore() (datastore.DataStore, error) {
+func randomLocalStore(needStore bool) (datastore.DataStore, error) {
+	if !needStore {
+		return nil, nil
+	}
 	tmp, err := ioutil.TempFile("", "libnetwork-")
 	if err != nil {
 		return nil, fmt.Errorf("Error creating temp file: %v", err)
@@ -50,17 +54,13 @@ func randomLocalStore() (datastore.DataStore, error) {
 	})
 }
 
-func getAllocator() (*Allocator, error) {
+func getAllocator(store bool) (*Allocator, error) {
 	ipamutils.InitNetworks()
-	ds, err := randomLocalStore()
+	ds, err := randomLocalStore(store)
 	if err != nil {
 		return nil, err
 	}
-	a, err := NewAllocator(ds, nil)
-	if err != nil {
-		return nil, err
-	}
-	return a, nil
+	return NewAllocator(ds, nil)
 }
 
 func TestInt2IP2IntConversion(t *testing.T) {
@@ -170,7 +170,7 @@ func TestPoolDataMarshal(t *testing.T) {
 }
 
 func TestSubnetsMarshal(t *testing.T) {
-	a, err := getAllocator()
+	a, err := getAllocator(true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,7 +217,7 @@ func TestSubnetsMarshal(t *testing.T) {
 }
 
 func TestAddSubnets(t *testing.T) {
-	a, err := getAllocator()
+	a, err := getAllocator(true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -286,7 +286,7 @@ func TestAddSubnets(t *testing.T) {
 func TestAddReleasePoolID(t *testing.T) {
 	var k0, k1, k2 SubnetKey
 
-	a, err := getAllocator()
+	a, err := getAllocator(true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -449,7 +449,7 @@ func TestAddReleasePoolID(t *testing.T) {
 }
 
 func TestPredefinedPool(t *testing.T) {
-	a, err := getAllocator()
+	a, err := getAllocator(true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -477,7 +477,7 @@ func TestPredefinedPool(t *testing.T) {
 }
 
 func TestRemoveSubnet(t *testing.T) {
-	a, err := getAllocator()
+	a, err := getAllocator(true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -520,7 +520,7 @@ func TestRemoveSubnet(t *testing.T) {
 }
 
 func TestGetSameAddress(t *testing.T) {
-	a, err := getAllocator()
+	a, err := getAllocator(true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -550,7 +550,7 @@ func TestGetSameAddress(t *testing.T) {
 }
 
 func TestGetAddressSubPoolEqualPool(t *testing.T) {
-	a, err := getAllocator()
+	a, err := getAllocator(true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -567,7 +567,7 @@ func TestGetAddressSubPoolEqualPool(t *testing.T) {
 }
 
 func TestRequestReleaseAddressFromSubPool(t *testing.T) {
-	a, err := getAllocator()
+	a, err := getAllocator(true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -698,8 +698,9 @@ func TestRequestReleaseAddressFromSubPool(t *testing.T) {
 
 func TestSerializeRequestReleaseAddressFromSubPool(t *testing.T) {
 	opts := map[string]string{
-		ipamapi.AllocSerialPrefix: "true"}
-	a, err := getAllocator()
+		ipamapi.AllocSerialPrefix: "true",
+	}
+	a, err := getAllocator(false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -849,7 +850,7 @@ func TestRequestSyntaxCheck(t *testing.T) {
 		err     error
 	)
 
-	a, err := getAllocator()
+	a, err := getAllocator(true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -951,7 +952,7 @@ func TestRelease(t *testing.T) {
 		subnet = "192.168.0.0/23"
 	)
 
-	a, err := getAllocator()
+	a, err := getAllocator(true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1058,7 +1059,7 @@ func assertNRequests(t *testing.T, subnet string, numReq int, lastExpectedIP str
 	)
 
 	lastIP := net.ParseIP(lastExpectedIP)
-	a, err := getAllocator()
+	a, err := getAllocator(true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1089,24 +1090,24 @@ func benchmarkRequest(b *testing.B, a *Allocator, subnet string) {
 }
 
 func benchMarkRequest(subnet string, b *testing.B) {
-	a, _ := getAllocator()
+	a, _ := getAllocator(true)
 	for n := 0; n < b.N; n++ {
 		benchmarkRequest(b, a, subnet)
 	}
 }
 
 func BenchmarkRequest_24(b *testing.B) {
-	a, _ := getAllocator()
+	a, _ := getAllocator(true)
 	benchmarkRequest(b, a, "10.0.0.0/24")
 }
 
 func BenchmarkRequest_16(b *testing.B) {
-	a, _ := getAllocator()
+	a, _ := getAllocator(true)
 	benchmarkRequest(b, a, "10.0.0.0/16")
 }
 
 func BenchmarkRequest_8(b *testing.B) {
-	a, _ := getAllocator()
+	a, _ := getAllocator(true)
 	benchmarkRequest(b, a, "10.0.0.0/8")
 }
 
@@ -1116,7 +1117,7 @@ func TestAllocateRandomDeallocate(t *testing.T) {
 }
 
 func testAllocateRandomDeallocate(t *testing.T, pool, subPool string, num int) {
-	ds, err := randomLocalStore()
+	ds, err := randomLocalStore(true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1185,7 +1186,7 @@ func testAllocateRandomDeallocate(t *testing.T, pool, subPool string, num int) {
 
 func TestRetrieveFromStore(t *testing.T) {
 	num := 200
-	ds, err := randomLocalStore()
+	ds, err := randomLocalStore(true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1320,7 +1321,7 @@ func runParallelTests(t *testing.T, instance int) {
 	// The first instance creates the allocator, gives the start
 	// and finally checks the pools each instance was assigned
 	if instance == first {
-		allocator, err = getAllocator()
+		allocator, err = getAllocator(true)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1359,6 +1360,71 @@ func runParallelTests(t *testing.T, instance int) {
 					t.Fatalf("Instance %d and %d were given the same predefined pool: %v", i, j, pools)
 				}
 			}
+		}
+	}
+}
+
+func TestRequestReleaseAddressDuplicate(t *testing.T) {
+	a, err := getAllocator(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	type IP struct {
+		ip  *net.IPNet
+		ref int
+	}
+	ips := []IP{}
+	allocatedIPs := []*net.IPNet{}
+	a.addrSpaces["rosso"] = &addrSpace{
+		id:      dsConfigKey + "/" + "rosso",
+		ds:      a.addrSpaces[localAddressSpace].ds,
+		alloc:   a.addrSpaces[localAddressSpace].alloc,
+		scope:   a.addrSpaces[localAddressSpace].scope,
+		subnets: map[SubnetKey]*PoolData{},
+	}
+	var wg sync.WaitGroup
+	opts := map[string]string{
+		ipamapi.AllocSerialPrefix: "true",
+	}
+	var l sync.Mutex
+
+	poolID, _, _, err := a.RequestPool("rosso", "198.168.0.0/23", "", nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for err == nil {
+		var c *net.IPNet
+		if c, _, err = a.RequestAddress(poolID, nil, opts); err == nil {
+			l.Lock()
+			ips = append(ips, IP{c, 1})
+			l.Unlock()
+			allocatedIPs = append(allocatedIPs, c)
+			if len(allocatedIPs) > 500 {
+				i := rand.Intn(len(allocatedIPs) - 1)
+				wg.Add(1)
+				go func(ip *net.IPNet) {
+					if err = a.ReleaseAddress(poolID, ip.IP); err != nil {
+						t.Fatal(err)
+					}
+					l.Lock()
+					ips = append(ips, IP{ip, -1})
+					l.Unlock()
+					wg.Done()
+				}(allocatedIPs[i])
+				allocatedIPs = append(allocatedIPs[:i], allocatedIPs[i+1:]...)
+			}
+		}
+	}
+	wg.Wait()
+	refMap := make(map[string]int)
+	for _, ip := range ips {
+		refMap[ip.ip.String()] = refMap[ip.ip.String()] + ip.ref
+		if refMap[ip.ip.String()] < 0 {
+			t.Fatalf("IP %s was previously released", ip.ip.String())
+		}
+		if refMap[ip.ip.String()] > 1 {
+			t.Fatalf("IP %s was previously allocated", ip.ip.String())
 		}
 	}
 }
