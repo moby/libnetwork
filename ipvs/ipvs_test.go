@@ -4,7 +4,6 @@ package ipvs
 
 import (
 	"net"
-	"syscall"
 	"testing"
 
 	"github.com/docker/libnetwork/testutils"
@@ -12,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netlink/nl"
+	"golang.org/x/sys/unix"
 )
 
 var (
@@ -142,12 +142,12 @@ func TestService(t *testing.T) {
 			case "FWM":
 				s.FWMark = 1234
 			case "TCP":
-				s.Protocol = syscall.IPPROTO_TCP
+				s.Protocol = unix.IPPROTO_TCP
 				s.Port = 80
 				s.Address = net.ParseIP("1.2.3.4")
 				s.Netmask = 0xFFFFFFFF
 			case "UDP":
-				s.Protocol = syscall.IPPROTO_UDP
+				s.Protocol = unix.IPPROTO_UDP
 				s.Port = 53
 				s.Address = net.ParseIP("2.3.4.5")
 			}
@@ -182,7 +182,7 @@ func TestService(t *testing.T) {
 		{
 			AddressFamily: nl.FAMILY_V4,
 			SchedName:     RoundRobin,
-			Protocol:      syscall.IPPROTO_TCP,
+			Protocol:      unix.IPPROTO_TCP,
 			Port:          80,
 			Address:       net.ParseIP("10.20.30.40"),
 			Netmask:       0xFFFFFFFF,
@@ -190,7 +190,7 @@ func TestService(t *testing.T) {
 		{
 			AddressFamily: nl.FAMILY_V4,
 			SchedName:     LeastConnection,
-			Protocol:      syscall.IPPROTO_UDP,
+			Protocol:      unix.IPPROTO_UDP,
 			Port:          8080,
 			Address:       net.ParseIP("10.20.30.41"),
 			Netmask:       0xFFFFFFFF,
@@ -260,12 +260,12 @@ func TestDestination(t *testing.T) {
 		case "FWM":
 			s.FWMark = 1234
 		case "TCP":
-			s.Protocol = syscall.IPPROTO_TCP
+			s.Protocol = unix.IPPROTO_TCP
 			s.Port = 80
 			s.Address = net.ParseIP("1.2.3.4")
 			s.Netmask = 0xFFFFFFFF
 		case "UDP":
-			s.Protocol = syscall.IPPROTO_UDP
+			s.Protocol = unix.IPPROTO_UDP
 			s.Port = 53
 			s.Address = net.ParseIP("2.3.4.5")
 		}
