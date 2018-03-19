@@ -6,12 +6,12 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
+	"golang.org/x/sys/unix"
 )
 
 var (
@@ -64,7 +64,7 @@ func getHandler() netns.NsHandle {
 }
 
 func getLink() (string, error) {
-	return os.Readlink(fmt.Sprintf("/proc/%d/task/%d/ns/net", os.Getpid(), syscall.Gettid()))
+	return os.Readlink(fmt.Sprintf("/proc/%d/task/%d/ns/net", os.Getpid(), unix.Gettid()))
 }
 
 // NlHandle returns the netlink handler
@@ -74,26 +74,26 @@ func NlHandle() *netlink.Handle {
 }
 
 func getSupportedNlFamilies() []int {
-	fams := []int{syscall.NETLINK_ROUTE}
+	fams := []int{unix.NETLINK_ROUTE}
 	// NETLINK_XFRM test
 	if err := loadXfrmModules(); err != nil {
 		if checkXfrmSocket() != nil {
 			logrus.Warnf("Could not load necessary modules for IPSEC rules: %v", err)
 		} else {
-			fams = append(fams, syscall.NETLINK_XFRM)
+			fams = append(fams, unix.NETLINK_XFRM)
 		}
 	} else {
-		fams = append(fams, syscall.NETLINK_XFRM)
+		fams = append(fams, unix.NETLINK_XFRM)
 	}
 	// NETLINK_NETFILTER test
 	if err := loadNfConntrackModules(); err != nil {
 		if checkNfSocket() != nil {
 			logrus.Warnf("Could not load necessary modules for Conntrack: %v", err)
 		} else {
-			fams = append(fams, syscall.NETLINK_NETFILTER)
+			fams = append(fams, unix.NETLINK_NETFILTER)
 		}
 	} else {
-		fams = append(fams, syscall.NETLINK_NETFILTER)
+		fams = append(fams, unix.NETLINK_NETFILTER)
 	}
 
 	return fams
@@ -111,11 +111,11 @@ func loadXfrmModules() error {
 
 // API check on required xfrm modules (xfrm_user, xfrm_algo)
 func checkXfrmSocket() error {
-	fd, err := syscall.Socket(syscall.AF_NETLINK, syscall.SOCK_RAW, syscall.NETLINK_XFRM)
+	fd, err := unix.Socket(unix.AF_NETLINK, unix.SOCK_RAW, unix.NETLINK_XFRM)
 	if err != nil {
 		return err
 	}
-	syscall.Close(fd)
+	unix.Close(fd)
 	return nil
 }
 
@@ -131,10 +131,10 @@ func loadNfConntrackModules() error {
 
 // API check on required nf_conntrack* modules (nf_conntrack, nf_conntrack_netlink)
 func checkNfSocket() error {
-	fd, err := syscall.Socket(syscall.AF_NETLINK, syscall.SOCK_RAW, syscall.NETLINK_NETFILTER)
+	fd, err := unix.Socket(unix.AF_NETLINK, unix.SOCK_RAW, unix.NETLINK_NETFILTER)
 	if err != nil {
 		return err
 	}
-	syscall.Close(fd)
+	unix.Close(fd)
 	return nil
 }

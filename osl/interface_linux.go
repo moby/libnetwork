@@ -5,7 +5,6 @@ import (
 	"net"
 	"regexp"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/docker/libnetwork/ns"
@@ -13,6 +12,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
+	"golang.org/x/sys/unix"
 )
 
 // IfaceOption is a function option type to set interface options
@@ -376,7 +376,7 @@ func setInterfaceIPv6(nlh *netlink.Handle, iface netlink.Link, i *nwIface) error
 	if err := setIPv6(i.ns.path, i.DstName(), true); err != nil {
 		return fmt.Errorf("failed to enable ipv6: %v", err)
 	}
-	ipAddr := &netlink.Addr{IPNet: i.AddressIPv6(), Label: "", Flags: syscall.IFA_F_NODAD}
+	ipAddr := &netlink.Addr{IPNet: i.AddressIPv6(), Label: "", Flags: unix.IFA_F_NODAD}
 	return nlh.AddrAdd(iface, ipAddr)
 }
 

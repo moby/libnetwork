@@ -3,10 +3,10 @@ package iptables
 import (
 	"errors"
 	"net"
-	"syscall"
 
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
+	"golang.org/x/sys/unix"
 )
 
 var (
@@ -16,7 +16,7 @@ var (
 
 // IsConntrackProgrammable returns true if the handle supports the NETLINK_NETFILTER and the base modules are loaded
 func IsConntrackProgrammable(nlh *netlink.Handle) bool {
-	return nlh.SupportsNetlinkFamily(syscall.NETLINK_NETFILTER)
+	return nlh.SupportsNetlinkFamily(unix.NETLINK_NETFILTER)
 }
 
 // DeleteConntrackEntries deletes all the conntrack connections on the host for the specified IP
@@ -28,7 +28,7 @@ func DeleteConntrackEntries(nlh *netlink.Handle, ipv4List []net.IP, ipv6List []n
 
 	var totalIPv4FlowPurged uint
 	for _, ipAddress := range ipv4List {
-		flowPurged, err := purgeConntrackState(nlh, syscall.AF_INET, ipAddress)
+		flowPurged, err := purgeConntrackState(nlh, unix.AF_INET, ipAddress)
 		if err != nil {
 			logrus.Warnf("Failed to delete conntrack state for %s: %v", ipAddress, err)
 			continue
@@ -38,7 +38,7 @@ func DeleteConntrackEntries(nlh *netlink.Handle, ipv4List []net.IP, ipv6List []n
 
 	var totalIPv6FlowPurged uint
 	for _, ipAddress := range ipv6List {
-		flowPurged, err := purgeConntrackState(nlh, syscall.AF_INET6, ipAddress)
+		flowPurged, err := purgeConntrackState(nlh, unix.AF_INET6, ipAddress)
 		if err != nil {
 			logrus.Warnf("Failed to delete conntrack state for %s: %v", ipAddress, err)
 			continue

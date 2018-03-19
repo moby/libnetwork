@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"net"
 	"sync"
-	"syscall"
 
 	"github.com/docker/libnetwork/common"
 	"github.com/docker/libnetwork/osl"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/sys/unix"
 )
 
 const ovPeerTable = "overlay_peer_table"
@@ -405,7 +405,7 @@ func (d *driver) peerAddOp(nid, eid string, peerIP net.IP, peerIPMask net.IPMask
 
 	// Add fdb entry to the bridge for the peer mac
 	if err := sbox.AddNeighbor(vtep, peerMac, l2Miss, sbox.NeighborOptions().LinkName(s.vxlanName),
-		sbox.NeighborOptions().Family(syscall.AF_BRIDGE)); err != nil {
+		sbox.NeighborOptions().Family(unix.AF_BRIDGE)); err != nil {
 		return fmt.Errorf("could not add fdb entry for nid:%s eid:%s into the sandbox:%v", nid, eid, err)
 	}
 

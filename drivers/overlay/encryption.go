@@ -8,7 +8,6 @@ import (
 	"hash/fnv"
 	"net"
 	"sync"
-	"syscall"
 
 	"strconv"
 
@@ -17,6 +16,7 @@ import (
 	"github.com/docker/libnetwork/types"
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
+	"golang.org/x/sys/unix"
 )
 
 const (
@@ -372,7 +372,7 @@ func saExists(sa *netlink.XfrmState) (bool, error) {
 	switch err {
 	case nil:
 		return true, nil
-	case syscall.ESRCH:
+	case unix.ESRCH:
 		return false, nil
 	default:
 		err = fmt.Errorf("Error while checking for SA existence: %v", err)
@@ -386,7 +386,7 @@ func spExists(sp *netlink.XfrmPolicy) (bool, error) {
 	switch err {
 	case nil:
 		return true, nil
-	case syscall.ENOENT:
+	case unix.ENOENT:
 		return false, nil
 	default:
 		err = fmt.Errorf("Error while checking for SP existence: %v", err)

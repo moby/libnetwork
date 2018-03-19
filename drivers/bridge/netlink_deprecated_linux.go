@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
-	"syscall"
 	"time"
 	"unsafe"
 
 	"github.com/docker/libnetwork/netutils"
+	"golang.org/x/sys/unix"
 )
 
 const (
@@ -24,7 +24,7 @@ type ifreqIndex struct {
 
 type ifreqHwaddr struct {
 	IfrnName   [ifNameSize]byte
-	IfruHwaddr syscall.RawSockaddr
+	IfruHwaddr unix.RawSockaddr
 }
 
 var rnd = rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -34,11 +34,11 @@ var rnd = rand.New(rand.NewSource(time.Now().UnixNano()))
 // WHICH SHIP WITH OLDER NOT ENTIRELY FUNCTIONAL VERSION OF NETLINK
 func getIfSocket() (fd int, err error) {
 	for _, socket := range []int{
-		syscall.AF_INET,
-		syscall.AF_PACKET,
-		syscall.AF_INET6,
+		unix.AF_INET,
+		unix.AF_PACKET,
+		unix.AF_INET6,
 	} {
-		if fd, err = syscall.Socket(socket, syscall.SOCK_DGRAM, 0); err == nil {
+		if fd, err = unix.Socket(socket, unix.SOCK_DGRAM, 0); err == nil {
 			break
 		}
 	}
@@ -57,13 +57,13 @@ func ifIoctBridge(iface, master *net.Interface, op uintptr) error {
 	if err != nil {
 		return err
 	}
-	defer syscall.Close(s)
+	defer unix.Close(s)
 
 	ifr := ifreqIndex{}
 	copy(ifr.IfrnName[:len(ifr.IfrnName)-1], master.Name)
 	ifr.IfruIndex = int32(iface.Index)
 
-	if _, _, err := syscall.Syscall(syscall.SYS_IOCTL, uintptr(s), op, uintptr(unsafe.Pointer(&ifr))); err != 0 {
+	if _, _, err := unix.Syscall(unix.SYS_IOCTL, uintptr(s), op, uintptr(unsafe.Pointer(&ifr))); err != 0 {
 		return err
 	}
 
@@ -90,17 +90,17 @@ func ioctlSetMacAddress(name, addr string) error {
 	if err != nil {
 		return err
 	}
-	defer syscall.Close(s)
+	defer unix.Close(s)
 
 	ifr := ifreqHwaddr{}
-	ifr.IfruHwaddr.Family = syscall.ARPHRD_ETHER
+	ifr.IfruHwaddr.Family = unix.ARPHRD_ETHER
 	copy(ifr.IfrnName[:len(ifr.IfrnName)-1], name)
 
 	for i := 0; i < 6; i++ {
 		ifr.IfruHwaddr.Data[i] = ifrDataByte(hw[i])
 	}
 
-	if _, _, err := syscall.Syscall(syscall.SYS_IOCTL, uintptr(s), syscall.SIOCSIFHWADDR, uintptr(unsafe.Pointer(&ifr))); err != 0 {
+	if _, _, err := unix.Syscall(unix.SYS_IOCTL, uintptr(s), unix.SIOCSIFHWADDR, uintptr(unsafe.Pointer(&ifr))); err != 0 {
 		return err
 	}
 	return nil
@@ -115,13 +115,13 @@ func ioctlCreateBridge(name string, setMacAddr bool) error {
 	if err != nil {
 		return err
 	}
-	defer syscall.Close(s)
+	defer unix.Close(s)
 
-	nameBytePtr, err := syscall.BytePtrFromString(name)
+	nameBytePtr, err := unix.BytePtrFromString(name)
 	if err != nil {
 		return err
 	}
-	if _, _, err := syscall.Syscall(syscall.SYS_IOCTL, uintptr(s), ioctlBrAdd, uintptr(unsafe.Pointer(nameBytePtr))); err != 0 {
+	if _, _, err := unix.Syscall(unix.SYS_IOCTL, uintptr(s), ioctlBrAdd, uintptr(unsafe.Pointer(nameBytePtr))); err != 0 {
 		return err
 	}
 	if setMacAddr {

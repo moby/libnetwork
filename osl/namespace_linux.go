@@ -11,8 +11,9 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
+
+	"syscall"
 
 	"github.com/docker/docker/pkg/reexec"
 	"github.com/docker/libnetwork/ns"
@@ -20,6 +21,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
+	"golang.org/x/sys/unix"
 )
 
 const defaultPrefix = "/var/run/docker"
@@ -211,7 +213,7 @@ func NewSandbox(key string, osCreate, isRestore bool) (Sandbox, error) {
 	}
 	defer sboxNs.Close()
 
-	n.nlHandle, err = netlink.NewHandleAt(sboxNs, syscall.NETLINK_ROUTE)
+	n.nlHandle, err = netlink.NewHandleAt(sboxNs, unix.NETLINK_ROUTE)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create a netlink handle: %v", err)
 	}
@@ -248,7 +250,7 @@ func (n *networkNamespace) NeighborOptions() NeighborOptionSetter {
 }
 
 func mountNetworkNamespace(basePath string, lnPath string) error {
-	return syscall.Mount(basePath, lnPath, "bind", syscall.MS_BIND, "")
+	return unix.Mount(basePath, lnPath, "bind", unix.MS_BIND, "")
 }
 
 // GetSandboxForExternalKey returns sandbox object for the supplied path
@@ -268,7 +270,7 @@ func GetSandboxForExternalKey(basePath string, key string) (Sandbox, error) {
 	}
 	defer sboxNs.Close()
 
-	n.nlHandle, err = netlink.NewHandleAt(sboxNs, syscall.NETLINK_ROUTE)
+	n.nlHandle, err = netlink.NewHandleAt(sboxNs, unix.NETLINK_ROUTE)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create a netlink handle: %v", err)
 	}
@@ -325,7 +327,7 @@ func createNetworkNamespace(path string, osCreate bool) error {
 
 func unmountNamespaceFile(path string) {
 	if _, err := os.Stat(path); err == nil {
-		syscall.Unmount(path, syscall.MNT_DETACH)
+		unix.Unmount(path, unix.MNT_DETACH)
 	}
 }
 
@@ -435,7 +437,7 @@ func (n *networkNamespace) Destroy() error {
 	}
 	// Assuming no running process is executing in this network namespace,
 	// unmounting is sufficient to destroy it.
-	if err := syscall.Unmount(n.path, syscall.MNT_DETACH); err != nil {
+	if err := unix.Unmount(n.path, unix.MNT_DETACH); err != nil {
 		return err
 	}
 

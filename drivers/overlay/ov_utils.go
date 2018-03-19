@@ -3,7 +3,6 @@ package overlay
 import (
 	"fmt"
 	"strings"
-	"syscall"
 
 	"github.com/docker/libnetwork/netutils"
 	"github.com/docker/libnetwork/ns"
@@ -11,6 +10,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
+	"golang.org/x/sys/unix"
 )
 
 var soTimeout = ns.NetlinkSocketsTimeout
@@ -131,7 +131,7 @@ func deleteVxlanByVNI(path string, vni uint32) error {
 		}
 		defer ns.Close()
 
-		nlh, err = netlink.NewHandleAt(ns, syscall.NETLINK_ROUTE)
+		nlh, err = netlink.NewHandleAt(ns, unix.NETLINK_ROUTE)
 		if err != nil {
 			return fmt.Errorf("failed to get netlink handle for ns %s: %v", path, err)
 		}

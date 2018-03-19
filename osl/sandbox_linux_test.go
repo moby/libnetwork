@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -18,6 +17,7 @@ import (
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netlink/nl"
 	"github.com/vishvananda/netns"
+	"golang.org/x/sys/unix"
 )
 
 const (
@@ -237,8 +237,8 @@ func TestDisableIPv6DAD(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if addrList[0].Flags&syscall.IFA_F_NODAD == 0 {
-		t.Fatalf("Unexpected interface flags: 0x%x. Expected to contain 0x%x", addrList[0].Flags, syscall.IFA_F_NODAD)
+	if addrList[0].Flags&unix.IFA_F_NODAD == 0 {
+		t.Fatalf("Unexpected interface flags: 0x%x. Expected to contain 0x%x", addrList[0].Flags, unix.IFA_F_NODAD)
 	}
 }
 

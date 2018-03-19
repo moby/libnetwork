@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 
 	"github.com/docker/docker/pkg/reexec"
 	"github.com/docker/libnetwork/iptables"
@@ -23,6 +22,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink/nl"
 	"github.com/vishvananda/netns"
+	"golang.org/x/sys/unix"
 )
 
 func init() {
@@ -196,7 +196,7 @@ func (sb *sandbox) addLBBackend(ip, vip net.IP, fwMark uint32, ingressPorts []*P
 			return
 		}
 
-		if err := i.NewService(s); err != nil && err != syscall.EEXIST {
+		if err := i.NewService(s); err != nil && err != unix.EEXIST {
 			logrus.Errorf("Failed to create a new service for vip %s fwmark %d in sbox %s (%s): %v", vip, fwMark, sb.ID()[0:7], sb.ContainerID()[0:7], err)
 			return
 		}
@@ -211,7 +211,7 @@ func (sb *sandbox) addLBBackend(ip, vip net.IP, fwMark uint32, ingressPorts []*P
 	// Remove the sched name before using the service to add
 	// destination.
 	s.SchedName = ""
-	if err := i.NewDestination(s, d); err != nil && err != syscall.EEXIST {
+	if err := i.NewDestination(s, d); err != nil && err != unix.EEXIST {
 		logrus.Errorf("Failed to create real server %s for vip %s fwmark %d in sbox %s (%s): %v", ip, vip, fwMark, sb.ID()[0:7], sb.ContainerID()[0:7], err)
 	}
 }
@@ -245,19 +245,19 @@ func (sb *sandbox) rmLBBackend(ip, vip net.IP, fwMark uint32, ingressPorts []*Po
 	}
 
 	if fullRemove {
-		if err := i.DelDestination(s, d); err != nil && err != syscall.ENOENT {
+		if err := i.DelDestination(s, d); err != nil && err != unix.ENOENT {
 			logrus.Errorf("Failed to delete real server %s for vip %s fwmark %d in sbox %s (%s): %v", ip, vip, fwMark, sb.ID()[0:7], sb.ContainerID()[0:7], err)
 		}
 	} else {
 		d.Weight = 0
-		if err := i.UpdateDestination(s, d); err != nil && err != syscall.ENOENT {
+		if err := i.UpdateDestination(s, d); err != nil && err != unix.ENOENT {
 			logrus.Errorf("Failed to set LB weight of real server %s to 0 for vip %s fwmark %d in sbox %s (%s): %v", ip, vip, fwMark, sb.ID()[0:7], sb.ContainerID()[0:7], err)
 		}
 	}
 
 	if rmService {
 		s.SchedName = ipvs.RoundRobin
-		if err := i.DelService(s); err != nil && err != syscall.ENOENT {
+		if err := i.DelService(s); err != nil && err != unix.ENOENT {
 			logrus.Errorf("Failed to delete service for vip %s fwmark %d in sbox %s (%s): %v", vip, fwMark, sb.ID()[0:7], sb.ContainerID()[0:7], err)
 		}
 

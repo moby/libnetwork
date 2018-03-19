@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"syscall"
 	"testing"
 	"time"
 
@@ -17,6 +16,7 @@ import (
 	"github.com/docker/libnetwork/netlabel"
 	_ "github.com/docker/libnetwork/testutils"
 	"github.com/vishvananda/netlink/nl"
+	"golang.org/x/sys/unix"
 )
 
 func init() {
@@ -145,12 +145,12 @@ func TestOverlayType(t *testing.T) {
 func TestNetlinkSocket(t *testing.T) {
 	// This is the same code used by the overlay driver to create the netlink interface
 	// for the watch miss
-	nlSock, err := nl.Subscribe(syscall.NETLINK_ROUTE, syscall.RTNLGRP_NEIGH)
+	nlSock, err := nl.Subscribe(unix.NETLINK_ROUTE, unix.RTNLGRP_NEIGH)
 	if err != nil {
 		t.Fatal()
 	}
 	// set the receive timeout to not remain stuck on the RecvFrom if the fd gets closed
-	tv := syscall.NsecToTimeval(soTimeout.Nanoseconds())
+	tv := unix.NsecToTimeval(soTimeout.Nanoseconds())
 	err = nlSock.SetReceiveTimeout(&tv)
 	if err != nil {
 		t.Fatal()
@@ -160,7 +160,7 @@ func TestNetlinkSocket(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	go func() {
-		n.watchMiss(nlSock, fmt.Sprintf("/proc/%d/task/%d/ns/net", os.Getpid(), syscall.Gettid()))
+		n.watchMiss(nlSock, fmt.Sprintf("/proc/%d/task/%d/ns/net", os.Getpid(), unix.Gettid()))
 		ch <- nil
 	}()
 	time.Sleep(5 * time.Second)

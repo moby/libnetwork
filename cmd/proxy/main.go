@@ -7,9 +7,9 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"syscall"
 
 	"github.com/ishidawataru/sctp"
+	"golang.org/x/sys/unix"
 )
 
 func main() {
@@ -62,7 +62,7 @@ func parseHostContainerAddrs() (host net.Addr, container net.Addr) {
 
 func handleStopSignals(p Proxy) {
 	s := make(chan os.Signal, 10)
-	signal.Notify(s, os.Interrupt, syscall.SIGTERM)
+	signal.Notify(s, os.Interrupt, unix.SIGTERM)
 
 	for range s {
 		p.Close()

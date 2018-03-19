@@ -5,10 +5,10 @@ package testutils
 import (
 	"os"
 	"runtime"
-	"syscall"
 	"testing"
 
 	"github.com/docker/libnetwork/ns"
+	"golang.org/x/sys/unix"
 )
 
 // SetupTestOSContext joins a new network namespace, and returns its associated
@@ -20,11 +20,11 @@ import (
 //
 func SetupTestOSContext(t *testing.T) func() {
 	runtime.LockOSThread()
-	if err := syscall.Unshare(syscall.CLONE_NEWNET); err != nil {
+	if err := unix.Unshare(unix.CLONE_NEWNET); err != nil {
 		t.Fatalf("Failed to enter netns: %v", err)
 	}
 
-	fd, err := syscall.Open("/proc/self/ns/net", syscall.O_RDONLY, 0)
+	fd, err := unix.Open("/proc/self/ns/net", unix.O_RDONLY, 0)
 	if err != nil {
 		t.Fatal("Failed to open netns file")
 	}
@@ -36,7 +36,7 @@ func SetupTestOSContext(t *testing.T) func() {
 	runtime.LockOSThread()
 
 	return func() {
-		if err := syscall.Close(fd); err != nil {
+		if err := unix.Close(fd); err != nil {
 			t.Logf("Warning: netns closing failed (%v)", err)
 		}
 		runtime.UnlockOSThread()

@@ -3,13 +3,13 @@ package overlay
 import (
 	"fmt"
 	"net"
-	"syscall"
 
 	"github.com/docker/libnetwork/driverapi"
 	"github.com/docker/libnetwork/ns"
 	"github.com/docker/libnetwork/types"
 	"github.com/gogo/protobuf/proto"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/sys/unix"
 )
 
 // Join method is invoked when a Sandbox is attached to an endpoint.
@@ -34,7 +34,7 @@ func (d *driver) Join(nid, eid string, sboxKey string, jinfo driverapi.JoinInfo,
 
 	nlh := ns.NlHandle()
 
-	if n.secure && !nlh.SupportsNetlinkFamily(syscall.NETLINK_XFRM) {
+	if n.secure && !nlh.SupportsNetlinkFamily(unix.NETLINK_XFRM) {
 		return fmt.Errorf("cannot join secure network: required modules to install IPSEC rules are missing on host")
 	}
 

@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"syscall"
 
 	"github.com/sirupsen/logrus"
+	"golang.org/x/sys/unix"
 )
 
 // Enumeration type saying which versions of IP protocol to process.
@@ -31,16 +31,12 @@ func getIPVersion(config *networkConfiguration) ipVersion {
 
 func setupBridgeNetFiltering(config *networkConfiguration, i *bridgeInterface) error {
 	err := checkBridgeNetFiltering(config, i)
-	if err != nil {
-		if ptherr, ok := err.(*os.PathError); ok {
-			if errno, ok := ptherr.Err.(syscall.Errno); ok && errno == syscall.ENOENT {
-				if isRunningInContainer() {
-					logrus.Warnf("running inside docker container, ignoring missing kernel params: %v", err)
-					err = nil
-				} else {
-					err = errors.New("please ensure that br_netfilter kernel module is loaded")
-				}
-			}
+	if err != nil && err.(*os.PathError).Err == unix.ENOENT {
+		if isRunningInContainer() {
+			logrus.Warnf("running inside docker container, ignoring missing kernel params: %v", err)
+			err = nil
+		} else {
+			err = errors.New("please ensure that br_netfilter kernel module is loaded")
 		}
 		if err != nil {
 			return fmt.Errorf("cannot restrict inter-container communication: %v", err)

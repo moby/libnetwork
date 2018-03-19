@@ -13,16 +13,14 @@ import (
 	"os"
 	"os/signal"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/codegangsta/cli"
+	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/opts"
 	"github.com/docker/docker/pkg/discovery"
 	"github.com/docker/docker/pkg/reexec"
-
-	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/pkg/term"
 	"github.com/docker/libnetwork"
 	"github.com/docker/libnetwork/api"
@@ -37,6 +35,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
+	"golang.org/x/sys/unix"
 )
 
 const (
@@ -351,7 +350,7 @@ func (d *dnetConnection) WaitForDetachment(context.Context, string, string, stri
 
 func handleSignals(controller libnetwork.NetworkController) {
 	c := make(chan os.Signal, 1)
-	signals := []os.Signal{os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT}
+	signals := []os.Signal{os.Interrupt, unix.SIGTERM, unix.SIGQUIT}
 	signal.Notify(c, signals...)
 	go func() {
 		for range c {

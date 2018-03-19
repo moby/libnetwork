@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
-	"syscall"
 
 	"github.com/docker/libnetwork/datastore"
 	"github.com/docker/libnetwork/discoverapi"
@@ -25,6 +24,7 @@ import (
 	"github.com/docker/libnetwork/types"
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
+	"golang.org/x/sys/unix"
 )
 
 const (
@@ -855,7 +855,7 @@ func addToBridge(nlh *netlink.Handle, ifaceName, bridgeName string) error {
 
 func setHairpinMode(nlh *netlink.Handle, link netlink.Link, enable bool) error {
 	err := nlh.LinkSetHairpin(link, enable)
-	if err != nil && err != syscall.EINVAL {
+	if err != nil && err != unix.EINVAL {
 		// If error is not EINVAL something else went wrong, bail out right away
 		return fmt.Errorf("unable to set hairpin mode on %s via netlink: %v",
 			link.Attrs().Name, err)
