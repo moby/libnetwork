@@ -1,0 +1,5 @@
+FROM docker:17.12-dind
+RUN apk add --no-cache curl
+ENV DIND_CLIENT=true
+COPY diagnostic/daemon.json /etc/docker/daemon.json
+COPY bin/diagnosticClient /usr/local/bin/diagnosticClient
