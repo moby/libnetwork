@@ -366,7 +366,7 @@ func (d *driver) CreateNetwork(id string, option map[string]interface{}, nInfo d
 		config.HnsID = hnsresponse.Id
 		genData[HNSID] = config.HnsID
 
-	} else {
+	} else if d.name == "nat" {
 		// Delete any stale HNS endpoints for this network.
 		if endpoints, err := hcsshim.HNSListEndpointRequest(); err == nil {
 			for _, ep := range endpoints {
