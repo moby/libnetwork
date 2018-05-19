@@ -18,6 +18,8 @@ const (
 	ipv6ForwardConfPerm    = 0644
 	ipv6ForwardConfDefault = "/proc/sys/net/ipv6/conf/default/forwarding"
 	ipv6ForwardConfAll     = "/proc/sys/net/ipv6/conf/all/forwarding"
+	ndpProxyConfPerm       = 0644
+	ndpProxyConfDefault    = "/proc/sys/net/ipv6/conf/default/proxy_ndp"
 )
 
 func init() {
@@ -115,5 +117,20 @@ func setupIPv6Forwarding(config *networkConfiguration, i *bridgeInterface) error
 		}
 	}
 
+	return nil
+}
+
+func setupNDPProxying(config *networkConfiguration, i *bridgeInterface) error {
+	ndpProxyConfPath := fmt.Sprintf("/proc/sys/net/ipv6/conf/%s/proxy_ndp", config.NDPProxyInterface)
+	ndpProxyDataIface, err := ioutil.ReadFile(ndpProxyConfPath)
+	if err != nil {
+		return fmt.Errorf("Cannot read NDP proxying for interface %s: %v", config.NDPProxyInterface, err)
+	}
+	// Enable NDP proxying only if it is not already enabled
+	if ndpProxyDataIface[0] != '1' {
+		if err := ioutil.WriteFile(ndpProxyConfPath, []byte{'1', '\n'}, ndpProxyConfPerm); err != nil {
+			logrus.Warnf("Unable to enable NDP proxying for interface %s: %v", config.NDPProxyInterface, err)
+		}
+	}
 	return nil
 }

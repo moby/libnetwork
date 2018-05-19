@@ -273,6 +273,7 @@ func TestCreateFullOptionsLabels(t *testing.T) {
 	gwV6s := "2001:db8:2600:2700:2800::25/80"
 	nwV6, _ := types.ParseCIDR(nwV6s)
 	gwV6, _ := types.ParseCIDR(gwV6s)
+	ndpPxyIface := "lo"
 
 	labels := map[string]string{
 		BridgeName:         DefaultBridgeName,
@@ -280,6 +281,7 @@ func TestCreateFullOptionsLabels(t *testing.T) {
 		EnableICC:          "true",
 		EnableIPMasquerade: "true",
 		DefaultBindingIP:   bndIPs,
+		NDPProxyInterface:  ndpPxyIface,
 	}
 
 	netOption := make(map[string]interface{})
@@ -322,6 +324,10 @@ func TestCreateFullOptionsLabels(t *testing.T) {
 		t.Fatal("incongruent EnableIPMasquerade in bridge network")
 	}
 
+	if nw.config.NDPProxyInterface != ndpPxyIface {
+		t.Fatalf("incongruend NDPProxyInterface in bridge network")
+	}
+
 	bndIP := net.ParseIP(bndIPs)
 	if !bndIP.Equal(nw.config.DefaultBindingIP) {
 		t.Fatalf("Unexpected: %v", nw.config.DefaultBindingIP)
@@ -350,6 +356,22 @@ func TestCreateFullOptionsLabels(t *testing.T) {
 	}
 	if te.Interface().AddressIPv6().IP.String() != "2001:db8:2600:2700:2800:aabb:ccdd:eeff" {
 		t.Fatalf("Unexpected endpoint IPv6 address: %v", te.Interface().AddressIPv6().IP)
+	}
+
+	// Check that the neighbor proxy was created by trying to delete it,
+	// because netlink.NeighList currently can't list proxies.
+	link, _ := d.nlh.LinkByName(ndpPxyIface)
+	err = d.nlh.NeighDel(&netlink.Neigh{
+		LinkIndex:    link.Attrs().Index,
+		Family:       netlink.FAMILY_V6,
+		State:        netlink.NUD_PERMANENT,
+		Type:         netlink.NDA_UNSPEC,
+		Flags:        netlink.NTF_PROXY,
+		IP:           te.Interface().AddressIPv6().IP,
+		HardwareAddr: te.Interface().MacAddress(),
+	})
+	if err != nil {
+		t.Fatalf("Cannot delete neighbor proxy, suggesting it wasn't created: %v", err)
 	}
 }
 
