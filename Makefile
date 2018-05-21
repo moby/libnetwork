@@ -28,7 +28,7 @@ build-local:
 	@mkdir -p "bin"
 	go build -tags experimental -o "bin/dnet" ./cmd/dnet
 	go build -o "bin/docker-proxy" ./cmd/proxy
-	GOOS=linux go build -o "./cmd/diagnostic/diagnosticClient" ./cmd/diagnostic
+	GOOS=linux go build -o "bin/diagnosticClient" ./cmd/diagnostic
 
 clean:
 	@echo "🐳 $@"
@@ -126,6 +126,12 @@ circle-ci-cross: ${build_image}.created
 		echo "$${platform}..." ; \
 		${cidocker} make cross-local ; \
 	done
+
+diag-client:
+	docker build --file diagnostic/Dockerfile.client . 
+
+diag-dind:
+	docker build --file diagnostic/Dockerfile.dind .
 
 circle-ci-check: ${build_image}.created
 	@${cidocker} make check-local coveralls
