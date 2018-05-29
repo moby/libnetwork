@@ -2,10 +2,11 @@
 SHELL=/bin/bash
 build_image=libnetworkbuild
 dockerargs = --privileged -v $(shell pwd):/go/src/github.com/docker/libnetwork -w /go/src/github.com/docker/libnetwork
+ci2args = --privileged  -w /go/src/github.com/docker/libnetwork -e CIRCLECI -e "COVERALLS_TOKEN=$$COVERALLS_TOKEN" -e "INSIDECONTAINER=-incontainer=true"
 container_env = -e "INSIDECONTAINER=-incontainer=true"
 docker = docker run --rm -it ${dockerargs} $$EXTRA_ARGS ${container_env} ${build_image}
 ciargs = -e CIRCLECI -e "COVERALLS_TOKEN=$$COVERALLS_TOKEN" -e "INSIDECONTAINER=-incontainer=true"
-cidocker = docker run ${dockerargs} ${ciargs} $$EXTRA_ARGS ${container_env} ${build_image}
+cidocker = docker run ${ci2args} $$EXTRA_ARGS ${build_image}
 CROSS_PLATFORMS = linux/amd64 linux/386 linux/arm windows/amd64
 PACKAGES=$(shell go list ./... | grep -v /vendor/)
 export PATH := $(CURDIR)/bin:$(PATH)
@@ -14,14 +15,25 @@ all: ${build_image}.created build check integration-tests clean
 
 all-local: build-local check-local integration-tests-local clean
 
+build-builder:
+	docker build -f Dockerfile.build -t ${build_image} .
+
 ${build_image}.created:
 	@echo "🐳 $@"
 	docker build -f Dockerfile.build -t ${build_image} .
 	touch ${build_image}.created
 
 build: ${build_image}.created
-	@echo "🐳 $@"
-	@${docker} ./wrapmake.sh build-local
+	@echo "🐳 BUILD $@"
+	@${cidocker} pwd
+	@${cidocker} ls -ltr
+	@${cidocker} ./wrapmake.sh build-local
+
+cibuild: ${build_image}.created
+	@echo "🐳 BUILD $@"
+	@${cidocker} pwd
+	@${cidocker} ls -ltr
+	@${cidocker} ./wrapmake.sh build-local
 
 build-local:
 	@echo "🐳 $@"
@@ -94,13 +106,19 @@ run-tests:
 	done
 	@echo "Done running tests"
 
-check-local:	check-format check-code run-tests
+check-local: check-format check-code run-tests
 
 integration-tests: ./bin/dnet
 	@./test/integration/dnet/run-integration-tests.sh
 
+ci-integration-tests: ./bin/ci-dnet
+	@./test/integration/dnet/run-integration-tests.sh
+
 ./bin/dnet:
 	make build
+
+./bin/ci-dnet:
+	make cibuild
 
 coveralls:
 	-@goveralls -service circleci -coverprofile=coverage.coverprofile -repotoken $$COVERALLS_TOKEN
@@ -147,7 +165,7 @@ circle-ci-check: ${build_image}.created
 circle-ci-build: ${build_image}.created
 	@${cidocker} make build-local
 
-circle-ci: circle-ci-build circle-ci-check circle-ci-cross integration-tests
+circle-ci: circle-ci-build circle-ci-check  integration-tests
 
 shell: ${build_image}.created
 	@${docker} ${SHELL}
