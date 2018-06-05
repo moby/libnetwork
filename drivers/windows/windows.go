@@ -38,11 +38,13 @@ type networkConfiguration struct {
 	VLAN               uint
 	VSID               uint
 	DNSServers         string
+	MacPools           []hcsshim.MacPool
 	DNSSuffix          string
 	SourceMac          string
 	NetworkAdapterName string
 	dbIndex            uint64
 	dbExists           bool
+	DisableGatewayDNS  bool
 }
 
 // endpointConfiguration represents the user specified configuration for the sandbox endpoint
@@ -168,6 +170,24 @@ func (d *driver) parseNetworkOptions(id string, genericOptions map[string]string
 			config.DNSSuffix = value
 		case DNSServers:
 			config.DNSServers = value
+		case DisableGatewayDNS:
+			b, err := strconv.ParseBool(value)
+			if err != nil {
+				return nil, err
+			}
+			config.DisableGatewayDNS = b
+		case MacPool:
+			config.MacPools = make([]hcsshim.MacPool, 0)
+			s := strings.Split(value, ",")
+			if len(s)%2 != 0 {
+				return nil, types.BadRequestErrorf("Invalid mac pool. You must specify both a start range and an end range")
+			}
+			for i := 0; i < len(s)-1; i += 2 {
+				config.MacPools = append(config.MacPools, hcsshim.MacPool{
+					StartMacAddress: s[i],
+					EndMacAddress:   s[i+1],
+				})
+			}
 		case VLAN:
 			vlan, err := strconv.ParseUint(value, 10, 32)
 			if err != nil {
@@ -274,6 +294,7 @@ func (d *driver) CreateNetwork(id string, option map[string]interface{}, nInfo d
 			Subnets:            subnets,
 			DNSServerList:      config.DNSServers,
 			DNSSuffix:          config.DNSSuffix,
+			MacPools:           config.MacPools,
 			SourceMac:          config.SourceMac,
 			NetworkAdapterName: config.NetworkAdapterName,
 		}
@@ -571,7 +592,14 @@ func (d *driver) CreateEndpoint(nid, eid string, ifInfo driverapi.InterfaceInfo,
 
 	endpointStruct.DNSServerList = strings.Join(epOption.DNSServers, ",")
 
+	// overwrite the ep DisableDNS option if DisableGatewayDNS was set to true during the network creation option
+	if n.config.DisableGatewayDNS {
+		logrus.Debugf("n.config.DisableGatewayDNS[%v] overwrites epOption.DisableDNS[%v]", n.config.DisableGatewayDNS, epOption.DisableDNS)
+		epOption.DisableDNS = n.config.DisableGatewayDNS
+	}
+
 	if n.driver.name == "nat" && !epOption.DisableDNS {
+		logrus.Debugf("endpointStruct.EnableInternalDNS =[%v]", endpointStruct.EnableInternalDNS)
 		endpointStruct.EnableInternalDNS = true
 	}
 
