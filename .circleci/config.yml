@@ -1,0 +1,103 @@
+version: 2
+
+defaults: &defaults
+  working_directory: ~/go/src/github.com/docker/libnetwork
+  docker:
+    - image: 'circleci/golang:1.10'
+      environment:
+          CODEPATH: "~/go/src/github.com/docker/libnetwork"
+          Dockerfile: Dockerfile.ci
+
+jobs:
+  builder:
+    <<: *defaults
+    steps:
+      - checkout
+      - setup_remote_docker:
+          reusable: true
+          exclusive: false
+      - run: make build-builder
+  
+  build:
+    <<: *defaults
+    steps:
+      - checkout
+      - setup_remote_docker:
+          reusable: true
+          exclusive: false
+      - run: make build-builder
+
+
+  lint:
+    <<: *defaults
+    steps:
+      - checkout
+      - setup_remote_docker:
+          reusable: true
+          exclusive: false
+      - run:
+          environment:
+            GOPATH: "$GOPATH:/go/src/github.com/docker/libnetwork"
+          command: |
+            make check
+  cross:
+    <<: *defaults
+    steps:
+      - checkout
+      - setup_remote_docker:
+          reusable: true
+          exclusive: false
+      - run:
+          environment:
+            GOPATH: "$GOPATH:/go/src/github.com/docker/libnetwork"
+          command: |
+            make cross
+  test:
+    <<: *defaults
+    steps:
+      - checkout
+      - setup_remote_docker:
+          reusable: true
+          exclusive: false
+      # - attach_workspace:
+      #     at: /work/images
+      - run:
+          environment:
+            GOPATH: "$GOPATH:/go/src/github.com/docker/libnetwork"
+          command: |
+            make integration-tests
+          # make run-tests
+
+
+  circleci:
+      <<: *defaults
+      steps:
+        - checkout
+        - setup_remote_docker:
+            reusable: true
+            exclusive: false
+        - run:
+            environment:
+              GOPATH: "$GOPATH:/go/src/github.com/docker/libnetwork"
+            command: |
+              make circle-ci
+workflows:
+  version: 2
+  ci:
+    jobs:
+      - builder
+      - build:
+        requires:
+          - builder
+      - lint:
+        requires:
+          - builder
+      - cross:
+        requires:
+          - builder
+#      - test:
+#          requires:
+#             - builder
+#      - circleci:
+#          requires:
+#             - builder

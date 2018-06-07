@@ -1,11 +1,14 @@
 .PHONY: all all-local build build-local clean cross cross-local gosimple vet lint misspell check check-code check-format run-tests integration-tests check-local coveralls circle-ci-cross circle-ci-build circle-ci-check circle-ci
 SHELL=/bin/bash
+Dockerfile ?= Dockerfile.build
 build_image=libnetworkbuild
-dockerargs = --privileged -v $(shell pwd):/go/src/github.com/docker/libnetwork -w /go/src/github.com/docker/libnetwork
+#dockerargs = --privileged -v $(shell pwd):/go/src/github.com/docker/libnetwork -w /go/src/github.com/docker/libnetwork
+dockerargs = --privileged -w /go/src/github.com/docker/libnetwork
+ci2args = --privileged  -w /go/src/github.com/docker/libnetwork -e CIRCLECI -e "COVERALLS_TOKEN=$$COVERALLS_TOKEN" -e "INSIDECONTAINER=-incontainer=true"
 container_env = -e "INSIDECONTAINER=-incontainer=true"
 docker = docker run --rm -it ${dockerargs} $$EXTRA_ARGS ${container_env} ${build_image}
 ciargs = -e CIRCLECI -e "COVERALLS_TOKEN=$$COVERALLS_TOKEN" -e "INSIDECONTAINER=-incontainer=true"
-cidocker = docker run ${dockerargs} ${ciargs} $$EXTRA_ARGS ${container_env} ${build_image}
+cidocker = docker run ${ci2args} $$EXTRA_ARGS ${build_image}
 CROSS_PLATFORMS = linux/amd64 linux/386 linux/arm windows/amd64
 PACKAGES=$(shell go list ./... | grep -v /vendor/)
 export PATH := $(CURDIR)/bin:$(PATH)
@@ -14,14 +17,18 @@ all: ${build_image}.created build check integration-tests clean
 
 all-local: build-local check-local integration-tests-local clean
 
-${build_image}.created:
-	@echo "🐳 $@"
-	docker build -f Dockerfile.build -t ${build_image} .
-	touch ${build_image}.created
+build-builder:
+	docker build -f ${Dockerfile} -t ${build_image} .
 
-build: ${build_image}.created
-	@echo "🐳 $@"
-	@${docker} ./wrapmake.sh build-local
+#${build_image}.created:
+#	@echo "🐳 $@"
+#	docker build -f Dockerfile.build -t ${build_image} .
+#	touch ${build_image}.created
+
+#build: ${build_image}.created
+build: build-builder
+	@echo "🐳 BUILD $@"
+	@${docker} make build-local
 
 build-local:
 	@echo "🐳 $@"
@@ -55,7 +62,7 @@ force-clean: clean
 	@echo "🐳 $@"
 	@rm -rf ${build_image}.created
 
-cross: ${build_image}.created
+cross: build-builder
 	@mkdir -p "bin"
 	@for platform in ${CROSS_PLATFORMS}; do \
 		EXTRA_ARGS="-e GOOS=$${platform%/*} -e GOARCH=$${platform##*/}" ; \
@@ -68,8 +75,11 @@ cross-local:
 	go build -o "bin/dnet-$$GOOS-$$GOARCH" ./cmd/dnet
 	go build -o "bin/docker-proxy-$$GOOS-$$GOARCH" ./cmd/proxy
 
-check: ${build_image}.created
-	@${docker} ./wrapmake.sh check-local
+#check: ${build_image}.created
+check: build-builder
+	@${docker} make check-local
+
+check-local: check-format check-code
 
 check-code: lint gosimple vet ineffassign
 
@@ -94,13 +104,18 @@ run-tests:
 	done
 	@echo "Done running tests"
 
-check-local:	check-format check-code run-tests
 
 integration-tests: ./bin/dnet
 	@./test/integration/dnet/run-integration-tests.sh
 
+ci-integration-tests: ./bin/ci-dnet
+	@./test/integration/dnet/run-integration-tests.sh
+
 ./bin/dnet:
 	make build
+
+./bin/ci-dnet:
+	make cibuild
 
 coveralls:
 	-@goveralls -service circleci -coverprofile=coverage.coverprofile -repotoken $$COVERALLS_TOKEN
@@ -147,7 +162,7 @@ circle-ci-check: ${build_image}.created
 circle-ci-build: ${build_image}.created
 	@${cidocker} make build-local
 
-circle-ci: circle-ci-build circle-ci-check circle-ci-cross integration-tests
+circle-ci: circle-ci-build circle-ci-check  integration-tests
 
 shell: ${build_image}.created
 	@${docker} ${SHELL}
