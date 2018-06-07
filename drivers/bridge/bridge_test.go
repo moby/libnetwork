@@ -597,12 +597,10 @@ func (te *testEndpoint) AddTableEntry(tableName string, key string, value []byte
 func (te *testEndpoint) DisableGatewayService() {}
 
 func TestQueryEndpointInfo(t *testing.T) {
-	t.Skip("ELANGO SKIP")
 	testQueryEndpointInfo(t, true)
 }
 
 func TestQueryEndpointInfoHairpin(t *testing.T) {
-	t.Skip("ELANGO SKIP")
 	testQueryEndpointInfo(t, false)
 }
 

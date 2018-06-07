@@ -3,9 +3,9 @@ version: 2
 defaults: &defaults
   working_directory: ~/go/src/github.com/docker/libnetwork
   docker:
-    - image: 'circleci/golang:1.9.6'
+    - image: 'circleci/golang:1.10'
       environment:
-          CODEPATH: "~/go/src/github.com/docker/libnetwork"
+          Dockerfile: Dockerfile.ci
 
 jobs:
   builder:
@@ -15,14 +15,17 @@ jobs:
       - setup_remote_docker:
           reusable: true
           exclusive: false
-      #- run: make circle-ci
-      - run: make build-builder
-      # - run: mkdir -p images
-      # - run: echo "libnetwork-builder:$CIRCLE_BUILD_NUM" > images/builder
-      # - persist_to_workspace:
-      #     root: ~/go
-      #     paths:
-      #       - src/github.com/docker/libnetwork
+      - run: make builder
+
+  build:
+    <<: *defaults
+    steps:
+      - checkout
+      - setup_remote_docker:
+          reusable: true
+          exclusive: false
+      - run: make build
+
   lint:
     <<: *defaults
     steps:
@@ -30,13 +33,8 @@ jobs:
       - setup_remote_docker:
           reusable: true
           exclusive: false
-      # - attach_workspace:
-      #     at: /work/images
-      - run:
-          environment:
-            GOPATH: "$GOPATH:/go/src/github.com/docker/libnetwork"
-          command: |
-            make circle-ci-check
+      - run: make check
+
   cross:
     <<: *defaults
     steps:
@@ -44,56 +42,31 @@ jobs:
       - setup_remote_docker:
           reusable: true
           exclusive: false
-      # - attach_workspace:
-      #     at: /work/images
-      - run:
-          environment:
-            GOPATH: "$GOPATH:/go/src/github.com/docker/libnetwork"
-          command: |
-            make circle-ci-cross
-  test:
+      - run: make cross
+
+  unit-tests:
     <<: *defaults
     steps:
       - checkout
       - setup_remote_docker:
           reusable: true
           exclusive: false
-      # - attach_workspace:
-      #     at: /work/images
-      - run:
-          environment:
-            GOPATH: "$GOPATH:/go/src/github.com/docker/libnetwork"
-          command: |
-            make integration-tests
-          # make run-tests
+      - run: make unit-tests
 
-
-  circleci:
-      <<: *defaults
-      steps:
-        - checkout
-        - setup_remote_docker:
-            reusable: true
-            exclusive: false
-        - run:
-            environment:
-              GOPATH: "$GOPATH:/go/src/github.com/docker/libnetwork"
-            command: |
-              make circle-ci
 workflows:
   version: 2
   ci:
     jobs:
       - builder
+      - build:
+          requires:
+            - builder
       - lint:
-         requires:
+          requires:
             - builder
       - cross:
           requires:
-             - builder
-      - test:
+            - builder
+      - unit-tests:
           requires:
-             - builder
-      - circleci:
-          requires:
-             - builder
+            - builder
