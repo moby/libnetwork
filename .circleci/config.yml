@@ -3,9 +3,10 @@ version: 2
 defaults: &defaults
   working_directory: ~/go/src/github.com/docker/libnetwork
   docker:
-    - image: 'circleci/golang:1.9.6'
+    - image: 'circleci/golang:1.10'
       environment:
           CODEPATH: "~/go/src/github.com/docker/libnetwork"
+          Dockerfile: Dockerfile.ci
 
 jobs:
   builder:
@@ -15,14 +16,18 @@ jobs:
       - setup_remote_docker:
           reusable: true
           exclusive: false
-      #- run: make circle-ci
       - run: make build-builder
-      # - run: mkdir -p images
-      # - run: echo "libnetwork-builder:$CIRCLE_BUILD_NUM" > images/builder
-      # - persist_to_workspace:
-      #     root: ~/go
-      #     paths:
-      #       - src/github.com/docker/libnetwork
+  
+  build:
+    <<: *defaults
+    steps:
+      - checkout
+      - setup_remote_docker:
+          reusable: true
+          exclusive: false
+      - run: make build-builder
+
+
   lint:
     <<: *defaults
     steps:
@@ -30,13 +35,11 @@ jobs:
       - setup_remote_docker:
           reusable: true
           exclusive: false
-      # - attach_workspace:
-      #     at: /work/images
       - run:
           environment:
             GOPATH: "$GOPATH:/go/src/github.com/docker/libnetwork"
           command: |
-            make circle-ci-check
+            make check
   cross:
     <<: *defaults
     steps:
@@ -44,13 +47,11 @@ jobs:
       - setup_remote_docker:
           reusable: true
           exclusive: false
-      # - attach_workspace:
-      #     at: /work/images
       - run:
           environment:
             GOPATH: "$GOPATH:/go/src/github.com/docker/libnetwork"
           command: |
-            make circle-ci-cross
+            make cross
   test:
     <<: *defaults
     steps:
@@ -85,15 +86,18 @@ workflows:
   ci:
     jobs:
       - builder
+      - build:
+        requires:
+          - builder
       - lint:
-         requires:
-            - builder
+        requires:
+          - builder
       - cross:
-          requires:
-             - builder
-      - test:
-          requires:
-             - builder
-      - circleci:
-          requires:
-             - builder
+        requires:
+          - builder
+#      - test:
+#          requires:
+#             - builder
+#      - circleci:
+#          requires:
+#             - builder

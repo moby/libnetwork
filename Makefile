@@ -1,7 +1,9 @@
 .PHONY: all all-local build build-local clean cross cross-local gosimple vet lint misspell check check-code check-format run-tests integration-tests check-local coveralls circle-ci-cross circle-ci-build circle-ci-check circle-ci
 SHELL=/bin/bash
+Dockerfile ?= Dockerfile.build
 build_image=libnetworkbuild
-dockerargs = --privileged -v $(shell pwd):/go/src/github.com/docker/libnetwork -w /go/src/github.com/docker/libnetwork
+#dockerargs = --privileged -v $(shell pwd):/go/src/github.com/docker/libnetwork -w /go/src/github.com/docker/libnetwork
+dockerargs = --privileged -w /go/src/github.com/docker/libnetwork
 ci2args = --privileged  -w /go/src/github.com/docker/libnetwork -e CIRCLECI -e "COVERALLS_TOKEN=$$COVERALLS_TOKEN" -e "INSIDECONTAINER=-incontainer=true"
 container_env = -e "INSIDECONTAINER=-incontainer=true"
 docker = docker run --rm -it ${dockerargs} $$EXTRA_ARGS ${container_env} ${build_image}
@@ -16,24 +18,17 @@ all: ${build_image}.created build check integration-tests clean
 all-local: build-local check-local integration-tests-local clean
 
 build-builder:
-	docker build -f Dockerfile.build -t ${build_image} .
+	docker build -f ${Dockerfile} -t ${build_image} .
 
-${build_image}.created:
-	@echo "🐳 $@"
-	docker build -f Dockerfile.build -t ${build_image} .
-	touch ${build_image}.created
+#${build_image}.created:
+#	@echo "🐳 $@"
+#	docker build -f Dockerfile.build -t ${build_image} .
+#	touch ${build_image}.created
 
-build: ${build_image}.created
+#build: ${build_image}.created
+build: build-builder
 	@echo "🐳 BUILD $@"
-	@${cidocker} pwd
-	@${cidocker} ls -ltr
-	@${cidocker} ./wrapmake.sh build-local
-
-cibuild: ${build_image}.created
-	@echo "🐳 BUILD $@"
-	@${cidocker} pwd
-	@${cidocker} ls -ltr
-	@${cidocker} ./wrapmake.sh build-local
+	@${docker} make build-local
 
 build-local:
 	@echo "🐳 $@"
@@ -67,7 +62,7 @@ force-clean: clean
 	@echo "🐳 $@"
 	@rm -rf ${build_image}.created
 
-cross: ${build_image}.created
+cross: build-builder
 	@mkdir -p "bin"
 	@for platform in ${CROSS_PLATFORMS}; do \
 		EXTRA_ARGS="-e GOOS=$${platform%/*} -e GOARCH=$${platform##*/}" ; \
@@ -80,8 +75,11 @@ cross-local:
 	go build -o "bin/dnet-$$GOOS-$$GOARCH" ./cmd/dnet
 	go build -o "bin/docker-proxy-$$GOOS-$$GOARCH" ./cmd/proxy
 
-check: ${build_image}.created
-	@${docker} ./wrapmake.sh check-local
+#check: ${build_image}.created
+check: build-builder
+	@${docker} make check-local
+
+check-local: check-format check-code
 
 check-code: lint gosimple vet ineffassign
 
@@ -106,7 +104,6 @@ run-tests:
 	done
 	@echo "Done running tests"
 
-check-local: check-format check-code run-tests
 
 integration-tests: ./bin/dnet
 	@./test/integration/dnet/run-integration-tests.sh
