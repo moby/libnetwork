@@ -278,7 +278,7 @@ const ingressChain = "DOCKER-INGRESS"
 
 var (
 	ingressOnce     sync.Once
-	ingressProxyMu  sync.Mutex
+	ingressMu       sync.Mutex // lock for operations on ingress
 	ingressProxyTbl = make(map[string]io.Closer)
 	portConfigMu    sync.Mutex
 	portConfigTbl   = make(map[PortConfig]int)
@@ -326,6 +326,9 @@ func programIngress(gwIP net.IP, ingressPorts []*PortConfig, isDelete bool) erro
 	if isDelete {
 		addDelOpt = "-D"
 	}
+
+	ingressMu.Lock()
+	defer ingressMu.Unlock()
 
 	chainExists := iptables.ExistChain(ingressChain, iptables.Nat)
 	filterChainExists := iptables.ExistChain(ingressChain, iptables.Filter)
@@ -496,13 +499,11 @@ func plumbProxy(iPort *PortConfig, isDelete bool) error {
 
 	portSpec := fmt.Sprintf("%d/%s", iPort.PublishedPort, strings.ToLower(PortConfig_Protocol_name[int32(iPort.Protocol)]))
 	if isDelete {
-		ingressProxyMu.Lock()
 		if listener, ok := ingressProxyTbl[portSpec]; ok {
 			if listener != nil {
 				listener.Close()
 			}
 		}
-		ingressProxyMu.Unlock()
 
 		return nil
 	}
@@ -518,9 +519,7 @@ func plumbProxy(iPort *PortConfig, isDelete bool) error {
 		return err
 	}
 
-	ingressProxyMu.Lock()
 	ingressProxyTbl[portSpec] = l
-	ingressProxyMu.Unlock()
 
 	return nil
 }
