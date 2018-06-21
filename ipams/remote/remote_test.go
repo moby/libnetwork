@@ -110,7 +110,7 @@ func TestGetCapabilitiesFromLegacyDriver(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
+	
 	d := newAllocator(plugin, client)
 
 	if _, err := d.(*allocator).getCapabilities(); err == nil {
