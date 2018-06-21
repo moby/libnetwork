@@ -1252,9 +1252,6 @@ func (c *controller) loadDriver(networkType string) error {
 	}
 
 	if err != nil {
-		if err == plugins.ErrNotFound {
-			return types.NotFoundErrorf(err.Error())
-		}
 		return err
 	}
 
