@@ -2,7 +2,11 @@
 *.o
 *.a
 *.so
+*~
+.gtm
 bin/
+tags
+.DS_Store
 
 # Folders
 integration-tmp/
@@ -37,3 +41,5 @@ cmd/dnet/dnet
 .settings/
 
 libnetworkbuild.created
+test/networkDb/testMain
+test/networkDb/gossipdb
