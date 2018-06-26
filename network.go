@@ -1151,6 +1151,11 @@ func (n *network) createEndpoint(name string, options ...EndpointOption) (Endpoi
 	if err = ep.assignAddress(ipam, true, n.enableIPv6 && !n.postIPv6); err != nil {
 		return nil, err
 	}
+	
+	if err = n.addEndpoint(ep); err != nil {
+		return nil, err
+	}
+	
 	defer func() {
 		if err != nil {
 			ep.releaseAddress()
@@ -1169,9 +1174,6 @@ func (n *network) createEndpoint(name string, options ...EndpointOption) (Endpoi
 		}
 	}()
 
-	if err = n.addEndpoint(ep); err != nil {
-		return nil, err
-	}
 	defer func() {
 		if err != nil {
 			if e := ep.deleteEndpoint(false); e != nil {
