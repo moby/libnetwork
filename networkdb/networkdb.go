@@ -130,6 +130,9 @@ type network struct {
 	// Lamport time for the latest state of the entry.
 	ltime serf.LamportTime
 
+	// Gets set to true after the first bulk sync happens
+	inSync bool
+
 	// Node leave is in progress.
 	leaving bool
 
@@ -582,6 +585,7 @@ func (nDB *NetworkDB) JoinNetwork(nid string) error {
 
 	nDB.addNetworkNode(nid, nDB.config.NodeName)
 	networkNodes := nDB.networkNodes[nid]
+	n = nodeNetworks[nid]
 	nDB.Unlock()
 
 	if err := nDB.sendNetworkEvent(nid, NetworkEventTypeJoin, ltime); err != nil {
@@ -592,6 +596,12 @@ func (nDB *NetworkDB) JoinNetwork(nid string) error {
 	if _, err := nDB.bulkSync(networkNodes, true); err != nil {
 		logrus.Errorf("Error bulk syncing while joining network %s: %v", nid, err)
 	}
+
+	// Mark the network as being synced
+	// note this is a best effort, we are not checking the result of the bulk sync
+	nDB.Lock()
+	n.inSync = true
+	nDB.Unlock()
 
 	return nil
 }
