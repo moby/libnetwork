@@ -434,15 +434,11 @@ func (n *network) applyConfigurationTo(to *network) error {
 	}
 	if len(n.ipamV4Config) > 0 {
 		to.ipamV4Config = make([]*IpamConf, 0, len(n.ipamV4Config))
-		for _, v4conf := range n.ipamV4Config {
-			to.ipamV4Config = append(to.ipamV4Config, v4conf)
-		}
+		to.ipamV4Config = append(to.ipamV4Config, n.ipamV4Config...)
 	}
 	if len(n.ipamV6Config) > 0 {
 		to.ipamV6Config = make([]*IpamConf, 0, len(n.ipamV6Config))
-		for _, v6conf := range n.ipamV6Config {
-			to.ipamV6Config = append(to.ipamV6Config, v6conf)
-		}
+		to.ipamV6Config = append(to.ipamV6Config, n.ipamV6Config...)
 	}
 	if len(n.generic) > 0 {
 		to.generic = options.Generic{}
@@ -873,8 +869,7 @@ func (n *network) resolveDriver(name string, load bool) (driverapi.Driver, *driv
 	d, cap := c.drvRegistry.Driver(name)
 	if d == nil {
 		if load {
-			var err error
-			err = c.loadDriver(name)
+			err := c.loadDriver(name)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -1455,11 +1450,7 @@ func (n *network) ipamAllocate() error {
 	}
 
 	err = n.ipamAllocateVersion(6, ipam)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
 func (n *network) requestPoolHelper(ipam ipamapi.Ipam, addressSpace, preferredPool, subPool string, options map[string]string, v6 bool) (string, *net.IPNet, map[string]string, error) {
@@ -1658,9 +1649,7 @@ func (n *network) getIPInfo(ipVer int) []*IpamInfo {
 	}
 	l := make([]*IpamInfo, 0, len(info))
 	n.Lock()
-	for _, d := range info {
-		l = append(l, d)
-	}
+	l = append(l, info...)
 	n.Unlock()
 	return l
 }
@@ -1874,7 +1863,7 @@ func (n *network) ResolveName(req string, ipType int) ([]net.IP, bool) {
 		// the docker network domain. If the network is not v6 enabled
 		// set ipv6Miss to filter the DNS query from going to external
 		// resolvers.
-		if ok && n.enableIPv6 == false {
+		if ok && !n.enableIPv6 {
 			ipv6Miss = true
 		}
 		ipSet, ok = sr.svcIPv6Map.Get(req)
@@ -1932,7 +1921,7 @@ func (n *network) ResolveIP(ip string) string {
 		return ""
 	}
 	// NOTE it is possible to have more than one element in the Set, this will happen
-	// because of interleave of diffent events from differnt sources (local container create vs
+	// because of interleave of different events from different sources (local container create vs
 	// network db notifications)
 	// In such cases the resolution will be based on the first element of the set, and can vary
 	// during the system stabilitation
