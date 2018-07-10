@@ -940,6 +940,22 @@ func (d *driver) CreateEndpoint(nid, eid string, ifInfo driverapi.InterfaceInfo,
 	if err != nil {
 		return err
 	}
+	// Update the srcName first to make sure that DeleteEndpoint could be successful.
+	// Set the pointers to empty value here is to make sure we could update db successfully(or will panic)
+	endpoint.srcName = containerIfName
+	endpoint.addr = &net.IPNet{}
+	endpoint.addrv6 = &net.IPNet{}
+
+	if err = d.storeUpdate(endpoint); err != nil {
+		return fmt.Errorf("failed to save bridge endpoint %s to store: %v", endpoint.id[0:7], err)
+	}
+	defer func() {
+		if err != nil {
+			if err = d.storeDelete(endpoint); err != nil {
+				logrus.Warnf("error rolling back bridge endpoint %s from store: %v", endpoint.id[0:7], err)
+			}
+		}
+	}()
 
 	// Generate and add the interface pipe host <-> sandbox
 	veth := &netlink.Veth{
@@ -1002,9 +1018,7 @@ func (d *driver) CreateEndpoint(nid, eid string, ifInfo driverapi.InterfaceInfo,
 			return err
 		}
 	}
-
 	// Store the sandbox side pipe interface parameters
-	endpoint.srcName = containerIfName
 	endpoint.macAddress = ifInfo.MacAddress()
 	endpoint.addr = ifInfo.Address()
 	endpoint.addrv6 = ifInfo.AddressIPv6()
