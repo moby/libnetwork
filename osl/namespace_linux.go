@@ -630,7 +630,6 @@ func reexecSetIPv6() {
 		os.Exit(4)
 	}
 
-	os.Exit(0)
 }
 
 func setIPv6(path, iface string, enable bool) error {
