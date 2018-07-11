@@ -39,10 +39,13 @@ type Driver interface {
 	DeleteNetwork(nid string) error
 
 	// CreateEndpoint invokes the driver method to create an endpoint
-	// passing the network id, endpoint id endpoint information and driver
+	// passing the network id, endpoint id, endpoint information and driver
 	// specific config. The endpoint information can be either consumed by
 	// the driver or populated by the driver. The config mechanism will
 	// eventually be replaced with labels which are yet to be introduced.
+	//
+	// XXX: Does this need updating? The API talks about InterfaceInfo, not EndpointInfo
+	// and we now have labels.
 	CreateEndpoint(nid, eid string, ifInfo InterfaceInfo, options map[string]interface{}) error
 
 	// DeleteEndpoint invokes the driver method to delete an endpoint
