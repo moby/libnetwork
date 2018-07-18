@@ -71,6 +71,10 @@ func Init(ic ipamapi.Callback, l, g interface{}) error {
 	return nil
 }
 
+func (a *allocator) IsBuiltIn() bool {
+	return false
+}
+
 // GetCapabilities calls for mac addresses to be passed to this driver
 func (a *allocator) GetCapabilities() *ipamapi.Capability {
 	return &ipamapi.Capability{RequiresMACAddress: true}
