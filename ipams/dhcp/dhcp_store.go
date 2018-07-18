@@ -7,7 +7,6 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/libkv/store"
-	"github.com/docker/libkv/store/boltdb"
 	"github.com/docker/libnetwork/datastore"
 	"github.com/docker/libnetwork/discoverapi"
 	"github.com/docker/libnetwork/types"
@@ -59,7 +58,7 @@ func (d *allocator) initStore() error {
 // populateDhcpPools is invoked at driver init to recreate persistently stored DHCP Pools
 func (d *allocator) populateDhcpPools() error {
 	kvol, err := d.store.List(datastore.Key(dhcpPrefix), &dhcpPool{})
-	if err != nil && err != datastore.ErrKeyNotFound && err != boltdb.ErrBoltBucketNotFound {
+	if err != nil && err != datastore.ErrKeyNotFound {
 		return fmt.Errorf("failed to get dhcp configurations from store: %v", err)
 	}
 	// If empty it simply means no dhcp networks have been created yet
