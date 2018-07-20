@@ -216,7 +216,7 @@ func (ep *endpoint) Iface() InterfaceInfo {
 		return ep.iface
 	}
 
-	return nil
+	return &endpointInterface{}
 }
 
 func (ep *endpoint) Interface() driverapi.InterfaceInfo {

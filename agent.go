@@ -583,7 +583,7 @@ func (ep *endpoint) deleteDriverInfoFromCluster() error {
 }
 
 func (ep *endpoint) addServiceInfoToCluster(sb *sandbox) error {
-	if ep.isAnonymous() && len(ep.myAliases) == 0 || ep.Iface().Address() == nil {
+	if ep.isAnonymous() && len(ep.myAliases) == 0 || ep.Iface() == nil || ep.Iface().Address() == nil {
 		return nil
 	}
 
