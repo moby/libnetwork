@@ -10,6 +10,8 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// ovNotify indicates that an endpoint is joining or leaving a network.
+// The only valid values for action are "join" and "leave".
 type ovNotify struct {
 	action string
 	ep     *endpoint
@@ -35,6 +37,9 @@ func (l *logWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// serfInit configures and starts a Serf instance, creates channels
+// for communication between Serf and the overlay driver and starts
+// a goroutine to multiplex and dispatch messages between them.
 func (d *driver) serfInit() error {
 	var err error
 
@@ -69,6 +74,7 @@ func (d *driver) serfInit() error {
 	return nil
 }
 
+// serfJoin attempts to join the Serf cluster at neighIP.
 func (d *driver) serfJoin(neighIP string) error {
 	if neighIP == "" {
 		return fmt.Errorf("no neighbor to join")
@@ -80,6 +86,8 @@ func (d *driver) serfJoin(neighIP string) error {
 	return nil
 }
 
+// notifyEvent pushes an ovNotify event, containing an endpoint join or leave
+// message, from the driver to the Serf cluster
 func (d *driver) notifyEvent(event ovNotify) {
 	ep := event.ep
 
@@ -93,6 +101,9 @@ func (d *driver) notifyEvent(event ovNotify) {
 	}
 }
 
+// processEvent handles a UserEvent containing an endpoint join or
+// leave message received from the Serf cluster and dispatches it to the
+// appropriate driver function.
 func (d *driver) processEvent(u serf.UserEvent) {
 	logrus.Debugf("Received user event name:%s, payload:%s LTime:%d \n", u.Name,
 		string(u.Payload), uint64(u.LTime))
@@ -126,6 +137,10 @@ func (d *driver) processEvent(u serf.UserEvent) {
 	}
 }
 
+// processQuery handles a Query from another node requesting information
+// about a peer; it is the counterpart of resolvePeer. processQuery looks
+// up the requested network and IP in the peer database and returns the
+// results to the requesting node via Serf.
 func (d *driver) processQuery(q *serf.Query) {
 	logrus.Debugf("Received query name:%s, payload:%s\n", q.Name,
 		string(q.Payload))
@@ -144,6 +159,9 @@ func (d *driver) processQuery(q *serf.Query) {
 	q.Respond([]byte(fmt.Sprintf("%s %s %s", pKey.peerMac.String(), net.IP(pEntry.peerIPMask).String(), pEntry.vtep.String())))
 }
 
+// resolvePeer queries the rest of the cluster to resolve peerIP in
+// network nid.   resolvePeer returns an error if the response from the
+// cluster is corrupt or if the call times out without receiving a response.
 func (d *driver) resolvePeer(nid string, peerIP net.IP) (net.HardwareAddr, net.IPMask, net.IP, error) {
 	if d.serfInstance == nil {
 		return nil, nil, nil, fmt.Errorf("could not resolve peer: serf instance not initialized")
@@ -176,6 +194,21 @@ func (d *driver) resolvePeer(nid string, peerIP net.IP) (net.HardwareAddr, net.I
 	}
 }
 
+// startSerfLoop multiplexes and dispatches messages between the overlay
+// driver and Serf, the gossip layer.
+//
+// notifyCh carries join and leave messages from the driver.   startSerfLoop
+// forwards these to the Serf cluster.
+//
+// exitCh carries channels from the driver.   On receiving one of these,
+// startSerfLoop leaves the Serf cluster, shuts down the local Serf instance
+// and closes the channel to inform the caller that shutdown is complete.
+//
+// eventCh carries join and leave messages (wrapped in UserEvent structs) and
+// peerlookup messages (wrapped in Query structs) from Serf.   startSerfLoop
+// forwards join and leave messages to the appropriate driver functions; it
+// calls peerDB to resolve peerlookup queries and sends the results back
+// directly to the requester.
 func (d *driver) startSerfLoop(eventCh chan serf.Event, notifyCh chan ovNotify,
 	exitCh chan chan struct{}) {
 
@@ -218,6 +251,7 @@ func (d *driver) startSerfLoop(eventCh chan serf.Event, notifyCh chan ovNotify,
 	}
 }
 
+// isSerfAlive returns true if serf is initialized and running
 func (d *driver) isSerfAlive() bool {
 	d.Lock()
 	serfInstance := d.serfInstance
