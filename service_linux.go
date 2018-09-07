@@ -143,7 +143,7 @@ func (n *network) addLBBackend(ip net.IP, lb *loadBalancer) {
 		}
 
 		logrus.Debugf("Creating service for vip %s fwMark %d ingressPorts %#v in sbox %.7s (%.7s)", lb.vip, lb.fwMark, lb.service.ingressPorts, sb.ID(), sb.ContainerID())
-		if err := invokeFWMarker(sb.Key(), lb.vip, lb.fwMark, lb.service.ingressPorts, eIP, false); err != nil {
+		if err := invokeFWMarker(sb.Key(), lb.vip, lb.fwMark, lb.service.ingressPorts, eIP, false, n.ingress); err != nil {
 			logrus.Errorf("Failed to add firewall mark rule in sbox %.7s (%.7s): %v", sb.ID(), sb.ContainerID(), err)
 			return
 		}
@@ -158,6 +158,9 @@ func (n *network) addLBBackend(ip net.IP, lb *loadBalancer) {
 		AddressFamily: nl.FAMILY_V4,
 		Address:       ip,
 		Weight:        1,
+	}
+	if !n.ingress {
+		d.ConnectionFlags = ipvs.ConnFwdDirectRoute
 	}
 
 	// Remove the sched name before using the service to add
@@ -204,6 +207,9 @@ func (n *network) rmLBBackend(ip net.IP, lb *loadBalancer, rmService bool, fullR
 		Address:       ip,
 		Weight:        1,
 	}
+	if !n.ingress {
+		d.ConnectionFlags = ipvs.ConnFwdDirectRoute
+	}
 
 	if fullRemove {
 		if err := i.DelDestination(s, d); err != nil && err != syscall.ENOENT {
@@ -233,7 +239,7 @@ func (n *network) rmLBBackend(ip net.IP, lb *loadBalancer, rmService bool, fullR
 			}
 		}
 
-		if err := invokeFWMarker(sb.Key(), lb.vip, lb.fwMark, lb.service.ingressPorts, eIP, true); err != nil {
+		if err := invokeFWMarker(sb.Key(), lb.vip, lb.fwMark, lb.service.ingressPorts, eIP, true, n.ingress); err != nil {
 			logrus.Errorf("Failed to delete firewall mark rule in sbox %.7s (%.7s): %v", sb.ID(), sb.ContainerID(), err)
 		}
 
@@ -544,7 +550,7 @@ func readPortsFromFile(fileName string) ([]*PortConfig, error) {
 
 // Invoke fwmarker reexec routine to mark vip destined packets with
 // the passed firewall mark.
-func invokeFWMarker(path string, vip net.IP, fwMark uint32, ingressPorts []*PortConfig, eIP *net.IPNet, isDelete bool) error {
+func invokeFWMarker(path string, vip net.IP, fwMark uint32, ingressPorts []*PortConfig, eIP *net.IPNet, isDelete bool, isIngress bool) error {
 	var ingressPortsFile string
 
 	if len(ingressPorts) != 0 {
@@ -562,9 +568,14 @@ func invokeFWMarker(path string, vip net.IP, fwMark uint32, ingressPorts []*Port
 		addDelOpt = "-D"
 	}
 
+	isIngressOpt := "false"
+	if isIngress {
+		isIngressOpt = "true"
+	}
+
 	cmd := &exec.Cmd{
 		Path:   reexec.Self(),
-		Args:   append([]string{"fwmarker"}, path, vip.String(), fmt.Sprintf("%d", fwMark), addDelOpt, ingressPortsFile, eIP.String()),
+		Args:   append([]string{"fwmarker"}, path, vip.String(), fmt.Sprintf("%d", fwMark), addDelOpt, ingressPortsFile, eIP.String(), isIngressOpt),
 		Stdout: os.Stdout,
 		Stderr: os.Stderr,
 	}
@@ -581,7 +592,7 @@ func fwMarker() {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
-	if len(os.Args) < 7 {
+	if len(os.Args) < 8 {
 		logrus.Error("invalid number of arguments..")
 		os.Exit(1)
 	}
@@ -623,7 +634,8 @@ func fwMarker() {
 		os.Exit(5)
 	}
 
-	if addDelOpt == "-A" {
+	isIngressOpt := os.Args[7]
+	if addDelOpt == "-A" && isIngressOpt == "true" {
 		eIP, subnet, err := net.ParseCIDR(os.Args[6])
 		if err != nil {
 			logrus.Errorf("Failed to parse endpoint IP %s: %v", os.Args[6], err)
