@@ -12,7 +12,8 @@ import (
 
 // DockerChain: DOCKER iptable chain name
 const (
-	DockerChain = "DOCKER"
+	DockerChain      = "DOCKER"
+	DockerInputChain = "DOCKER-INPUT"
 	// Isolation between bridge networks is achieved in two stages by means
 	// of the following two chains in the filter table. The first chain matches
 	// on the source interface being a bridge network's bridge and the
@@ -58,6 +59,18 @@ func setupIPChains(config *configuration) (*iptables.ChainInfo, *iptables.ChainI
 		}
 	}()
 
+	_, err = iptables.NewChain(DockerInputChain, iptables.Filter, false)
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("failed to create INPUT chain %s: %v", DockerInputChain, err)
+	}
+	defer func() {
+		if err != nil {
+			if err := iptables.RemoveExistingChain(DockerInputChain, iptables.Filter); err != nil {
+				logrus.Warnf("failed on removing iptables INPUT chain %s on cleanup: %v", DockerInputChain, err)
+			}
+		}
+	}()
+
 	isolationChain1, err := iptables.NewChain(IsolationChain1, iptables.Filter, false)
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("failed to create FILTER isolation chain: %v", err)
@@ -82,11 +95,19 @@ func setupIPChains(config *configuration) (*iptables.ChainInfo, *iptables.ChainI
 		}
 	}()
 
+	if err := iptables.AddReturnRule(DockerInputChain); err != nil {
+		return nil, nil, nil, nil, err
+	}
+
 	if err := iptables.AddReturnRule(IsolationChain1); err != nil {
 		return nil, nil, nil, nil, err
 	}
 
 	if err := iptables.AddReturnRule(IsolationChain2); err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	if err := iptables.ProgramRule(iptables.Filter, DockerInputChain, iptables.Insert, []string{"-m", "conntrack", "--ctstate", "INVALID", "-j", "DROP"}); err != nil {
 		return nil, nil, nil, nil, err
 	}
 
@@ -147,6 +168,13 @@ func (n *bridgeNetwork) setupIPTables(config *networkConfiguration, i *bridgeInt
 		})
 
 		n.portMapper.SetIptablesChain(natChain, n.getNetworkBridgeName())
+	}
+
+	d.Lock()
+	err = iptables.EnsureJumpRule("INPUT", DockerInputChain)
+	d.Unlock()
+	if err != nil {
+		return err
 	}
 
 	d.Lock()
@@ -321,10 +349,14 @@ func removeIPChains() {
 	// Remove obsolete rules from default chains
 	iptables.ProgramRule(iptables.Filter, "FORWARD", iptables.Delete, []string{"-j", oldIsolationChain})
 
+	// Remove possibly installed references to chains
+	iptables.ProgramRule(iptables.Filter, "INPUT", iptables.Delete, []string{"-j", DockerInputChain})
+
 	// Remove chains
 	for _, chainInfo := range []iptables.ChainInfo{
 		{Name: DockerChain, Table: iptables.Nat},
 		{Name: DockerChain, Table: iptables.Filter},
+		{Name: DockerInputChain, Table: iptables.Filter},
 		{Name: IsolationChain1, Table: iptables.Filter},
 		{Name: IsolationChain2, Table: iptables.Filter},
 		{Name: oldIsolationChain, Table: iptables.Filter},
