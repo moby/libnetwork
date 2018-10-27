@@ -1,18 +1,16 @@
 # libnetwork - networking for containers
 
 [![Circle CI](https://circleci.com/gh/docker/libnetwork/tree/master.svg?style=svg)](https://circleci.com/gh/docker/libnetwork/tree/master) [![Coverage Status](https://coveralls.io/repos/docker/libnetwork/badge.svg)](https://coveralls.io/r/docker/libnetwork) [![GoDoc](https://godoc.org/github.com/docker/libnetwork?status.svg)](https://godoc.org/github.com/docker/libnetwork) [![Go Report Card](https://goreportcard.com/badge/github.com/docker/libnetwork)](https://goreportcard.com/report/github.com/docker/libnetwork)
+Libnetwork fournit une implémentation Go native pour connecter des conteneurs.
 
-Libnetwork provides a native Go implementation for connecting containers
+Le but de libnetwork est de fournir un modèle de réseau de conteneur robuste offrant une interface de programmation cohérente et les abstractions de réseau requises pour les applications.
 
-The goal of libnetwork is to deliver a robust Container Network Model that provides a consistent programming interface and the required network abstractions for applications.
+#### Conception
+Veuillez vous reporter à [design] (docs / design.md) pour plus d'informations.
 
-#### Design
-Please refer to the [design](docs/design.md) for more information.
+#### Utilisation de libnetwork
 
-#### Using libnetwork
-
-There are many networking solutions available to suit a broad range of use-cases. libnetwork uses a driver / plugin model to support all of these solutions while abstracting the complexity of the driver implementations by exposing a simple and consistent Network Model to users.
-
+Il existe de nombreuses solutions réseau disponibles pour une large gamme de cas d'utilisation. libnetwork utilise un modèle de pilote / plug-in pour prendre en charge toutes ces solutions tout en résumant la complexité de la mise en œuvre des pilotes en exposant un modèle de réseau simple et cohérent aux utilisateurs.
 
 ```go
 import (
@@ -89,12 +87,12 @@ func main() {
 }
 ```
 
-## Future
-Please refer to [roadmap](ROADMAP.md) for more information.
+## Futur
+Veuillez vous reporter à [roadmap] (ROADMAP.md) pour plus d'informations.
 
-## Contributing
+## Contribuant
 
-Want to hack on libnetwork? [Docker's contributions guidelines](https://github.com/docker/docker/blob/master/CONTRIBUTING.md) apply.
+Voulez-vous pirater sur libnetwork? [Les directives concernant les contributions de Docker] (https://github.com/docker/docker/blob/master/CONTRIBUTING.md) s'appliquent.
 
-## Copyright and license
-Code and documentation copyright 2015 Docker, inc. Code released under the Apache 2.0 license. Docs released under Creative commons.
+## Copyright et licence
+Code et documentation copyright 2015 Docker, inc. Code publié sous la licence Apache 2.0. Docs publiés sous Creative commons.
