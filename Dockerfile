@@ -1,7 +1,7 @@
 FROM golang:1.10.7 as dev
 RUN apt-get update && apt-get -y install iptables
 
-RUN go get github.com/golang/lint/golint \
+RUN go get golang.org/x/lint/golint \
 		golang.org/x/tools/cmd/cover \
 		github.com/mattn/goveralls \
 		github.com/gordonklaus/ineffassign \
