@@ -1051,7 +1051,13 @@ func (n *network) delete(force bool, rmLBEndpoint bool) error {
 
 	if n.ConfigFrom() != "" {
 		if t, err := c.getConfigNetwork(n.ConfigFrom()); err == nil {
-			if err := t.getEpCnt().DecEndpointCnt(); err != nil {
+            // ConfigOnly and ConfigFrom Networks have 1 to 1 correspondence? In that case
+            // there is no need to decrement the ref count, simply set it to zero.
+            // In the case of a powercycle, the count on the configfrom network increments more than
+            // once and this can cause the configfrom network to linger forever and not even deleteable.
+            // This happens due to the additional increment after the power on, hence count can never
+            // become zero.
+            if err := t.getEpCnt().SetEndpointCnt(0); err != nil {
 				logrus.Warnf("Failed to update reference count for configuration network %q on removal of network %q: %v",
 					t.Name(), n.Name(), err)
 			}

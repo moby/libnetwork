@@ -180,3 +180,8 @@ func (ec *endpointCnt) IncEndpointCnt() error {
 func (ec *endpointCnt) DecEndpointCnt() error {
 	return ec.atomicIncDecEpCnt(false)
 }
+
+func (ec *endpointCnt) SetEndpointCnt(cnt uint64) error {
+    return ec.setCnt(cnt)
+}
+
