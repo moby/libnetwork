@@ -88,12 +88,10 @@ func (d *driver) createNetwork(config *configuration) (bool, error) {
             if config.ID != nw.config.ID {
 				return false, fmt.Errorf("network %s is already using parent interface %s",
 					getDummyName(stringid.TruncateID(nw.config.ID)), config.Parent)
-            } else {
-                logrus.Debugf("Create Network for the same ID %s\n", config.ID)
-                foundExisting = true
-                break
             }
-
+            logrus.Debugf("Create Network for the same ID %s\n", config.ID)
+            foundExisting = true
+            break
 		}
 	}
 	if !parentExists(config.Parent) {
