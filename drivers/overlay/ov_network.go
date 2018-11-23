@@ -27,6 +27,7 @@ import (
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netlink/nl"
 	"github.com/vishvananda/netns"
+	"golang.org/x/sys/unix"
 )
 
 var (
@@ -760,7 +761,7 @@ func (n *network) initSandbox(restore bool) error {
 			return
 		}
 		// set the receive timeout to not remain stuck on the RecvFrom if the fd gets closed
-		tv := syscall.NsecToTimeval(soTimeout.Nanoseconds())
+		tv := unix.NsecToTimeval(soTimeout.Nanoseconds())
 		err = nlSock.SetReceiveTimeout(&tv)
 	})
 	n.nlSocket = nlSock
