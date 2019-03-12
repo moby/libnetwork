@@ -428,6 +428,8 @@ func (sb *sandbox) updateGateway(ep *endpoint) error {
 		return fmt.Errorf("failed to set IPv6 gateway while updating gateway: %v", err)
 	}
 
+	ep.network.addSvcRecords(ep.ID(), hostDockerInternal, ep.svcID, ep.Gateway(), ep.GatewayIPv6(), true, "updateGateway")
+
 	return nil
 }
 
@@ -704,7 +706,7 @@ func (sb *sandbox) EnableService() (err error) {
 				return fmt.Errorf("could not update state for endpoint %s into cluster: %v", ep.Name(), err)
 			}
 			ep.enableService()
-			ep.network.addSvcRecords(ep.ID(), hostDockerInternal, ep.svcID, ep.Gateway(), ep.GatewayIPv6(), true, "EnableService")
+
 		}
 	}
 	logrus.Debugf("EnableService %s DONE", sb.containerID)
@@ -725,7 +727,6 @@ func (sb *sandbox) DisableService() (err error) {
 				failedEps = append(failedEps, ep.Name())
 				logrus.Warnf("failed update state for endpoint %s into cluster: %v", ep.Name(), err)
 			}
-			ep.network.deleteSvcRecords(ep.ID(), hostDockerInternal, ep.svcID, ep.Gateway(), ep.GatewayIPv6(), true, "DisableService")
 			ep.disableService()
 		}
 	}
