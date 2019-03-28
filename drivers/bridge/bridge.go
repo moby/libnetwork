@@ -15,6 +15,7 @@ import (
 	"github.com/docker/libnetwork/datastore"
 	"github.com/docker/libnetwork/discoverapi"
 	"github.com/docker/libnetwork/driverapi"
+	"github.com/docker/libnetwork/ip6tables"
 	"github.com/docker/libnetwork/iptables"
 	"github.com/docker/libnetwork/netlabel"
 	"github.com/docker/libnetwork/netutils"
@@ -51,12 +52,15 @@ func (d defaultBridgeNetworkConflict) Error() string {
 }
 
 type iptableCleanFunc func() error
+type ip6tableCleanFunc func() error
 type iptablesCleanFuncs []iptableCleanFunc
+type ip6tablesCleanFuncs []ip6tableCleanFunc
 
 // configuration info for the "bridge" driver.
 type configuration struct {
 	EnableIPForwarding  bool
 	EnableIPTables      bool
+	EnableIP6Tables     bool
 	EnableUserlandProxy bool
 	UserlandProxyPath   string
 }
@@ -126,27 +130,32 @@ type bridgeEndpoint struct {
 }
 
 type bridgeNetwork struct {
-	id            string
-	bridge        *bridgeInterface // The bridge's L3 interface
-	config        *networkConfiguration
-	endpoints     map[string]*bridgeEndpoint // key: endpoint id
-	portMapper    *portmapper.PortMapper
-	driver        *driver // The network's driver
-	iptCleanFuncs iptablesCleanFuncs
+	id             string
+	bridge         *bridgeInterface // The bridge's L3 interface
+	config         *networkConfiguration
+	endpoints      map[string]*bridgeEndpoint // key: endpoint id
+	portMapper     *portmapper.PortMapper
+	driver         *driver // The network's driver
+	iptCleanFuncs  iptablesCleanFuncs
+	ip6tCleanFuncs ip6tablesCleanFuncs
 	sync.Mutex
 }
 
 type driver struct {
-	config          *configuration
-	network         *bridgeNetwork
-	natChain        *iptables.ChainInfo
-	filterChain     *iptables.ChainInfo
-	isolationChain1 *iptables.ChainInfo
-	isolationChain2 *iptables.ChainInfo
-	networks        map[string]*bridgeNetwork
-	store           datastore.DataStore
-	nlh             *netlink.Handle
-	configNetwork   sync.Mutex
+	config              *configuration
+	network             *bridgeNetwork
+	natChain            *iptables.ChainInfo
+	filterChain         *iptables.ChainInfo
+	isolationChain1     *iptables.ChainInfo
+	isolationChain2     *iptables.ChainInfo
+	ip6tNatChain        *ip6tables.ChainInfo
+	ip6tFilterChain     *ip6tables.ChainInfo
+	ip6tIsolationChain1 *ip6tables.ChainInfo
+	ip6tIsolationChain2 *ip6tables.ChainInfo
+	networks            map[string]*bridgeNetwork
+	store               datastore.DataStore
+	nlh                 *netlink.Handle
+	configNetwork       sync.Mutex
 	sync.Mutex
 }
 
@@ -267,6 +276,10 @@ func (n *bridgeNetwork) registerIptCleanFunc(clean iptableCleanFunc) {
 	n.iptCleanFuncs = append(n.iptCleanFuncs, clean)
 }
 
+func (n *bridgeNetwork) registerIP6tCleanFunc(clean ip6tableCleanFunc) {
+	n.ip6tCleanFuncs = append(n.ip6tCleanFuncs, clean)
+}
+
 func (n *bridgeNetwork) getDriverChains() (*iptables.ChainInfo, *iptables.ChainInfo, *iptables.ChainInfo, *iptables.ChainInfo, error) {
 	n.Lock()
 	defer n.Unlock()
@@ -276,6 +289,17 @@ func (n *bridgeNetwork) getDriverChains() (*iptables.ChainInfo, *iptables.ChainI
 	}
 
 	return n.driver.natChain, n.driver.filterChain, n.driver.isolationChain1, n.driver.isolationChain2, nil
+}
+
+func (n *bridgeNetwork) getIP6DriverChains() (*ip6tables.ChainInfo, *ip6tables.ChainInfo, *ip6tables.ChainInfo, *ip6tables.ChainInfo, error) {
+	n.Lock()
+	defer n.Unlock()
+
+	if n.driver == nil {
+		return nil, nil, nil, nil, types.BadRequestErrorf("no driver found")
+	}
+
+	return n.driver.ip6tNatChain, n.driver.ip6tFilterChain, n.driver.ip6tIsolationChain1, n.driver.ip6tIsolationChain2, nil
 }
 
 func (n *bridgeNetwork) getNetworkBridgeName() string {
@@ -318,12 +342,16 @@ func (n *bridgeNetwork) isolateNetwork(others []*bridgeNetwork, enable bool) err
 
 func (d *driver) configure(option map[string]interface{}) error {
 	var (
-		config          *configuration
-		err             error
-		natChain        *iptables.ChainInfo
-		filterChain     *iptables.ChainInfo
-		isolationChain1 *iptables.ChainInfo
-		isolationChain2 *iptables.ChainInfo
+		config              *configuration
+		err                 error
+		natChain            *iptables.ChainInfo
+		filterChain         *iptables.ChainInfo
+		isolationChain1     *iptables.ChainInfo
+		isolationChain2     *iptables.ChainInfo
+		ip6tNatChain        *ip6tables.ChainInfo
+		ip6tFilterChain     *ip6tables.ChainInfo
+		ip6tIsolationChain1 *ip6tables.ChainInfo
+		ip6tIsolationChain2 *ip6tables.ChainInfo
 	)
 
 	genericData, ok := option[netlabel.GenericData]
@@ -344,12 +372,15 @@ func (d *driver) configure(option map[string]interface{}) error {
 		return &ErrInvalidDriverConfig{}
 	}
 
-	if config.EnableIPTables {
+	if config.EnableIPTables || config.EnableIP6Tables {
 		if _, err := os.Stat("/proc/sys/net/bridge"); err != nil {
 			if out, err := exec.Command("modprobe", "-va", "bridge", "br_netfilter").CombinedOutput(); err != nil {
 				logrus.Warnf("Running modprobe bridge br_netfilter failed with message: %s, error: %v", out, err)
 			}
 		}
+	}
+
+	if config.EnableIPTables {
 		removeIPChains()
 		natChain, filterChain, isolationChain1, isolationChain2, err = setupIPChains(config)
 		if err != nil {
@@ -357,6 +388,16 @@ func (d *driver) configure(option map[string]interface{}) error {
 		}
 		// Make sure on firewall reload, first thing being re-played is chains creation
 		iptables.OnReloaded(func() { logrus.Debugf("Recreating iptables chains on firewall reload"); setupIPChains(config) })
+	}
+
+	if config.EnableIP6Tables {
+		removeIP6Chains()
+		ip6tNatChain, ip6tFilterChain, ip6tIsolationChain1, ip6tIsolationChain2, err = setupIP6Chains(config)
+		if err != nil {
+			return err
+		}
+		// Make sure on firewall reload, first thing being re-played is chains creation
+		ip6tables.OnReloaded(func() { logrus.Debugf("Recreating ip6tables chains on firewall reload"); setupIP6Chains(config) })
 	}
 
 	if config.EnableIPForwarding {
@@ -372,6 +413,10 @@ func (d *driver) configure(option map[string]interface{}) error {
 	d.filterChain = filterChain
 	d.isolationChain1 = isolationChain1
 	d.isolationChain2 = isolationChain2
+	d.ip6tNatChain = ip6tNatChain
+	d.ip6tFilterChain = ip6tFilterChain
+	d.ip6tIsolationChain1 = ip6tIsolationChain1
+	d.ip6tIsolationChain2 = ip6tIsolationChain2
 	d.config = config
 	d.Unlock()
 
@@ -709,6 +754,9 @@ func (d *driver) createNetwork(config *networkConfiguration) (err error) {
 
 		// Setup IPTables.
 		{d.config.EnableIPTables, network.setupIPTables},
+
+		// Setup IP6Tables.
+		{d.config.EnableIP6Tables && config.AddressIPv6 != nil, network.setupIP6Tables},
 
 		//We want to track firewalld configuration so that
 		//if it is started/reloaded, the rules can be applied correctly

@@ -6,6 +6,7 @@ import (
 	"net"
 	"sync"
 
+	"github.com/docker/libnetwork/ip6tables"
 	"github.com/docker/libnetwork/iptables"
 	"github.com/docker/libnetwork/portallocator"
 	"github.com/ishidawataru/sctp"
@@ -17,6 +18,7 @@ type mapping struct {
 	userlandProxy userlandProxy
 	host          net.Addr
 	container     net.Addr
+	containerv6   net.Addr
 }
 
 var newProxy = newProxyCommand
@@ -35,6 +37,7 @@ var (
 // PortMapper manages the network address translation
 type PortMapper struct {
 	chain      *iptables.ChainInfo
+	ip6tChain  *ip6tables.ChainInfo
 	bridgeName string
 
 	// udp:ip:port
@@ -66,13 +69,19 @@ func (pm *PortMapper) SetIptablesChain(c *iptables.ChainInfo, bridgeName string)
 	pm.bridgeName = bridgeName
 }
 
+// SetIP6tablesChain sets the specified chain into portmapper
+func (pm *PortMapper) SetIP6tablesChain(c *ip6tables.ChainInfo, bridgeName string) {
+	pm.ip6tChain = c
+	pm.bridgeName = bridgeName
+}
+
 // Map maps the specified container transport address to the host's network address and transport port
-func (pm *PortMapper) Map(container net.Addr, hostIP net.IP, hostPort int, useProxy bool) (host net.Addr, err error) {
-	return pm.MapRange(container, hostIP, hostPort, hostPort, useProxy)
+func (pm *PortMapper) Map(container net.Addr, containerv6 net.Addr, hostIP net.IP, hostPort int, useProxy bool) (host net.Addr, err error) {
+	return pm.MapRange(container, containerv6, hostIP, hostPort, hostPort, useProxy)
 }
 
 // MapRange maps the specified container transport address to the host's network address and transport port range
-func (pm *PortMapper) MapRange(container net.Addr, hostIP net.IP, hostPortStart, hostPortEnd int, useProxy bool) (host net.Addr, err error) {
+func (pm *PortMapper) MapRange(container net.Addr, containerv6 net.Addr, hostIP net.IP, hostPortStart, hostPortEnd int, useProxy bool) (host net.Addr, err error) {
 	pm.lock.Lock()
 	defer pm.lock.Unlock()
 
@@ -90,9 +99,10 @@ func (pm *PortMapper) MapRange(container net.Addr, hostIP net.IP, hostPortStart,
 		}
 
 		m = &mapping{
-			proto:     proto,
-			host:      &net.TCPAddr{IP: hostIP, Port: allocatedHostPort},
-			container: container,
+			proto:       proto,
+			host:        &net.TCPAddr{IP: hostIP, Port: allocatedHostPort},
+			container:   container,
+			containerv6: containerv6,
 		}
 
 		if useProxy {
@@ -113,9 +123,10 @@ func (pm *PortMapper) MapRange(container net.Addr, hostIP net.IP, hostPortStart,
 		}
 
 		m = &mapping{
-			proto:     proto,
-			host:      &net.UDPAddr{IP: hostIP, Port: allocatedHostPort},
-			container: container,
+			proto:       proto,
+			host:        &net.UDPAddr{IP: hostIP, Port: allocatedHostPort},
+			container:   container,
+			containerv6: containerv6,
 		}
 
 		if useProxy {
@@ -136,9 +147,10 @@ func (pm *PortMapper) MapRange(container net.Addr, hostIP net.IP, hostPortStart,
 		}
 
 		m = &mapping{
-			proto:     proto,
-			host:      &sctp.SCTPAddr{IP: []net.IP{hostIP}, Port: allocatedHostPort},
-			container: container,
+			proto:       proto,
+			host:        &sctp.SCTPAddr{IP: []net.IP{hostIP}, Port: allocatedHostPort},
+			container:   container,
+			containerv6: containerv6,
 		}
 
 		if useProxy {
@@ -173,8 +185,14 @@ func (pm *PortMapper) MapRange(container net.Addr, hostIP net.IP, hostPortStart,
 	}
 
 	containerIP, containerPort := getIPAndPort(m.container)
-	if hostIP.To4() != nil {
+	if containerIP.To4() != nil {
 		if err := pm.forward(iptables.Append, m.proto, hostIP, allocatedHostPort, containerIP.String(), containerPort); err != nil {
+			return nil, err
+		}
+	}
+	containerIPv6, containerPort := getIPAndPort(m.containerv6)
+	if containerIPv6 != nil {
+		if err := pm.ip6tForward(ip6tables.Append, m.proto, hostIP, allocatedHostPort, containerIPv6.String(), containerPort); err != nil {
 			return nil, err
 		}
 	}
@@ -182,8 +200,14 @@ func (pm *PortMapper) MapRange(container net.Addr, hostIP net.IP, hostPortStart,
 	cleanup := func() error {
 		// need to undo the iptables rules before we return
 		m.userlandProxy.Stop()
-		if hostIP.To4() != nil {
+		if containerIP.To4() != nil {
 			pm.forward(iptables.Delete, m.proto, hostIP, allocatedHostPort, containerIP.String(), containerPort)
+			if err := pm.Allocator.ReleasePort(hostIP, m.proto, allocatedHostPort); err != nil {
+				return err
+			}
+		}
+		if containerIPv6 != nil {
+			pm.ip6tForward(ip6tables.Delete, m.proto, hostIP, allocatedHostPort, containerIPv6.String(), containerPort)
 			if err := pm.Allocator.ReleasePort(hostIP, m.proto, allocatedHostPort); err != nil {
 				return err
 			}
@@ -225,6 +249,12 @@ func (pm *PortMapper) Unmap(host net.Addr) error {
 	if err := pm.forward(iptables.Delete, data.proto, hostIP, hostPort, containerIP.String(), containerPort); err != nil {
 		logrus.Errorf("Error on iptables delete: %s", err)
 	}
+	containerIPv6, containerPort := getIPAndPort(data.containerv6)
+	if containerIPv6 != nil {
+		if err := pm.ip6tForward(ip6tables.Delete, data.proto, hostIP, hostPort, containerIPv6.String(), containerPort); err != nil {
+			logrus.Errorf("Error on ip6tables delete: %s", err)
+		}
+	}
 
 	switch a := host.(type) {
 	case *net.TCPAddr:
@@ -250,6 +280,12 @@ func (pm *PortMapper) ReMapAll() {
 		hostIP, hostPort := getIPAndPort(data.host)
 		if err := pm.forward(iptables.Append, data.proto, hostIP, hostPort, containerIP.String(), containerPort); err != nil {
 			logrus.Errorf("Error on iptables add: %s", err)
+		}
+		if data.containerv6 != nil {
+			containerIPv6, containerPort := getIPAndPort(data.containerv6)
+			if err := pm.ip6tForward(ip6tables.Append, data.proto, hostIP, hostPort, containerIPv6.String(), containerPort); err != nil {
+				logrus.Errorf("Error on ip6tables add: %s", err)
+			}
 		}
 	}
 }
@@ -291,4 +327,11 @@ func (pm *PortMapper) forward(action iptables.Action, proto string, sourceIP net
 		return nil
 	}
 	return pm.chain.Forward(action, sourceIP, sourcePort, proto, containerIP, containerPort, pm.bridgeName)
+}
+
+func (pm *PortMapper) ip6tForward(action ip6tables.Action, proto string, sourceIP net.IP, sourcePort int, containerIPv6 string, containerPort int) error {
+	if pm.ip6tChain == nil {
+		return nil
+	}
+	return pm.ip6tChain.Forward(action, sourceIP, sourcePort, proto, containerIPv6, containerPort, pm.bridgeName)
 }
