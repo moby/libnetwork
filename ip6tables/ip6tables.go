@@ -238,7 +238,6 @@ func RemoveExistingChain(name string, table Table) error {
 // Forward adds forwarding rule to 'filter' table and corresponding nat rule to 'nat' table.
 func (c *ChainInfo) Forward(action Action, ip net.IP, port int, proto, destAddr string, destPort int, bridgeName string) error {
 	daddr := ip.String()
-	args := []string{}
 	if ip.IsUnspecified() {
 		// iptables interprets "0.0.0.0" as "0.0.0.0/32", whereas we
 		// want "0.0.0.0/0". "0/0" is correctly interpreted as "any
@@ -253,7 +252,7 @@ func (c *ChainInfo) Forward(action Action, ip net.IP, port int, proto, destAddr 
 	}
 
 	if ulaCIDR.Contains(net.ParseIP(destAddr)) {
-		args = []string{
+		args := []string{
 			"-p", proto,
 			"-d", daddr,
 			"--dport", strconv.Itoa(port),
@@ -267,7 +266,7 @@ func (c *ChainInfo) Forward(action Action, ip net.IP, port int, proto, destAddr 
 		}
 	}
 
-	args = []string{
+	args := []string{
 		"!", "-i", bridgeName,
 		"-o", bridgeName,
 		"-p", proto,
