@@ -85,6 +85,7 @@ func (t *TransportPort) FromString(s string) error {
 type PortBinding struct {
 	Proto       Protocol
 	IP          net.IP
+	IPv6        net.IP
 	Port        uint16
 	HostIP      net.IP
 	HostPort    uint16
@@ -106,16 +107,25 @@ func (p PortBinding) HostAddr() (net.Addr, error) {
 }
 
 // ContainerAddr returns the container side transport address
-func (p PortBinding) ContainerAddr() (net.Addr, error) {
+func (p PortBinding) ContainerAddr() (net.Addr, net.Addr, error) {
 	switch p.Proto {
 	case UDP:
-		return &net.UDPAddr{IP: p.IP, Port: int(p.Port)}, nil
+		if p.IPv6 != nil {
+			return &net.UDPAddr{IP: p.IP, Port: int(p.Port)}, &net.UDPAddr{IP: p.IP, Port: int(p.Port)}, nil
+		}
+		return &net.UDPAddr{IP: p.IP, Port: int(p.Port)}, nil, nil
 	case TCP:
-		return &net.TCPAddr{IP: p.IP, Port: int(p.Port)}, nil
+		if p.IPv6 != nil {
+			return &net.TCPAddr{IP: p.IP, Port: int(p.Port)}, &net.TCPAddr{IP: p.IPv6, Port: int(p.Port)}, nil
+		}
+		return &net.TCPAddr{IP: p.IP, Port: int(p.Port)}, nil, nil
 	case SCTP:
-		return &sctp.SCTPAddr{IP: []net.IP{p.IP}, Port: int(p.Port)}, nil
+		if p.IPv6 != nil {
+			return &sctp.SCTPAddr{IP: []net.IP{p.IPv6}, Port: int(p.Port)}, &sctp.SCTPAddr{IP: []net.IP{p.IPv6}, Port: int(p.Port)}, nil
+		}
+		return &sctp.SCTPAddr{IP: []net.IP{p.IP}, Port: int(p.Port)}, nil, nil
 	default:
-		return nil, ErrInvalidProtocolBinding(p.Proto.String())
+		return nil, nil, ErrInvalidProtocolBinding(p.Proto.String())
 	}
 }
 
@@ -124,6 +134,7 @@ func (p *PortBinding) GetCopy() PortBinding {
 	return PortBinding{
 		Proto:       p.Proto,
 		IP:          GetIPCopy(p.IP),
+		IPv6:        GetIPCopy(p.IPv6),
 		Port:        p.Port,
 		HostIP:      GetIPCopy(p.HostIP),
 		HostPort:    p.HostPort,
