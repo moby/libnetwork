@@ -133,7 +133,7 @@ type containerConfig struct {
 }
 
 const (
-	resolverIPSandbox  = "127.0.0.11"
+	resolverIPSandbox = "127.0.0.11"
 	hostDockerInternal = "host.docker.internal"
 )
 
@@ -706,7 +706,6 @@ func (sb *sandbox) EnableService() (err error) {
 				return fmt.Errorf("could not update state for endpoint %s into cluster: %v", ep.Name(), err)
 			}
 			ep.enableService()
-
 		}
 	}
 	logrus.Debugf("EnableService %s DONE", sb.containerID)
