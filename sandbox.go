@@ -134,8 +134,8 @@ type containerConfig struct {
 }
 
 const (
-	resolverIPSandbox  = "127.0.0.11"
-	hostDockerInternal = "host.docker.internal"
+	resolverIPSandbox     = "127.0.0.11"
+	hostDockerInternal    = "host.docker.internal"
 	gatewayDockerInternal = "gateway.docker.internal"
 )
 
