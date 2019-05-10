@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -135,6 +136,7 @@ type containerConfig struct {
 const (
 	resolverIPSandbox  = "127.0.0.11"
 	hostDockerInternal = "host.docker.internal"
+	gatewayDockerInternal = "gateway.docker.internal"
 )
 
 func (sb *sandbox) ID() string {
@@ -428,7 +430,10 @@ func (sb *sandbox) updateGateway(ep *endpoint) error {
 		return fmt.Errorf("failed to set IPv6 gateway while updating gateway: %v", err)
 	}
 
-	ep.network.addSvcRecords(ep.ID(), hostDockerInternal, ep.svcID, ep.Gateway(), ep.GatewayIPv6(), true, "updateGateway")
+	if ep.needResolver() && runtime.GOOS == "linux" {
+		ep.network.addSvcRecords(ep.ID(), hostDockerInternal, ep.svcID, ep.Gateway(), ep.GatewayIPv6(), true, "updateGateway")
+		ep.network.addSvcRecords(ep.ID(), gatewayDockerInternal, ep.svcID, ep.Gateway(), ep.GatewayIPv6(), true, "updateGateway")
+	}
 
 	return nil
 }
