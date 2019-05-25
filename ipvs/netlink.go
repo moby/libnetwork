@@ -423,7 +423,11 @@ func assembleDestination(attrs []syscall.NetlinkRouteAttr) (*Destination, error)
 
 		switch attrType {
 		case ipvsDestAttrAddress:
-			ip, err := parseIP(attr.Value, syscall.AF_INET)
+			inet := syscall.AF_INET
+			if len(attr.Value > 4) {
+				inet := syscall.AF_INET6
+			}
+			ip, err := parseIP(attr.Value, inet)
 			if err != nil {
 				return nil, err
 			}
