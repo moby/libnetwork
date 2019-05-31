@@ -338,7 +338,6 @@ func (c *controller) clusterAgentInit() {
 				}
 			}
 		case cluster.EventNodeLeave:
-			keysAvailable = false
 			c.agentOperationStart()
 			c.Lock()
 			c.keys = nil
