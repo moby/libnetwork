@@ -29,7 +29,7 @@ jobs:
           exclusive: false
       - run: make build
 
-  lint:
+  check:
     <<: *defaults
     steps:
       - checkout
@@ -67,7 +67,7 @@ workflows:
       - build:
           requires:
             - builder
-      - lint:
+      - check:
           requires:
             - builder
       - cross:
