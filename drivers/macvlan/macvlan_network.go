@@ -83,9 +83,24 @@ func (d *driver) CreateNetwork(nid string, option map[string]interface{}, nInfo 
 func (d *driver) createNetwork(config *configuration) error {
 	networkList := d.getNetworks()
 	for _, nw := range networkList {
+		// check if the new network uses the same interface as an existing network, as different networks of this type cannot share the same interface
 		if config.Parent == nw.config.Parent {
-			return fmt.Errorf("network %s is already using parent interface %s",
-				getDummyName(stringid.TruncateID(nw.config.ID)), config.Parent)
+			// if the new network ID does not match an existing network ID then we must return with an error, as the new network is not the same and cannot co-exist with the existing
+			if config.ID != nw.config.ID {
+				return fmt.Errorf("network %s is already using parent interface %s",
+					getDummyName(stringid.TruncateID(nw.config.ID)), config.Parent)
+			}
+			// attempt to delete the old duplicate network, and return an error if unsuccessful, or log info if successful
+			logrus.Infof("attempting to remove duplicate network ID %s on parent interface %s before re-creating",
+				getDummyName(stringid.TruncateID(config.ID)), config.Parent)
+			err := d.DeleteNetwork(config.ID)
+			if err != nil {
+				return fmt.Errorf("network %s is already using parent interface %s, and could not delete old duplicate network ID",
+					getDummyName(stringid.TruncateID(config.ID)), config.Parent)
+			}
+			// duplicate network has been removed; it is now safe to proceed
+			logrus.Infof("successfully removed duplicate network ID %s",
+				getDummyName(stringid.TruncateID(config.ID)))
 		}
 	}
 	if !parentExists(config.Parent) {
