@@ -2,6 +2,7 @@ package zk
 
 import (
 	"errors"
+	"fmt"
 )
 
 const (
@@ -25,21 +26,23 @@ const (
 	opGetChildren2 = 12
 	opCheck        = 13
 	opMulti        = 14
+	opReconfig     = 16
 	opClose        = -11
 	opSetAuth      = 100
 	opSetWatches   = 101
+	opError        = -1
 	// Not in protocol, used internally
 	opWatcherEvent = -2
 )
 
 const (
-	EventNodeCreated         = EventType(1)
-	EventNodeDeleted         = EventType(2)
-	EventNodeDataChanged     = EventType(3)
-	EventNodeChildrenChanged = EventType(4)
+	EventNodeCreated         EventType = 1
+	EventNodeDeleted         EventType = 2
+	EventNodeDataChanged     EventType = 3
+	EventNodeChildrenChanged EventType = 4
 
-	EventSession     = EventType(-1)
-	EventNotWatching = EventType(-2)
+	EventSession     EventType = -1
+	EventNotWatching EventType = -2
 )
 
 var (
@@ -54,15 +57,13 @@ var (
 )
 
 const (
-	StateUnknown           = State(-1)
-	StateDisconnected      = State(0)
-	StateConnecting        = State(1)
-	StateSyncConnected     = State(3)
-	StateAuthFailed        = State(4)
-	StateConnectedReadOnly = State(5)
-	StateSaslAuthenticated = State(6)
-	StateExpired           = State(-112)
-	// StateAuthFailed        = State(-113)
+	StateUnknown           State = -1
+	StateDisconnected      State = 0
+	StateConnecting        State = 1
+	StateAuthFailed        State = 4
+	StateConnectedReadOnly State = 5
+	StateSaslAuthenticated State = 6
+	StateExpired           State = -112
 
 	StateConnected  = State(100)
 	StateHasSession = State(101)
@@ -77,7 +78,6 @@ var (
 	stateNames = map[State]string{
 		StateUnknown:           "StateUnknown",
 		StateDisconnected:      "StateDisconnected",
-		StateSyncConnected:     "StateSyncConnected",
 		StateConnectedReadOnly: "StateConnectedReadOnly",
 		StateSaslAuthenticated: "StateSaslAuthenticated",
 		StateExpired:           "StateExpired",
@@ -94,7 +94,7 @@ func (s State) String() string {
 	if name := stateNames[s]; name != "" {
 		return name
 	}
-	return "Unknown"
+	return "unknown state"
 }
 
 type ErrCode int32
@@ -115,8 +115,10 @@ var (
 	ErrClosing                 = errors.New("zk: zookeeper is closing")
 	ErrNothing                 = errors.New("zk: no server responsees to process")
 	ErrSessionMoved            = errors.New("zk: session moved to another server, so operation is ignored")
-
+	ErrReconfigDisabled        = errors.New("attempts to perform a reconfiguration operation when reconfiguration feature is disabled")
+	ErrBadArguments            = errors.New("invalid arguments")
 	// ErrInvalidCallback         = errors.New("zk: invalid callback specified")
+
 	errCodeToError = map[ErrCode]error{
 		0:                          nil,
 		errAPIError:                ErrAPIError,
@@ -128,11 +130,13 @@ var (
 		errNotEmpty:                ErrNotEmpty,
 		errSessionExpired:          ErrSessionExpired,
 		// errInvalidCallback:         ErrInvalidCallback,
-		errInvalidAcl:   ErrInvalidACL,
-		errAuthFailed:   ErrAuthFailed,
-		errClosing:      ErrClosing,
-		errNothing:      ErrNothing,
-		errSessionMoved: ErrSessionMoved,
+		errInvalidAcl:        ErrInvalidACL,
+		errAuthFailed:        ErrAuthFailed,
+		errClosing:           ErrClosing,
+		errNothing:           ErrNothing,
+		errSessionMoved:      ErrSessionMoved,
+		errZReconfigDisabled: ErrReconfigDisabled,
+		errBadArguments:      ErrBadArguments,
 	}
 )
 
@@ -140,7 +144,7 @@ func (e ErrCode) toError() error {
 	if err, ok := errCodeToError[e]; ok {
 		return err
 	}
-	return ErrUnknown
+	return errors.New(fmt.Sprintf("unknown error: %v", e))
 }
 
 const (
@@ -156,20 +160,22 @@ const (
 	errBadArguments         = -8
 	errInvalidState         = -9
 	// API errors
-	errAPIError                = ErrCode(-100)
-	errNoNode                  = ErrCode(-101) // *
-	errNoAuth                  = ErrCode(-102)
-	errBadVersion              = ErrCode(-103) // *
-	errNoChildrenForEphemerals = ErrCode(-108)
-	errNodeExists              = ErrCode(-110) // *
-	errNotEmpty                = ErrCode(-111)
-	errSessionExpired          = ErrCode(-112)
-	errInvalidCallback         = ErrCode(-113)
-	errInvalidAcl              = ErrCode(-114)
-	errAuthFailed              = ErrCode(-115)
-	errClosing                 = ErrCode(-116)
-	errNothing                 = ErrCode(-117)
-	errSessionMoved            = ErrCode(-118)
+	errAPIError                ErrCode = -100
+	errNoNode                  ErrCode = -101 // *
+	errNoAuth                  ErrCode = -102
+	errBadVersion              ErrCode = -103 // *
+	errNoChildrenForEphemerals ErrCode = -108
+	errNodeExists              ErrCode = -110 // *
+	errNotEmpty                ErrCode = -111
+	errSessionExpired          ErrCode = -112
+	errInvalidCallback         ErrCode = -113
+	errInvalidAcl              ErrCode = -114
+	errAuthFailed              ErrCode = -115
+	errClosing                 ErrCode = -116
+	errNothing                 ErrCode = -117
+	errSessionMoved            ErrCode = -118
+	// Attempts to perform a reconfiguration operation when reconfiguration feature is disabled
+	errZReconfigDisabled ErrCode = -123
 )
 
 // Constants for ACL permissions
@@ -199,6 +205,7 @@ var (
 		opGetChildren2: "getChildren2",
 		opCheck:        "check",
 		opMulti:        "multi",
+		opReconfig:     "reconfig",
 		opClose:        "close",
 		opSetAuth:      "setAuth",
 		opSetWatches:   "setWatches",

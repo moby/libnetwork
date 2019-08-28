@@ -1,18 +1,51 @@
 package api
 
+import (
+	"net"
+	"strconv"
+)
+
+type Weights struct {
+	Passing int
+	Warning int
+}
+
 type Node struct {
-	Node    string
+	ID              string
+	Node            string
+	Address         string
+	Datacenter      string
+	TaggedAddresses map[string]string
+	Meta            map[string]string
+	CreateIndex     uint64
+	ModifyIndex     uint64
+}
+
+type ServiceAddress struct {
 	Address string
+	Port    int
 }
 
 type CatalogService struct {
-	Node           string
-	Address        string
-	ServiceID      string
-	ServiceName    string
-	ServiceAddress string
-	ServiceTags    []string
-	ServicePort    int
+	ID                       string
+	Node                     string
+	Address                  string
+	Datacenter               string
+	TaggedAddresses          map[string]string
+	NodeMeta                 map[string]string
+	ServiceID                string
+	ServiceName              string
+	ServiceAddress           string
+	ServiceTaggedAddresses   map[string]ServiceAddress
+	ServiceTags              []string
+	ServiceMeta              map[string]string
+	ServicePort              int
+	ServiceWeights           Weights
+	ServiceEnableTagOverride bool
+	ServiceProxy             *AgentServiceConnectProxyConfig
+	CreateIndex              uint64
+	Checks                   HealthChecks
+	ModifyIndex              uint64
 }
 
 type CatalogNode struct {
@@ -21,16 +54,21 @@ type CatalogNode struct {
 }
 
 type CatalogRegistration struct {
-	Node       string
-	Address    string
-	Datacenter string
-	Service    *AgentService
-	Check      *AgentCheck
+	ID              string
+	Node            string
+	Address         string
+	TaggedAddresses map[string]string
+	NodeMeta        map[string]string
+	Datacenter      string
+	Service         *AgentService
+	Check           *AgentCheck
+	Checks          HealthChecks
+	SkipNodeUpdate  bool
 }
 
 type CatalogDeregistration struct {
 	Node       string
-	Address    string
+	Address    string // Obsolete.
 	Datacenter string
 	ServiceID  string
 	CheckID    string
@@ -138,10 +176,43 @@ func (c *Catalog) Services(q *QueryOptions) (map[string][]string, *QueryMeta, er
 
 // Service is used to query catalog entries for a given service
 func (c *Catalog) Service(service, tag string, q *QueryOptions) ([]*CatalogService, *QueryMeta, error) {
-	r := c.c.newRequest("GET", "/v1/catalog/service/"+service)
-	r.setQueryOptions(q)
+	var tags []string
 	if tag != "" {
-		r.params.Set("tag", tag)
+		tags = []string{tag}
+	}
+	return c.service(service, tags, q, false)
+}
+
+// Supports multiple tags for filtering
+func (c *Catalog) ServiceMultipleTags(service string, tags []string, q *QueryOptions) ([]*CatalogService, *QueryMeta, error) {
+	return c.service(service, tags, q, false)
+}
+
+// Connect is used to query catalog entries for a given Connect-enabled service
+func (c *Catalog) Connect(service, tag string, q *QueryOptions) ([]*CatalogService, *QueryMeta, error) {
+	var tags []string
+	if tag != "" {
+		tags = []string{tag}
+	}
+	return c.service(service, tags, q, true)
+}
+
+// Supports multiple tags for filtering
+func (c *Catalog) ConnectMultipleTags(service string, tags []string, q *QueryOptions) ([]*CatalogService, *QueryMeta, error) {
+	return c.service(service, tags, q, true)
+}
+
+func (c *Catalog) service(service string, tags []string, q *QueryOptions, connect bool) ([]*CatalogService, *QueryMeta, error) {
+	path := "/v1/catalog/service/" + service
+	if connect {
+		path = "/v1/catalog/connect/" + service
+	}
+	r := c.c.newRequest("GET", path)
+	r.setQueryOptions(q)
+	if len(tags) > 0 {
+		for _, tag := range tags {
+			r.params.Add("tag", tag)
+		}
 	}
 	rtt, resp, err := requireOK(c.c.doRequest(r))
 	if err != nil {
@@ -179,4 +250,13 @@ func (c *Catalog) Node(node string, q *QueryOptions) (*CatalogNode, *QueryMeta, 
 		return nil, nil, err
 	}
 	return out, qm, nil
+}
+
+func ParseServiceAddr(addrPort string) (ServiceAddress, error) {
+	port := 0
+	host, portStr, err := net.SplitHostPort(addrPort)
+	if err == nil {
+		port, err = strconv.Atoi(portStr)
+	}
+	return ServiceAddress{Address: host, Port: port}, err
 }

@@ -543,6 +543,7 @@ func (nDB *NetworkDB) deleteNodeNetworkEntries(nid, node string) {
 }
 
 func (nDB *NetworkDB) deleteNodeTableEntries(node string) {
+	_ = nDB.indexes[byTable].Walk
 	nDB.indexes[byTable].Walk(func(path string, v interface{}) bool {
 		oldEntry := v.(*entry)
 		if oldEntry.node != node {

@@ -1,4 +1,4 @@
-// +build !windows
+// +build !windows,go1.6
 
 package shellwords
 
@@ -9,10 +9,17 @@ import (
 	"strings"
 )
 
-func shellRun(line string) (string, error) {
+func shellRun(line, dir string) (string, error) {
 	shell := os.Getenv("SHELL")
-	b, err := exec.Command(shell, "-c", line).Output()
+	cmd := exec.Command(shell, "-c", line)
+	if dir != "" {
+		cmd.Dir = dir
+	}
+	b, err := cmd.Output()
 	if err != nil {
+		if eerr, ok := err.(*exec.ExitError); ok {
+			b = eerr.Stderr
+		}
 		return "", errors.New(err.Error() + ":" + string(b))
 	}
 	return strings.TrimSpace(string(b)), nil

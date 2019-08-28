@@ -678,3 +678,19 @@ func (c *SCTPSndRcvInfoWrappedConn) SetReadDeadline(t time.Time) error {
 func (c *SCTPSndRcvInfoWrappedConn) SetWriteDeadline(t time.Time) error {
 	return c.conn.SetWriteDeadline(t)
 }
+
+func (c *SCTPSndRcvInfoWrappedConn) SetWriteBuffer(bytes int) error {
+	return c.conn.SetWriteBuffer(bytes)
+}
+
+func (c *SCTPSndRcvInfoWrappedConn) GetWriteBuffer() (int, error) {
+	return c.conn.GetWriteBuffer()
+}
+
+func (c *SCTPSndRcvInfoWrappedConn) SetReadBuffer(bytes int) error {
+	return c.conn.SetReadBuffer(bytes)
+}
+
+func (c *SCTPSndRcvInfoWrappedConn) GetReadBuffer() (int, error) {
+	return c.conn.GetReadBuffer()
+}

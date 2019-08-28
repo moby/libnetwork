@@ -1,5 +1,6 @@
-[![Build Status](https://travis-ci.org/deckarep/golang-set.png?branch=master)](https://travis-ci.org/deckarep/golang-set)
-[![GoDoc](https://godoc.org/github.com/deckarep/golang-set?status.png)](http://godoc.org/github.com/deckarep/golang-set)
+[![Build Status](https://travis-ci.org/deckarep/golang-set.svg?branch=master)](https://travis-ci.org/deckarep/golang-set)
+[![Go Report Card](https://goreportcard.com/badge/github.com/deckarep/golang-set)](https://goreportcard.com/report/github.com/deckarep/golang-set)
+[![GoDoc](https://godoc.org/github.com/deckarep/golang-set?status.svg)](http://godoc.org/github.com/deckarep/golang-set)
 
 ## golang-set
 
@@ -22,7 +23,7 @@ I have to give some credit for helping seed the idea with this post on [stackove
 
 ## Features (as of 9/22/2014)
 
-* a CartesionProduct() method has been added with unit-tests: [Read more about the cartesion product](http://en.wikipedia.org/wiki/Cartesian_product)
+* a CartesianProduct() method has been added with unit-tests: [Read more about the cartesian product](http://en.wikipedia.org/wiki/Cartesian_product)
 
 ## Features (as of 9/15/2014)
 

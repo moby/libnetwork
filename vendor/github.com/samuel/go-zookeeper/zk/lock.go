@@ -8,10 +8,13 @@ import (
 )
 
 var (
-	ErrDeadlock  = errors.New("zk: trying to acquire a lock twice")
+	// ErrDeadlock is returned by Lock when trying to lock twice without unlocking first
+	ErrDeadlock = errors.New("zk: trying to acquire a lock twice")
+	// ErrNotLocked is returned by Unlock when trying to release a lock that has not first be acquired.
 	ErrNotLocked = errors.New("zk: not locked")
 )
 
+// Lock is a mutual exclusion lock.
 type Lock struct {
 	c        *Conn
 	path     string
@@ -20,6 +23,9 @@ type Lock struct {
 	seq      int
 }
 
+// NewLock creates a new lock instance using the provided connection, path, and acl.
+// The path must be a node that is only used by this lock. A lock instances starts
+// unlocked until Lock() is called.
 func NewLock(c *Conn, path string, acl []ACL) *Lock {
 	return &Lock{
 		c:    c,
@@ -33,6 +39,9 @@ func parseSeq(path string) (int, error) {
 	return strconv.Atoi(parts[len(parts)-1])
 }
 
+// Lock attempts to acquire the lock. It will wait to return until the lock
+// is acquired or an error occurs. If this instance already has the lock
+// then ErrDeadlock is returned.
 func (l *Lock) Lock() error {
 	if l.lockPath != "" {
 		return ErrDeadlock
@@ -49,8 +58,16 @@ func (l *Lock) Lock() error {
 			parts := strings.Split(l.path, "/")
 			pth := ""
 			for _, p := range parts[1:] {
+				var exists bool
 				pth += "/" + p
-				_, err := l.c.Create(pth, []byte{}, 0, l.acl)
+				exists, _, err = l.c.Exists(pth)
+				if err != nil {
+					return err
+				}
+				if exists == true {
+					continue
+				}
+				_, err = l.c.Create(pth, []byte{}, 0, l.acl)
 				if err != nil && err != ErrNodeExists {
 					return err
 				}
@@ -77,7 +94,7 @@ func (l *Lock) Lock() error {
 		}
 
 		lowestSeq := seq
-		prevSeq := 0
+		prevSeq := -1
 		prevSeqPath := ""
 		for _, p := range children {
 			s, err := parseSeq(p)
@@ -118,6 +135,8 @@ func (l *Lock) Lock() error {
 	return nil
 }
 
+// Unlock releases an acquired lock. If the lock is not currently acquired by
+// this Lock instance than ErrNotLocked is returned.
 func (l *Lock) Unlock() error {
 	if l.lockPath == "" {
 		return ErrNotLocked

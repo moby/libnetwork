@@ -114,6 +114,22 @@ func (c *SCTPConn) Close() error {
 	return syscall.EBADF
 }
 
+func (c *SCTPConn) SetWriteBuffer(bytes int) error {
+	return syscall.SetsockoptInt(c.fd(), syscall.SOL_SOCKET, syscall.SO_SNDBUF, bytes)
+}
+
+func (c *SCTPConn) GetWriteBuffer() (int, error) {
+	return syscall.GetsockoptInt(c.fd(), syscall.SOL_SOCKET, syscall.SO_SNDBUF)
+}
+
+func (c *SCTPConn) SetReadBuffer(bytes int) error {
+	return syscall.SetsockoptInt(c.fd(), syscall.SOL_SOCKET, syscall.SO_RCVBUF, bytes)
+}
+
+func (c *SCTPConn) GetReadBuffer() (int, error) {
+	return syscall.GetsockoptInt(c.fd(), syscall.SOL_SOCKET, syscall.SO_RCVBUF)
+}
+
 // ListenSCTP - start listener on specified address/port
 func ListenSCTP(net string, laddr *SCTPAddr) (*SCTPListener, error) {
 	return ListenSCTPExt(net, laddr, InitMsg{NumOstreams: SCTP_MAX_STREAM})

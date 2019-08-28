@@ -30,6 +30,22 @@ func (c *SCTPConn) Close() error {
 	return ErrUnsupported
 }
 
+func (c *SCTPConn) SetWriteBuffer(bytes int) error {
+	return ErrUnsupported
+}
+
+func (c *SCTPConn) GetWriteBuffer() (int, error) {
+	return 0, ErrUnsupported
+}
+
+func (c *SCTPConn) SetReadBuffer(bytes int) error {
+	return ErrUnsupported
+}
+
+func (c *SCTPConn) GetReadBuffer() (int, error) {
+	return 0, ErrUnsupported
+}
+
 func ListenSCTP(net string, laddr *SCTPAddr) (*SCTPListener, error) {
 	return nil, ErrUnsupported
 }

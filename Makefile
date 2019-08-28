@@ -8,10 +8,11 @@ container_env = -e "INSIDECONTAINER=-incontainer=true"
 docker = docker run --rm -it --init ${dockerargs} $$EXTRA_ARGS ${container_env} ${build_image}
 
 CROSS_PLATFORMS = linux/amd64 linux/386 linux/arm windows/amd64
-PACKAGES=$(shell go list ./... | grep -v /vendor/)
 PROTOC_FLAGS=-I=. -I=/go/src -I=/go/src/github.com/gogo/protobuf -I=/go/src/github.com/gogo/protobuf/protobuf
 
 export PATH := $(CURDIR)/bin:$(PATH)
+export GO111MODULE := on
+export GOFLAGS := -mod=vendor
 
 
 # Several targets in this Makefile expect to run within the
@@ -145,7 +146,7 @@ unit-tests-local:
 # Depends on binaries because vet will silently fail if it can not load compiled imports
 vet: ## run go vet
 	@echo "🐳 $@"
-	@test -z "$$(go vet ${PACKAGES} 2>&1 | grep -v 'constant [0-9]* not a string in call to Errorf' | egrep -v '(timestamp_test.go|duration_test.go|exit status 1)' | tee /dev/stderr)"
+	go vet ./...
 
 misspell:
 	@echo "🐳 $@"
