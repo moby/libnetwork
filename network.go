@@ -23,6 +23,14 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+type hostInfoStruct struct {
+	ipV4 net.IP
+	ipV6 net.IP
+}
+
+// HostInfo will be used to resolve host.docker.internal hostname to an address
+var HostInfo *hostInfoStruct
+
 // A Network represents a logical connectivity zone that containers may
 // join using the Link method. A Network is managed by a specific driver.
 type Network interface {
@@ -802,6 +810,15 @@ func NetworkOptionScope(scope string) NetworkOption {
 
 // NetworkOptionIpam function returns an option setter for the ipam configuration for this network
 func NetworkOptionIpam(ipamDriver string, addrSpace string, ipV4 []*IpamConf, ipV6 []*IpamConf, opts map[string]string) NetworkOption {
+	if ipamDriver == "default" && HostInfo == nil {
+		HostInfo = &hostInfoStruct{}
+		if len(ipV4) > 0 {
+			HostInfo.ipV4 = net.ParseIP(ipV4[0].Gateway)
+		}
+		if len(ipV6) > 0 {
+			HostInfo.ipV6 = net.ParseIP(ipV6[0].Gateway)
+		}
+	}
 	return func(n *network) {
 		if ipamDriver != "" {
 			n.ipamType = ipamDriver

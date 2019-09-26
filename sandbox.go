@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -134,9 +133,10 @@ type containerConfig struct {
 }
 
 const (
-	resolverIPSandbox     = "127.0.0.11"
-	hostDockerInternal    = "host.docker.internal"
-	gatewayDockerInternal = "gateway.docker.internal"
+	resolverIPSandbox           = "127.0.0.11"
+	dnsOptResolveDockerInternal = "resolve-docker-internal"
+	hostDockerInternal          = "host.docker.internal"
+	gatewayDockerInternal       = "gateway.docker.internal"
 )
 
 func (sb *sandbox) ID() string {
@@ -404,6 +404,15 @@ func (sb *sandbox) getEndpoint(id string) *endpoint {
 	return nil
 }
 
+func (sb *sandbox) shouldResolveInternal() bool {
+	for _, opt := range sb.config.dnsOptionsList {
+		if opt == dnsOptResolveDockerInternal {
+			return true
+		}
+	}
+	return false
+}
+
 func (sb *sandbox) updateGateway(ep *endpoint) error {
 	sb.Lock()
 	osSbox := sb.osSbox
@@ -428,11 +437,6 @@ func (sb *sandbox) updateGateway(ep *endpoint) error {
 
 	if err := osSbox.SetGatewayIPv6(joinInfo.gw6); err != nil {
 		return fmt.Errorf("failed to set IPv6 gateway while updating gateway: %v", err)
-	}
-
-	if ep.needResolver() && runtime.GOOS == "linux" {
-		ep.network.addSvcRecords(ep.ID(), hostDockerInternal, ep.svcID, ep.Gateway(), ep.GatewayIPv6(), true, "updateGateway")
-		ep.network.addSvcRecords(ep.ID(), gatewayDockerInternal, ep.svcID, ep.Gateway(), ep.GatewayIPv6(), true, "updateGateway")
 	}
 
 	return nil
@@ -711,6 +715,11 @@ func (sb *sandbox) EnableService() (err error) {
 				return fmt.Errorf("could not update state for endpoint %s into cluster: %v", ep.Name(), err)
 			}
 			ep.enableService()
+			if ep.needResolver() && sb.shouldResolveInternal() {
+				ep.network.addSvcRecords(ep.ID(), hostDockerInternal, ep.svcID, HostInfo.ipV4, HostInfo.ipV6, true, "updateGateway")
+				ep.network.addSvcRecords(ep.ID(), gatewayDockerInternal, ep.svcID, HostInfo.ipV4, HostInfo.ipV6, true, "updateGateway")
+			}
+
 		}
 	}
 	logrus.Debugf("EnableService %s DONE", sb.containerID)
