@@ -366,7 +366,6 @@ func programIngress(gwIP net.IP, ingressPorts []*PortConfig, isDelete bool) erro
 			if err := iptables.RawCombinedOutput("-I", "FORWARD", "-j", ingressChain); err != nil {
 				return fmt.Errorf("failed to add jump rule to %s in filter table forward chain: %v", ingressChain, err)
 			}
-			arrangeUserFilterRule()
 		}
 
 		oifName, err := findOIFName(gwIP)

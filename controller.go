@@ -910,8 +910,6 @@ addToStore:
 		c.Unlock()
 	}
 
-	c.arrangeUserFilterRule()
-
 	return network, nil
 }
 

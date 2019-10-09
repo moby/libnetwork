@@ -33,6 +33,7 @@ const (
 	vethLen                    = 7
 	defaultContainerVethPrefix = "eth"
 	maxAllocatePortAttempts    = 10
+	userChain                  = "DOCKER-USER"
 )
 
 const (
@@ -357,6 +358,13 @@ func (d *driver) configure(option map[string]interface{}) error {
 		}
 		// Make sure on firewall reload, first thing being re-played is chains creation
 		iptables.OnReloaded(func() { logrus.Debugf("Recreating iptables chains on firewall reload"); setupIPChains(config) })
+
+		// Add DOCKER-USER chain
+		arrangeUserFilterRule()
+		iptables.OnReloaded(func() {
+			logrus.Debugf("Recreating DOCKER-USER iptables chain on firewall reload")
+			arrangeUserFilterRule()
+		})
 	}
 
 	if config.EnableIPForwarding {
@@ -1503,4 +1511,25 @@ func electMacAddress(epConfig *endpointConfiguration, ip net.IP) net.HardwareAdd
 		return epConfig.MacAddress
 	}
 	return netutils.GenerateMACFromIP(ip)
+}
+
+// This chain allow users to configure firewall policies in a way that persists
+// docker operations/restarts. Docker will not delete or modify any pre-existing
+// rules from the DOCKER-USER filter chain.
+func arrangeUserFilterRule() {
+	_, err := iptables.NewChain(userChain, iptables.Filter, false)
+	if err != nil {
+		logrus.Warnf("Failed to create %s chain: %v", userChain, err)
+		return
+	}
+
+	if err = iptables.AddReturnRule(userChain); err != nil {
+		logrus.Warnf("Failed to add the RETURN rule for %s: %v", userChain, err)
+		return
+	}
+
+	err = iptables.EnsureJumpRule("FORWARD", userChain)
+	if err != nil {
+		logrus.Warnf("Failed to ensure the jump rule for %s: %v", userChain, err)
+	}
 }
