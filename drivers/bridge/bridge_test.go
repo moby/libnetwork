@@ -19,6 +19,41 @@ import (
 	"github.com/vishvananda/netlink"
 )
 
+// TestEnableIPTables enables EnableIPTables and checks if
+// the DOCKER-USER chain is created or not
+func TestEnableIPTables(t *testing.T) {
+	if !testutils.IsRunningInContainer() {
+		defer testutils.SetupTestOSContext(t)()
+	}
+
+	d := newDriver()
+
+	config := &configuration{
+		EnableIPTables: true,
+	}
+	genericOption := make(map[string]interface{})
+	genericOption[netlabel.GenericData] = config
+
+	if err := d.configure(genericOption); err != nil {
+		t.Fatalf("Failed to setup driver config: %v", err)
+	}
+
+	userRule1 := []string{
+		"-j", "DOCKER-USER"}
+
+	if !iptables.Exists(iptables.Filter, "FORWARD", userRule1...) {
+		t.Fatal("rule does not exist")
+	}
+
+	userRule2 := []string{
+		"-j", "RETURN"}
+
+	if !iptables.Exists(iptables.Filter, "DOCKER-USER", userRule2...) {
+		t.Fatal("rule does not exist")
+	}
+
+}
+
 func TestEndpointMarshalling(t *testing.T) {
 	ip1, _ := types.ParseCIDR("172.22.0.9/16")
 	ip2, _ := types.ParseCIDR("2001:db8::9")
