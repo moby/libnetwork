@@ -34,6 +34,7 @@ const (
 	defaultContainerVethPrefix = "eth"
 	maxAllocatePortAttempts    = 10
 	userChain                  = "DOCKER-USER"
+	ingressChain               = "DOCKER-INGRESS"
 )
 
 const (
@@ -359,10 +360,13 @@ func (d *driver) configure(option map[string]interface{}) error {
 		// Make sure on firewall reload, first thing being re-played is chains creation
 		iptables.OnReloaded(func() { logrus.Debugf("Recreating iptables chains on firewall reload"); setupIPChains(config) })
 
+		// Add DOCKER-INGRESS chain
+		arrangeIngressFilterRule()
 		// Add DOCKER-USER chain
 		arrangeUserFilterRule()
 		iptables.OnReloaded(func() {
-			logrus.Debugf("Recreating DOCKER-USER iptables chain on firewall reload")
+			logrus.Debugf("Recreating DOCKER-INGRESS and DOCKER-USER iptables chain on firewall reload")
+			arrangeIngressFilterRule()
 			arrangeUserFilterRule()
 		})
 	}
@@ -1531,5 +1535,23 @@ func arrangeUserFilterRule() {
 	err = iptables.EnsureJumpRule("FORWARD", userChain)
 	if err != nil {
 		logrus.Warnf("Failed to ensure the jump rule for %s: %v", userChain, err)
+	}
+}
+
+// In the filter table FORWARD chain the first rule should be to jump to
+// DOCKER-USER so the user is able to filter packet first.
+// The second rule should be jump to INGRESS-CHAIN.
+// This chain has the rules to allow access to the published ports for swarm tasks
+// from local bridge networks and docker_gwbridge (ie:taks on other swarm networks)
+func arrangeIngressFilterRule() {
+	if iptables.ExistChain(ingressChain, iptables.Filter) {
+		if iptables.Exists(iptables.Filter, "FORWARD", "-j", ingressChain) {
+			if err := iptables.RawCombinedOutput("-D", "FORWARD", "-j", ingressChain); err != nil {
+				logrus.Warnf("failed to delete jump rule to ingressChain in filter table: %v", err)
+			}
+		}
+		if err := iptables.RawCombinedOutput("-I", "FORWARD", "-j", ingressChain); err != nil {
+			logrus.Warnf("failed to add jump rule to ingressChain in filter table: %v", err)
+		}
 	}
 }

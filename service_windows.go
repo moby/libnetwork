@@ -168,6 +168,3 @@ func numEnabledBackends(lb *loadBalancer) int {
 
 func (sb *sandbox) populateLoadBalancers(ep *endpoint) {
 }
-
-func arrangeIngressFilterRule() {
-}

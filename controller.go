@@ -904,12 +904,6 @@ addToStore:
 		}
 	}
 
-	if !c.isDistributedControl() {
-		c.Lock()
-		arrangeIngressFilterRule()
-		c.Unlock()
-	}
-
 	return network, nil
 }
 

@@ -20,6 +20,3 @@ func (c *controller) rmServiceBinding(name, sid, nid, eid string, vip net.IP, in
 
 func (sb *sandbox) populateLoadBalancers(ep *endpoint) {
 }
-
-func arrangeIngressFilterRule() {
-}
