@@ -255,7 +255,7 @@ func (r *resolver) handleIPQuery(name string, query *dns.Msg, ipType int) (*dns.
 		return nil, nil
 	}
 
-	logrus.Debugf("[resolver] lookup for %s: IP %v", name, addr)
+	debugf("[resolver] lookup for %s: IP %v", name, addr)
 
 	resp := createRespMsg(query)
 	if len(addr) > 1 {
@@ -296,7 +296,7 @@ func (r *resolver) handlePTRQuery(ptr string, query *dns.Msg) (*dns.Msg, error) 
 		return nil, nil
 	}
 
-	logrus.Debugf("[resolver] lookup for IP %s: name %s", parts[0], host)
+	debugf("[resolver] lookup for IP %s: name %s", parts[0], host)
 	fqdn := dns.Fqdn(host)
 
 	resp := new(dns.Msg)
@@ -453,7 +453,7 @@ func (r *resolver) ServeDNS(w dns.ResponseWriter, query *dns.Msg) {
 				continue
 			}
 			queryType := dns.TypeToString[query.Question[0].Qtype]
-			logrus.Debugf("[resolver] query %s (%s) from %s, forwarding to %s:%s", name, queryType,
+			debugf("[resolver] query %s (%s) from %s, forwarding to %s:%s", name, queryType,
 				extConn.LocalAddr().String(), proto, extDNS.IPStr)
 
 			// Timeout has to be set for every IO operation.
@@ -522,17 +522,17 @@ func (r *resolver) ServeDNS(w dns.ResponseWriter, query *dns.Msg) {
 				case dns.TypeA:
 					answers++
 					ip := rr.(*dns.A).A
-					logrus.Debugf("[resolver] received A record %q for %q from %s:%s", ip, h.Name, proto, extDNS.IPStr)
+					debugf("[resolver] received A record %q for %q from %s:%s", ip, h.Name, proto, extDNS.IPStr)
 					r.backend.HandleQueryResp(h.Name, ip)
 				case dns.TypeAAAA:
 					answers++
 					ip := rr.(*dns.AAAA).AAAA
-					logrus.Debugf("[resolver] received AAAA record %q for %q from %s:%s", ip, h.Name, proto, extDNS.IPStr)
+					debugf("[resolver] received AAAA record %q for %q from %s:%s", ip, h.Name, proto, extDNS.IPStr)
 					r.backend.HandleQueryResp(h.Name, ip)
 				}
 			}
 			if resp.Answer == nil || answers == 0 {
-				logrus.Debugf("[resolver] external DNS %s:%s did not return any %s records for %q", proto, extDNS.IPStr, queryType, name)
+				debugf("[resolver] external DNS %s:%s did not return any %s records for %q", proto, extDNS.IPStr, queryType, name)
 			}
 			resp.Compress = true
 			break

@@ -439,7 +439,7 @@ func (sb *sandbox) HandleQueryResp(name string, ip net.IP) {
 
 func (sb *sandbox) ResolveIP(ip string) string {
 	var svc string
-	logrus.Debugf("IP To resolve %v", ip)
+	debugf("IP to resolve %v", ip)
 
 	for _, ep := range sb.getConnectedEndpoints() {
 		n := ep.getNetwork()
@@ -466,7 +466,7 @@ func (sb *sandbox) ResolveService(name string) ([]*net.SRV, []net.IP) {
 	srv := []*net.SRV{}
 	ip := []net.IP{}
 
-	logrus.Debugf("Service name To resolve: %v", name)
+	debugf("Service name to resolve: %v", name)
 
 	// There are DNS implementations that allow SRV queries for names not in
 	// the format defined by RFC 2782. Hence specific validations checks are
@@ -529,7 +529,7 @@ func (sb *sandbox) ResolveName(name string, ipType int) ([]net.IP, bool) {
 	// {a.b in network c.d},
 	// {a in network b.c.d},
 
-	logrus.Debugf("Name To resolve: %v", name)
+	debugf("Name to resolve: %v", name)
 	name = strings.TrimSuffix(name, ".")
 	reqName := []string{name}
 	networkName := []string{""}
