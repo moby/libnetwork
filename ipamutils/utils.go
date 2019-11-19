@@ -5,6 +5,14 @@ import (
 	"fmt"
 	"net"
 	"sync"
+
+	log "github.com/sirupsen/logrus"
+)
+
+const (
+	// maxSubnetSizeBits is the maximum number of subnets that can be split from a predefined subnet
+	// its value is 2 ^ 20 = 1Mb
+	maxSubnetSizeBits = 24
 )
 
 var (
@@ -106,16 +114,25 @@ func splitNetworks(list []*NetworkToSplit) ([]*net.IPNet, error) {
 	return localPools, nil
 }
 
+// splitNetwork takes a Subnet and returns a list of Subnets with a length equal to size
 func splitNetwork(size int, base *net.IPNet) []*net.IPNet {
 	one, bits := base.Mask.Size()
 	mask := net.CIDRMask(size, bits)
-	n := 1 << uint(size-one)
+	subnetBits := uint(size - one)
+	if subnetBits > maxSubnetSizeBits {
+		log.Errorf("unable to split %v, %d exceeds max subnet bitsize of %d", base, subnetBits, maxSubnetSizeBits)
+		return nil
+	}
+	// Total number of subnets
+	n := 1 << subnetBits
+	// Shift
 	s := uint(bits - size)
 	list := make([]*net.IPNet, 0, n)
 
+	// Build n Subnets of length size
 	for i := 0; i < n; i++ {
 		ip := copyIP(base.IP)
-		addIntToIP(ip, uint(i<<s))
+		addIntToIP(ip, uint(i), s)
 		list = append(list, &net.IPNet{IP: ip, Mask: mask})
 	}
 	return list
@@ -127,9 +144,16 @@ func copyIP(from net.IP) net.IP {
 	return ip
 }
 
-func addIntToIP(array net.IP, ordinal uint) {
-	for i := len(array) - 1; i >= 0; i-- {
-		array[i] |= (byte)(ordinal & 0xff)
-		ordinal >>= 8
+// addInttoIP builds a new IP off the array IP by appending "addVal" left shifted by "shift"
+func addIntToIP(array net.IP, addVal, shift uint) {
+	alignment := shift % 8
+	alignedBits := addVal << alignment
+	alignedShift := shift - alignment
+
+	offset := uint(len(array))*8 - 8
+	for i := 0; i < len(array); i++ {
+		array[i] |= byte(alignedBits >> (offset - alignedShift))
+		offset -= 8
+
 	}
 }
