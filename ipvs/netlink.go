@@ -420,11 +420,11 @@ func (i *Handle) doCmdWithoutAttr(cmd uint8) ([][]byte, error) {
 	return execute(i.sock, req, 0)
 }
 
-func assembleDestination(attrs []syscall.NetlinkRouteAttr) (*Destination, error) {
+func assembleDestination(attrs []syscall.NetlinkRouteAttr, addressFamily uint16) (*Destination, error) {
 
 	var d Destination
 	var addressBytes []byte
-
+	d.AddressFamily = addressFamily
 	for _, attr := range attrs {
 
 		attrType := int(attr.Attr.Type)
@@ -471,7 +471,7 @@ func assembleDestination(attrs []syscall.NetlinkRouteAttr) (*Destination, error)
 }
 
 // parseDestination given a ipvs netlink response this function will respond with a valid destination entry, an error otherwise
-func (i *Handle) parseDestination(msg []byte) (*Destination, error) {
+func (i *Handle) parseDestination(msg []byte, addressFamily uint16) (*Destination, error) {
 	var dst *Destination
 
 	//Remove General header for this message
@@ -491,7 +491,7 @@ func (i *Handle) parseDestination(msg []byte) (*Destination, error) {
 	}
 
 	//Assemble netlink attributes and create a Destination record
-	dst, err = assembleDestination(ipvsAttrs)
+	dst, err = assembleDestination(ipvsAttrs, addressFamily)
 	if err != nil {
 		return nil, err
 	}
@@ -510,7 +510,7 @@ func (i *Handle) doGetDestinationsCmd(s *Service, d *Destination) ([]*Destinatio
 	}
 
 	for _, msg := range msgs {
-		dest, err := i.parseDestination(msg)
+		dest, err := i.parseDestination(msg, s.AddressFamily)
 		if err != nil {
 			return res, err
 		}
