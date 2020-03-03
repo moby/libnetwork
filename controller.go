@@ -267,10 +267,6 @@ func (c *controller) SetClusterProvider(provider cluster.Provider) {
 	go c.clusterAgentInit()
 }
 
-func isValidClusteringIP(addr string) bool {
-	return addr != "" && !net.ParseIP(addr).IsLoopback() && !net.ParseIP(addr).IsUnspecified()
-}
-
 // libnetwork side of agent depends on the keys. On the first receipt of
 // keys setup the agent. For subsequent key set handle the key change
 func (c *controller) SetKeys(keys []*types.EncryptionKey) error {
