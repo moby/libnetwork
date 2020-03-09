@@ -54,6 +54,13 @@ const (
 	ipvsCmdAttrTimeoutUDP
 )
 
+// Attributes used to describe an info
+const (
+	ipvsCmdAttrInfoUnspec int = iota
+	ipvsCmdAttrInfoVersion
+	ipvsCmdAttrInfoConnTableSize
+)
+
 // Attributes used to describe a service. Used inside nested attribute
 // ipvsCmdAttrService
 const (

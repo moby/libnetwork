@@ -74,6 +74,24 @@ type Config struct {
 	TimeoutUDP    time.Duration
 }
 
+// Info defines IPVS info
+type Info struct {
+	Version       *Version
+	ConnTableSize uint32
+}
+
+// Version defines IPVS version
+type Version struct {
+	Major uint
+	Minor uint
+	Patch uint
+}
+
+// String returns a string of IPVS version
+func (v *Version) String() string {
+	return fmt.Sprintf("%d.%d.%d", v.Major, v.Minor, v.Patch)
+}
+
 // Handle provides a namespace specific ipvs handle to program ipvs
 // rules.
 type Handle struct {
@@ -203,4 +221,22 @@ func (i *Handle) GetConfig() (*Config, error) {
 // SetConfig set the current timeout configuration. 0: no change
 func (i *Handle) SetConfig(c *Config) error {
 	return i.doSetConfigCmd(c)
+}
+
+// GetInfo returns info details from IPVS
+func (i *Handle) GetInfo() (*Info, error) {
+	res, err := i.doGetInfoCmd()
+	if err != nil {
+		return nil, err
+	}
+
+	ver := uint(res.version)
+	return &Info{
+		Version: &Version{
+			Major: (ver >> 16) & 0xff,
+			Minor: (ver >> 8) & 0xff,
+			Patch: ver & 0xff,
+		},
+		ConnTableSize: res.connTableSize,
+	}, nil
 }

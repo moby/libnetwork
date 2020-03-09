@@ -382,4 +382,10 @@ func TestTimeouts(t *testing.T) {
 	c3, err := i.GetConfig()
 	assert.NilError(t, err)
 	assert.DeepEqual(t, *c3, Config{77 * time.Second, 66 * time.Second, 77 * time.Second})
+
+	info, err := i.GetInfo()
+	assert.NilError(t, err)
+	assert.Check(t, info.Version != nil)
+	assert.Assert(t, info.Version.String() != "")
+	assert.Assert(t, info.ConnTableSize > 0)
 }
