@@ -18,7 +18,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink/nl"
 	"github.com/vishvananda/netns"
-	"debug/dwarf"
 )
 
 // For Quick Reference IPVS related netlink message is described at the end of this file.
