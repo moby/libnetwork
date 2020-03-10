@@ -449,7 +449,7 @@ func assembleDestination(attrs []syscall.NetlinkRouteAttr) (*Destination, error)
 			d.ActiveConnections = int(native.Uint16(attr.Value))
 		case ipvsDestAttrInactiveConnections:
 			d.InactiveConnections = int(native.Uint16(attr.Value))
-		case ipvsSvcAttrStats:
+		case ipvsDestAttrStats:
 			stats, err := assembleStats(attr.Value)
 			if err != nil {
 				return nil, err
