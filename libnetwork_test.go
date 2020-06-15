@@ -85,8 +85,11 @@ func getPortMapping() []types.PortBinding {
 		{Proto: types.TCP, Port: uint16(230), HostPort: uint16(23000)},
 		{Proto: types.UDP, Port: uint16(200), HostPort: uint16(22000)},
 		{Proto: types.TCP, Port: uint16(120), HostPort: uint16(12000)},
-		{Proto: types.TCP, Port: uint16(320), HostPort: uint16(32000), HostPortEnd: uint16(32999)},
-		{Proto: types.UDP, Port: uint16(420), HostPort: uint16(42000), HostPortEnd: uint16(42001)},
+		{Proto: types.TCP, Port: uint16(320), HostPortStart: uint16(32000), HostPortEnd: uint16(32999)},
+		{Proto: types.UDP, Port: uint16(420), HostPortStart: uint16(42000), HostPortEnd: uint16(42001)},
+		{Proto: types.TCP, Port: uint16(330), HostPort: uint16(33998), HostPortStart: uint16(33000), HostPortEnd: uint16(33999)},
+		{Proto: types.TCP, Port: uint16(331), HostPort: uint16(33998), HostPortStart: uint16(33000), HostPortEnd: uint16(33999)},
+		{Proto: types.UDP, Port: uint16(430), HostPort: uint16(43000), HostPortStart: uint16(43000), HostPortEnd: uint16(43001)},
 	}
 }
 
@@ -195,7 +198,7 @@ func TestBridge(t *testing.T) {
 	if !ok {
 		t.Fatalf("Unexpected format for port mapping in endpoint operational data")
 	}
-	if len(pm) != 5 {
+	if len(pm) != 8 {
 		t.Fatalf("Incomplete data for port mapping in endpoint operational data: %d", len(pm))
 	}
 }

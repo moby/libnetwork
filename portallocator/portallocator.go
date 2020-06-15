@@ -6,6 +6,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"net"
 	"sync"
+
+	"github.com/Sirupsen/logrus"
 )
 
 var (
@@ -143,7 +145,16 @@ func (p *PortAllocator) RequestPort(ip net.IP, proto string, port int) (int, err
 // If portStart != portEnd it returns the first free port in the requested range.
 // Otherwise (portStart == portEnd) it checks port availability in the requested proto's port-pool
 // and returns that port or error if port is already busy.
-func (p *PortAllocator) RequestPortInRange(ip net.IP, proto string, portStart, portEnd int) (int, error) {
+func (p *PortAllocator) RequestPortInRange(ip net.IP, proto string, portStart int, portEnd int) (int, error) {
+	return p.RequestPreferredPortInRange(ip, proto, 0, portStart, portEnd)
+}
+
+// RequestPreferredPortInRange allows caller to specify a preferred specific port and a fallback range.
+// If port, portStart and portEnd are all 0 it returns the first free port in the default ephemeral range.
+// If port is 0 and portStart < portEnd it returns the first free port in the requested range.
+// If port != 0, we allocate the specified port if it is available, or the first free port in the specified custom range.
+// When no range is specified, returns error if port is already busy.
+func (p *PortAllocator) RequestPreferredPortInRange(ip net.IP, proto string, port int, portStart int, portEnd int) (int, error) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
@@ -166,12 +177,29 @@ func (p *PortAllocator) RequestPortInRange(ip net.IP, proto string, portStart, p
 		p.ipMap[ipstr] = protomap
 	}
 	mapping := protomap[proto]
-	if portStart > 0 && portStart == portEnd {
-		if _, ok := mapping.p[portStart]; !ok {
-			mapping.p[portStart] = struct{}{}
-			return portStart, nil
+
+	// Fixup request for dynamic port from range of size 1
+	if port == 0 && portStart == portEnd {
+		port = portStart
+	}
+	// Catch a preferred port with an invalid range
+	if port != 0 && portStart != 0 &&
+		(port < portStart || port > portEnd) {
+		return 0, fmt.Errorf("invalid port range %d-%d for requested port: %d", portStart, portEnd, port)
+	}
+
+	if port > 0 {
+		if _, ok := mapping.p[port]; !ok {
+			mapping.p[port] = struct{}{}
+			return port, nil
 		}
-		return 0, newErrPortAlreadyAllocated(ipstr, portStart)
+		// If a custom range is specified, we can try to auto-allocate again from the range.
+		if portStart != 0 && portStart != portEnd && port >= portStart && port <= portEnd {
+			warn := fmt.Sprintf("Port %d/%s is busy, re-allocating from specified range: %d-%d", port, proto, portStart, portEnd)
+			logrus.Warn(warn)
+		} else {
+			return 0, newErrPortAlreadyAllocated(ipstr, port)
+		}
 	}
 
 	port, err := mapping.findPort(portStart, portEnd)
@@ -246,11 +274,11 @@ func (p *PortAllocator) ReleaseAll() error {
 	return nil
 }
 
-func getRangeKey(portStart, portEnd int) string {
+func getRangeKey(portStart int, portEnd int) string {
 	return fmt.Sprintf("%d-%d", portStart, portEnd)
 }
 
-func newPortRange(portStart, portEnd int) *portRange {
+func newPortRange(portStart int, portEnd int) *portRange {
 	return &portRange{
 		begin: portStart,
 		end:   portEnd,
@@ -258,7 +286,7 @@ func newPortRange(portStart, portEnd int) *portRange {
 	}
 }
 
-func (pm *portMap) getPortRange(portStart, portEnd int) (*portRange, error) {
+func (pm *portMap) getPortRange(portStart int, portEnd int) (*portRange, error) {
 	var key string
 	if portStart == 0 && portEnd == 0 {
 		key = pm.defaultRange
@@ -282,7 +310,7 @@ func (pm *portMap) getPortRange(portStart, portEnd int) (*portRange, error) {
 	return pr, nil
 }
 
-func (pm *portMap) findPort(portStart, portEnd int) (int, error) {
+func (pm *portMap) findPort(portStart int, portEnd int) (int, error) {
 	pr, err := pm.getPortRange(portStart, portEnd)
 	if err != nil {
 		return 0, err
