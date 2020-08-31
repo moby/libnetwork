@@ -7,21 +7,10 @@ import (
 )
 
 var (
-	// lcowSupported determines if Linux Containers on Windows are supported.
-	lcowSupported = false
-
 	// containerdRuntimeSupported determines if ContainerD should be the runtime.
 	// As of March 2019, this is an experimental feature.
 	containerdRuntimeSupported = false
 )
-
-// InitLCOW sets whether LCOW is supported or not
-func InitLCOW(experimental bool) {
-	v := GetOSVersion()
-	if experimental && v.Build >= 16299 {
-		lcowSupported = true
-	}
-}
 
 // InitContainerdRuntime sets whether to use ContainerD for runtime
 // on Windows. This is an experimental feature still in development, and
