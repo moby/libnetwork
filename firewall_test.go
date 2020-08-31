@@ -5,11 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	"gotest.tools/v3/assert"
-
 	"github.com/docker/libnetwork/iptables"
 	"github.com/docker/libnetwork/netlabel"
 	"github.com/docker/libnetwork/options"
+	"gotest.tools/v3/assert"
 )
 
 const (
