@@ -2,9 +2,10 @@ package libnetwork
 
 import (
 	"fmt"
-	"gotest.tools/assert"
 	"strings"
 	"testing"
+
+	"gotest.tools/v3/assert"
 
 	"github.com/docker/libnetwork/iptables"
 	"github.com/docker/libnetwork/netlabel"
