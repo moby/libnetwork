@@ -8,6 +8,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"golang.org/x/net/ipv4"
 )
 
 const (
@@ -64,6 +65,11 @@ func NewUDPProxy(frontendAddr, backendAddr *net.UDPAddr) (*UDPProxy, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	listenerv4 := ipv4.NewPacketConn(listener)
+
+	listenerv4.SetControlMessage(ipv4.FlagDst, true)
+
 	return &UDPProxy{
 		listener:       listener,
 		frontendAddr:   listener.LocalAddr().(*net.UDPAddr),
@@ -72,7 +78,7 @@ func NewUDPProxy(frontendAddr, backendAddr *net.UDPAddr) (*UDPProxy, error) {
 	}, nil
 }
 
-func (proxy *UDPProxy) replyLoop(proxyConn *net.UDPConn, clientAddr *net.UDPAddr, clientKey *connTrackKey) {
+func (proxy *UDPProxy) replyLoop(proxyConn *net.UDPConn, clientAddr *net.UDPAddr, srcAddr *net.IP, clientKey *connTrackKey) {
 	defer func() {
 		proxy.connTrackLock.Lock()
 		delete(proxy.connTrackTable, *clientKey)
@@ -97,7 +103,11 @@ func (proxy *UDPProxy) replyLoop(proxyConn *net.UDPConn, clientAddr *net.UDPAddr
 			return
 		}
 		for i := 0; i != read; {
-			written, err := proxy.listener.WriteToUDP(readBuf[i:read], clientAddr)
+			cm := new(ipv4.ControlMessage)
+			cm.Src = *srcAddr
+			oob := cm.Marshal()
+
+			written, _, err := proxy.listener.WriteMsgUDP(readBuf[i:read], oob, clientAddr)
 			if err != nil {
 				return
 			}
@@ -110,7 +120,9 @@ func (proxy *UDPProxy) replyLoop(proxyConn *net.UDPConn, clientAddr *net.UDPAddr
 func (proxy *UDPProxy) Run() {
 	readBuf := make([]byte, UDPBufSize)
 	for {
-		read, from, err := proxy.listener.ReadFromUDP(readBuf)
+		oobBuf := ipv4.NewControlMessage(ipv4.FlagDst)
+		read, _, _, from, err := proxy.listener.ReadMsgUDP(readBuf, oobBuf)
+
 		if err != nil {
 			// NOTE: Apparently ReadFrom doesn't return
 			// ECONNREFUSED like Read do (see comment in
@@ -120,6 +132,15 @@ func (proxy *UDPProxy) Run() {
 			}
 			break
 		}
+
+		cm := new(ipv4.ControlMessage)
+		err = cm.Parse(oobBuf)
+
+		if err != nil {
+			// TODO
+		}
+
+		to := &cm.Dst
 
 		fromKey := newConnTrackKey(from)
 		proxy.connTrackLock.Lock()
@@ -132,7 +153,7 @@ func (proxy *UDPProxy) Run() {
 				continue
 			}
 			proxy.connTrackTable[*fromKey] = proxyConn
-			go proxy.replyLoop(proxyConn, from, fromKey)
+			go proxy.replyLoop(proxyConn, from, to, fromKey)
 		}
 		proxy.connTrackLock.Unlock()
 		for i := 0; i != read; {
