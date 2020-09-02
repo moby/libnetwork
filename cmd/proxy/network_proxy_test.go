@@ -234,6 +234,19 @@ func TestUDP4Proxy(t *testing.T) {
 	testProxy(t, "udp", proxy, false)
 }
 
+func TestUDP4SrcAddrProxy(t *testing.T) {
+	backend := NewEchoServer(t, "udp", "127.0.0.1:0", EchoServerOptions{})
+	defer backend.Close()
+	backend.Run()
+	frontendAddr := &net.UDPAddr{IP: net.IPv4(0, 0, 0, 0), Port: 0}
+	proxy, err := NewProxy(frontendAddr, backend.LocalAddr())
+	if err != nil {
+		t.Fatal(err)
+	}
+	testAddr := strings.ReplaceAll(proxy.FrontendAddr().String(), "0.0.0.0", "127.0.0.2")
+	testProxyAt(t, "udp", proxy, testAddr, false)
+}
+
 func TestUDP6Proxy(t *testing.T) {
 	t.Skip("Need to start CI docker with --ipv6")
 	backend := NewEchoServer(t, "udp", "[::1]:0", EchoServerOptions{})

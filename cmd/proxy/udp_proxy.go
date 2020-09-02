@@ -70,15 +70,19 @@ func NewUDPProxy(frontendAddr, backendAddr *net.UDPAddr) (*UDPProxy, error) {
 	}
 
 	frontendUDPAddr := listener.LocalAddr().(*net.UDPAddr)
-	inet6Socket := frontendUDPAddr.IP.To16 != nil
+	inet6Socket := frontendUDPAddr.IP.To4() == nil
 
 	// INET_6 sockets (which are bound by default) serve
 	// both udp6 and udp4 packets, and provide IPv4 dst IPs
 	// in IPv6 CMSGs
 	if inet6Socket {
-		ipv6.NewPacketConn(listener).SetControlMessage(ipv6.FlagDst|ipv6.FlagInterface, true)
+		err = ipv6.NewPacketConn(listener).SetControlMessage(ipv6.FlagDst|ipv6.FlagInterface, true)
 	} else {
-		ipv4.NewPacketConn(listener).SetControlMessage(ipv4.FlagDst, true)
+		err = ipv4.NewPacketConn(listener).SetControlMessage(ipv4.FlagDst, true)
+	}
+
+	if err != nil {
+		log.Printf("Setting FlagDst on frontend socket %s failed, %s, was inet6? %t", frontendUDPAddr.String(), err, inet6Socket)
 	}
 
 	return &UDPProxy{
@@ -115,21 +119,28 @@ func (proxy *UDPProxy) replyLoop(proxyConn *net.UDPConn, clientAddr *net.UDPAddr
 			return
 		}
 		for i := 0; i != read; {
-			// set the src IP of the response to match the DST of the
-			// initial client packet.
-			var oob []byte = nil
+			written := 0
 
-			if srcAddr.To4() != nil {
-				cm := new(ipv4.ControlMessage)
-				cm.Src = *srcAddr
-				oob = cm.Marshal()
+			if srcAddr != nil {
+				// set the src IP of the response to match the DST of the
+				// initial client packet.
+				var oob []byte //= nil
+
+				if srcAddr.To4() != nil {
+					cm := new(ipv4.ControlMessage)
+					cm.Src = *srcAddr
+					oob = cm.Marshal()
+				} else {
+					cm := new(ipv6.ControlMessage)
+					cm.Src = *srcAddr
+					oob = cm.Marshal()
+				}
+
+				written, _, err = proxy.listener.WriteMsgUDP(readBuf[i:read], oob, clientAddr)
 			} else {
-				cm := new(ipv6.ControlMessage)
-				cm.Src = *srcAddr
-				oob = cm.Marshal()
+				written, err = proxy.listener.WriteToUDP(readBuf[i:read], clientAddr)
 			}
 
-			written, _, err := proxy.listener.WriteMsgUDP(readBuf[i:read], oob, clientAddr)
 			if err != nil {
 				return
 			}
@@ -146,7 +157,7 @@ func (proxy *UDPProxy) Run() {
 		// received packet. This is used to ensure the src IP of the
 		// response matches when bound to 0.0.0.0 on  multi-homed
 		// machines.
-		var oobBuf []byte = nil
+		var oobBuf []byte
 
 		if proxy.inet6Socket {
 			oobBuf = ipv6.NewControlMessage(ipv6.FlagDst | ipv6.FlagInterface)
