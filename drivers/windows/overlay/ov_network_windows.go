@@ -325,6 +325,16 @@ func (d *driver) createHnsNetwork(n *network) error {
 	configuration := string(configurationb)
 	logrus.Infof("HNSNetwork Request =%v", configuration)
 
+	// Avoid error "failed during hnsCallRawResponse: hnsCall failed in Win32: A network with this name already exists. (0x803b0010)"
+	// HNS network name = overlay network id
+	// so if network already exists on HNS side we can expect that it was created by us.
+	hnsNetwork, _ := hcsshim.GetHNSNetworkByName(n.name)
+	if hnsNetwork != nil {
+		n.hnsID = hnsNetwork.Name
+		n.providerAddress = hnsNetwork.ManagementIP
+		return nil
+	}
+
 	hnsresponse, err := hcsshim.HNSNetworkRequest("POST", "", configuration)
 	if err != nil {
 		return err
