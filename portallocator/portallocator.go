@@ -3,18 +3,10 @@ package portallocator
 import (
 	"errors"
 	"fmt"
-	"github.com/sirupsen/logrus"
 	"net"
 	"sync"
-)
 
-var (
-	// defaultPortRangeStart indicates the first port in port range
-	defaultPortRangeStart = 49153
-	// defaultPortRangeEnd indicates the last port in port range
-	// consistent with default /proc/sys/net/ipv4/ip_local_port_range
-	// upper bound on linux
-	defaultPortRangeEnd = 60999
+	"github.com/sirupsen/logrus"
 )
 
 func sanitizePortRange(start int, end int) (newStart, newEnd int, err error) {
