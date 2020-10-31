@@ -17,9 +17,8 @@ import (
 	"github.com/vishvananda/netlink"
 )
 
-var (
-	networkGetRoutesFct func(netlink.Link, int) ([]netlink.Route, error)
-)
+// networkGetRoutesFct is used to mock out ns.NlHandle().RouteList in tests
+var networkGetRoutesFct func(netlink.Link, int) ([]netlink.Route, error)
 
 // CheckRouteOverlaps checks whether the passed network overlaps with any existing routes
 func CheckRouteOverlaps(toCheck *net.IPNet) error {
