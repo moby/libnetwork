@@ -58,7 +58,10 @@ func (n *bridgeNetwork) allocatePortsInternal(bindings []types.PortBinding, cont
 			}
 			return nil, err
 		}
-		bs = append(bs, b)
+		// if HostIP was set to nil we have to skip this binding
+		if b.HostIP != nil {
+			bs = append(bs, b)
+		}
 	}
 	return bs, nil
 }
@@ -75,6 +78,18 @@ func (n *bridgeNetwork) allocatePort(bnd *types.PortBinding, containerIP, defHos
 	// Adjust the host address in the operational binding
 	if len(bnd.HostIP) == 0 {
 		bnd.HostIP = defHostIP
+	}
+
+	// if host and container are using different IP addresses we skip this allocation
+	// -> only if EnableIP6Tables is set to keep backward compatibility
+	if n.driver.config.EnableIP6Tables {
+		if ((bnd.HostIP.To4() == nil) != (containerIP.To4() == nil)) ||
+			((bnd.HostIP.To16() == nil) != (containerIP.To16() == nil)) {
+
+			// set HostIP to nil to detect skip in allocatePortsInternal
+			bnd.HostIP = nil
+			return nil
+		}
 	}
 
 	// Adjust HostPortEnd if this is not a range.
