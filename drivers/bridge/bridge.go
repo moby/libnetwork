@@ -416,6 +416,11 @@ func (d *driver) configure(option map[string]interface{}) error {
 		})
 	}
 
+	if config.EnableIPTables && config.EnableIP6Tables && config.EnableUserlandProxy {
+		logrus.Warn("userland proxy cannot be used if iptables and ip6tables are enabled -> disabling it")
+		config.EnableUserlandProxy = false
+	}
+
 	if config.EnableIPForwarding {
 		err = setupIPForwarding(config.EnableIPTables, config.EnableIP6Tables)
 		if err != nil {
