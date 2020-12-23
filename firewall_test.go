@@ -17,7 +17,7 @@ const (
 )
 
 func TestUserChain(t *testing.T) {
-	iptable := iptables.GetIptable(iptables.IPv4)
+	iptable := iptables.GetTable(iptables.IPv4)
 
 	nc, err := New()
 	assert.NilError(t, err)
@@ -80,7 +80,7 @@ func TestUserChain(t *testing.T) {
 }
 
 func getRules(t *testing.T, chain string) []string {
-	iptable := iptables.GetIptable(iptables.IPv4)
+	iptable := iptables.GetTable(iptables.IPv4)
 
 	t.Helper()
 	output, err := iptable.Raw("-S", chain)
@@ -94,7 +94,7 @@ func getRules(t *testing.T, chain string) []string {
 }
 
 func resetIptables(t *testing.T) {
-	iptable := iptables.GetIptable(iptables.IPv4)
+	iptable := iptables.GetTable(iptables.IPv4)
 
 	t.Helper()
 	_, err := iptable.Raw("-F", fwdChainName)
