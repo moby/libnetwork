@@ -4,28 +4,31 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/docker/libnetwork/firewalld"
 	"github.com/docker/libnetwork/iptables"
 	"github.com/docker/libnetwork/types"
 	"github.com/sirupsen/logrus"
 )
 
 type link struct {
-	parentIP string
-	childIP  string
-	ports    []types.TransportPort
-	bridge   string
+	parentIP       string
+	childIP        string
+	ports          []types.TransportPort
+	bridge         string
+	enableNFTables bool
 }
 
 func (l *link) String() string {
 	return fmt.Sprintf("%s <-> %s [%v] on %s", l.parentIP, l.childIP, l.ports, l.bridge)
 }
 
-func newLink(parentIP, childIP string, ports []types.TransportPort, bridge string) *link {
+func newLink(parentIP, childIP string, ports []types.TransportPort, bridge string, enableNFTables bool) *link {
 	return &link{
-		childIP:  childIP,
-		parentIP: parentIP,
-		ports:    ports,
-		bridge:   bridge,
+		childIP:        childIP,
+		parentIP:       parentIP,
+		ports:          ports,
+		bridge:         bridge,
+		enableNFTables: enableNFTables,
 	}
 
 }
@@ -33,25 +36,25 @@ func newLink(parentIP, childIP string, ports []types.TransportPort, bridge strin
 func (l *link) Enable() error {
 	// -A == iptables append flag
 	linkFunction := func() error {
-		return linkContainers("-A", l.parentIP, l.childIP, l.ports, l.bridge, false)
+		return linkContainers("-A", l.parentIP, l.childIP, l.ports, l.bridge, l.enableNFTables, false)
 	}
 
-	iptables.OnReloaded(func() { linkFunction() })
+	firewalld.OnReloaded(func() { linkFunction() })
 	return linkFunction()
 }
 
 func (l *link) Disable() {
 	// -D == iptables delete flag
-	err := linkContainers("-D", l.parentIP, l.childIP, l.ports, l.bridge, true)
+	err := linkContainers("-D", l.parentIP, l.childIP, l.ports, l.bridge, l.enableNFTables, true)
 	if err != nil {
-		logrus.Errorf("Error removing IPTables rules for a link %s due to %s", l.String(), err.Error())
+		logrus.Errorf("Error removing rules for a link %s due to %s", l.String(), err.Error())
 	}
 	// Return proper error once we move to use a proper iptables package
 	// that returns typed errors
 }
 
 func linkContainers(action, parentIP, childIP string, ports []types.TransportPort, bridge string,
-	ignoreErrors bool) error {
+	enableNFTables bool, ignoreErrors bool) error {
 	var nfAction iptables.Action
 
 	switch action {

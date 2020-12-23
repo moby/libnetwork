@@ -8,20 +8,21 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/docker/libnetwork/firewallapi"
 	_ "github.com/docker/libnetwork/testutils"
 )
 
 const chainName = "DOCKEREST"
 
-var natChain *ChainInfo
-var filterChain *ChainInfo
+var natChain firewallapi.FirewallChain
+var filterChain firewallapi.FirewallChain
 var bridgeName string
 
 func TestNewChain(t *testing.T) {
 	var err error
 
 	bridgeName = "lo"
-	iptable := GetIptable(IPv4)
+	iptable := GetTable(IPv4)
 
 	natChain, err = iptable.NewChain(chainName, Nat, false)
 	if err != nil {
@@ -50,7 +51,7 @@ func TestForward(t *testing.T) {
 	proto := "tcp"
 
 	bridgeName := "lo"
-	iptable := GetIptable(IPv4)
+	iptable := GetTable(IPv4)
 
 	err := natChain.Forward(Insert, ip, port, proto, dstAddr, dstPort, bridgeName)
 	if err != nil {
@@ -66,7 +67,7 @@ func TestForward(t *testing.T) {
 		"!", "-i", bridgeName,
 	}
 
-	if !iptable.Exists(natChain.Table, natChain.Name, dnatRule...) {
+	if !iptable.Exists(natChain.GetTable(), natChain.GetName(), dnatRule...) {
 		t.Fatal("DNAT rule does not exist")
 	}
 
@@ -79,7 +80,7 @@ func TestForward(t *testing.T) {
 		"-j", "ACCEPT",
 	}
 
-	if !iptable.Exists(filterChain.Table, filterChain.Name, filterRule...) {
+	if !iptable.Exists(filterChain.GetTable(), filterChain.GetName(), filterRule...) {
 		t.Fatal("filter rule does not exist")
 	}
 
@@ -91,7 +92,7 @@ func TestForward(t *testing.T) {
 		"-j", "MASQUERADE",
 	}
 
-	if !iptable.Exists(natChain.Table, "POSTROUTING", masqRule...) {
+	if !iptable.Exists(natChain.GetTable(), "POSTROUTING", masqRule...) {
 		t.Fatal("MASQUERADE rule does not exist")
 	}
 }
@@ -100,7 +101,7 @@ func TestLink(t *testing.T) {
 	var err error
 
 	bridgeName := "lo"
-	iptable := GetIptable(IPv4)
+	iptable := GetTable(IPv4)
 	ip1 := net.ParseIP("192.168.1.1")
 	ip2 := net.ParseIP("192.168.1.2")
 	port := 1234
@@ -120,7 +121,7 @@ func TestLink(t *testing.T) {
 		"--dport", strconv.Itoa(port),
 		"-j", "ACCEPT"}
 
-	if !iptable.Exists(filterChain.Table, filterChain.Name, rule1...) {
+	if !iptable.Exists(filterChain.GetTable(), filterChain.GetName(), rule1...) {
 		t.Fatal("rule1 does not exist")
 	}
 
@@ -133,7 +134,7 @@ func TestLink(t *testing.T) {
 		"--sport", strconv.Itoa(port),
 		"-j", "ACCEPT"}
 
-	if !iptable.Exists(filterChain.Table, filterChain.Name, rule2...) {
+	if !iptable.Exists(filterChain.GetTable(), filterChain.GetName(), rule2...) {
 		t.Fatal("rule2 does not exist")
 	}
 }
@@ -142,14 +143,14 @@ func TestPrerouting(t *testing.T) {
 	args := []string{
 		"-i", "lo",
 		"-d", "192.168.1.1"}
-	iptable := GetIptable(IPv4)
+	iptable := GetTable(IPv4)
 
 	err := natChain.Prerouting(Insert, args...)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if !iptable.Exists(natChain.Table, "PREROUTING", args...) {
+	if !iptable.Exists(natChain.GetTable(), "PREROUTING", args...) {
 		t.Fatal("rule does not exist")
 	}
 
@@ -163,19 +164,19 @@ func TestOutput(t *testing.T) {
 	args := []string{
 		"-o", "lo",
 		"-d", "192.168.1.1"}
-	iptable := GetIptable(IPv4)
+	iptable := GetTable(IPv4)
 
 	err := natChain.Output(Insert, args...)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if !iptable.Exists(natChain.Table, "OUTPUT", args...) {
+	if !iptable.Exists(natChain.GetTable(), "OUTPUT", args...) {
 		t.Fatal("rule does not exist")
 	}
 
 	delRule := append([]string{"-D", "OUTPUT", "-t",
-		string(natChain.Table)}, args...)
+		string(natChain.GetTable())}, args...)
 	if _, err = iptable.Raw(delRule...); err != nil {
 		t.Fatal(err)
 	}
@@ -225,11 +226,11 @@ func TestCleanup(t *testing.T) {
 	var rules []byte
 
 	// Cleanup filter/FORWARD first otherwise output of iptables-save is dirty
-	link := []string{"-t", string(filterChain.Table),
+	link := []string{"-t", string(filterChain.GetTable()),
 		string(Delete), "FORWARD",
 		"-o", bridgeName,
-		"-j", filterChain.Name}
-	iptable := GetIptable(IPv4)
+		"-j", filterChain.GetName()}
+	iptable := GetTable(IPv4)
 
 	if _, err = iptable.Raw(link...); err != nil {
 		t.Fatal(err)
@@ -254,7 +255,7 @@ func TestExistsRaw(t *testing.T) {
 	testChain1 := "ABCD"
 	testChain2 := "EFGH"
 
-	iptable := GetIptable(IPv4)
+	iptable := GetTable(IPv4)
 
 	_, err := iptable.NewChain(testChain1, Filter, false)
 	if err != nil {

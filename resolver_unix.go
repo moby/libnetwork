@@ -58,7 +58,7 @@ func reexecSetupResolver() {
 	}
 
 	// TODO IPv6 support
-	iptable := iptables.GetIptable(iptables.IPv4)
+	iptable := iptables.GetTable(iptables.IPv4)
 
 	// insert outputChain and postroutingchain
 	err = iptable.RawCombinedOutputNative("-t", "nat", "-C", "OUTPUT", "-d", resolverIP, "-j", outputChain)
