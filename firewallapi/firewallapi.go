@@ -57,6 +57,11 @@ type FirewallTable interface {
 	SetDefaultPolicy(table Table, chain string, policy Policy) error
 	AddReturnRule(chain string) error
 	EnsureJumpRule(fromChain, toChain string) error
+	EnsureJumpRuleForIface(fromChain, toChain, iface string) error
+	EnsureAcceptRule(chain string) error
+	EnsureAcceptRuleForIface(chain, iface string) error
+	EnsureDropRule(chain string) error
+	EnsureDropRuleForIface(chain, iface string) error
 }
 
 type FirewallChain interface {

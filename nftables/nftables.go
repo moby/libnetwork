@@ -120,7 +120,7 @@ func initDependencies() {
 	detectNftables()
 }
 
-func initCheck() error {
+func InitCheck() error {
 	initOnce.Do(initDependencies)
 
 	if nftablesPath == "" {
@@ -490,7 +490,7 @@ func (nftable NFTable) exists(native bool, table Table, chain string, rule ...st
 		table = Filter
 	}
 
-	if err := initCheck(); err != nil {
+	if err := InitCheck(); err != nil {
 		// The exists() signature does not allow us to return an error, but at least
 		// we can skip the (likely invalid) exec invocation.
 		return false
@@ -543,7 +543,7 @@ func (nftable NFTable) Raw(args ...string) ([]byte, error) {
 }
 
 func (nftable NFTable) raw(args ...string) ([]byte, error) {
-	if err := initCheck(); err != nil {
+	if err := InitCheck(); err != nil {
 		return nil, err
 	}
 	bestEffortLock.Lock()
@@ -642,6 +642,123 @@ func (nftable NFTable) EnsureJumpRule(fromChain, toChain string) error {
 	var (
 		table = Filter
 		args  = []string{"jump", toChain}
+	)
+
+	if nftable.Exists(table, fromChain, args...) {
+		err := nftable.DeleteRule(nftable.Version, "filter", fromChain, args...)
+		if err != nil {
+			return fmt.Errorf("unable to remove jump to %s rule in %s chain: %s", toChain, fromChain, err.Error())
+		}
+	}
+
+	err := nftable.RawCombinedOutput(append([]string{"insert", "rule", "ip", "filter", fromChain}, args...)...)
+	if err != nil {
+		return fmt.Errorf("unable to insert jump to %s rule in %s chain: %s", toChain, fromChain, err.Error())
+	}
+
+	return nil
+}
+
+func (nftable NFTable) EnsureAcceptRule(chain string) error {
+	chain = strings.ToLower(chain)
+
+	var (
+		table = Filter
+		args  = []string{"accept"}
+	)
+
+	if nftable.Exists(table, chain, args...) {
+		err := nftable.DeleteRule(nftable.Version, "filter", chain, args...)
+		if err != nil {
+			return fmt.Errorf("unable to remove accept rule in %s chain: %s", chain, err.Error())
+		}
+	}
+
+	err := nftable.RawCombinedOutput(append([]string{"add", "rule", "ip", "filter", chain}, args...)...)
+	if err != nil {
+		return fmt.Errorf("unable to insert accept rule in %s chain: %s", chain, err.Error())
+	}
+
+	return nil
+}
+
+func (nftable NFTable) EnsureAcceptRuleForIface(chain, iface string) error {
+	chain = strings.ToLower(chain)
+
+	var (
+		table = Filter
+		args  = []string{"oifname", iface, "accept"}
+	)
+
+	if nftable.Exists(table, chain, args...) {
+		err := nftable.DeleteRule(nftable.Version, "filter", chain, args...)
+		if err != nil {
+			return fmt.Errorf("unable to remove accept rule in %s chain: %s", chain, err.Error())
+		}
+	}
+
+	err := nftable.RawCombinedOutput(append([]string{"add", "rule", "ip", "filter", chain}, args...)...)
+	if err != nil {
+		return fmt.Errorf("unable to insert accept rule in %s chain: %s", chain, err.Error())
+	}
+
+	return nil
+}
+
+func (nftable NFTable) EnsureDropRule(chain string) error {
+	chain = strings.ToLower(chain)
+
+	var (
+		table = Filter
+		args  = []string{"drop"}
+	)
+
+	if nftable.Exists(table, chain, args...) {
+		err := nftable.DeleteRule(nftable.Version, "filter", chain, args...)
+		if err != nil {
+			return fmt.Errorf("unable to remove drop rule in %s chain: %s", chain, err.Error())
+		}
+	}
+
+	err := nftable.RawCombinedOutput(append([]string{"add", "rule", "ip", "filter", chain}, args...)...)
+	if err != nil {
+		return fmt.Errorf("unable to insert drop rule in %s chain: %s", chain, err.Error())
+	}
+
+	return nil
+}
+
+func (nftable NFTable) EnsureDropRuleForIface(chain, iface string) error {
+	chain = strings.ToLower(chain)
+
+	var (
+		table = Filter
+		args  = []string{"oifname", iface, "drop"}
+	)
+
+	if nftable.Exists(table, chain, args...) {
+		err := nftable.DeleteRule(nftable.Version, "filter", chain, args...)
+		if err != nil {
+			return fmt.Errorf("unable to remove drop rule in %s chain: %s", chain, err.Error())
+		}
+	}
+
+	err := nftable.RawCombinedOutput(append([]string{"add", "rule", "ip", "filter", chain}, args...)...)
+	if err != nil {
+		return fmt.Errorf("unable to insert drop rule in %s chain: %s", chain, err.Error())
+	}
+
+	return nil
+}
+
+// EnsureJumpRule ensures the jump rule is on top
+func (nftable NFTable) EnsureJumpRuleForIface(fromChain, toChain, iface string) error {
+	fromChain = strings.ToLower(fromChain)
+	toChain = strings.ToLower(toChain)
+
+	var (
+		table = Filter
+		args  = []string{"oifname", iface, "jump", toChain}
 	)
 
 	if nftable.Exists(table, fromChain, args...) {
