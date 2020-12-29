@@ -136,7 +136,7 @@ func initDependencies() {
 	detectIptables()
 }
 
-func initCheck() error {
+func InitCheck() error {
 	initOnce.Do(initDependencies)
 
 	if iptablesPath == "" {
@@ -470,7 +470,7 @@ func (iptable IPTable) exists(native bool, table Table, chain string, rule ...st
 		table = Filter
 	}
 
-	if err := initCheck(); err != nil {
+	if err := InitCheck(); err != nil {
 		// The exists() signature does not allow us to return an error, but at least
 		// we can skip the (likely invalid) exec invocation.
 		return false
@@ -530,7 +530,7 @@ func (iptable IPTable) Raw(args ...string) ([]byte, error) {
 }
 
 func (iptable IPTable) raw(args ...string) ([]byte, error) {
-	if err := initCheck(); err != nil {
+	if err := InitCheck(); err != nil {
 		return nil, err
 	}
 	if supportsXlock {
@@ -638,6 +638,113 @@ func (iptable IPTable) EnsureJumpRule(fromChain, toChain string) error {
 	var (
 		table = Filter
 		args  = []string{"-j", toChain}
+	)
+
+	if iptable.Exists(table, fromChain, args...) {
+		err := iptable.RawCombinedOutput(append([]string{"-D", fromChain}, args...)...)
+		if err != nil {
+			return fmt.Errorf("unable to remove jump to %s rule in %s chain: %s", toChain, fromChain, err.Error())
+		}
+	}
+
+	err := iptable.RawCombinedOutput(append([]string{"-I", fromChain}, args...)...)
+	if err != nil {
+		return fmt.Errorf("unable to insert jump to %s rule in %s chain: %s", toChain, fromChain, err.Error())
+	}
+
+	return nil
+}
+
+func (iptable IPTable) EnsureAcceptRule(chain string) error {
+	var (
+		table = Filter
+		args  = []string{"-j", "ACCEPT"}
+	)
+
+	if iptable.Exists(table, chain, args...) {
+		err := iptable.RawCombinedOutput(append([]string{"-D", chain}, args...)...)
+		if err != nil {
+			return fmt.Errorf("unable to remove accept rule in %s chain: %s", chain, err.Error())
+		}
+	}
+
+	err := iptable.RawCombinedOutput(append([]string{"-A", chain}, args...)...)
+	if err != nil {
+		return fmt.Errorf("unable to insert accept rule in %s chain: %s", chain, err.Error())
+	}
+
+	return nil
+}
+
+func (iptable IPTable) EnsureAcceptRuleForIface(chain, iface string) error {
+	var (
+		table = Filter
+		args  = []string{"-o", iface, "-j", "ACCEPT"}
+	)
+
+	if iptable.Exists(table, chain, args...) {
+		err := iptable.RawCombinedOutput(append([]string{"-D", chain}, args...)...)
+		if err != nil {
+			return fmt.Errorf("unable to remove accept rule in %s chain: %s", chain, err.Error())
+		}
+	}
+
+	err := iptable.RawCombinedOutput(append([]string{"-A", chain}, args...)...)
+	if err != nil {
+		return fmt.Errorf("unable to insert accept rule in %s chain: %s", chain, err.Error())
+	}
+
+	return nil
+}
+
+// EnsureJumpRule ensures the jump rule is on top
+func (iptable IPTable) EnsureDropRule(chain string) error {
+	var (
+		table = Filter
+		args  = []string{"-j", "DROP"}
+	)
+
+	if iptable.Exists(table, chain, args...) {
+		err := iptable.RawCombinedOutput(append([]string{"-D", chain}, args...)...)
+		if err != nil {
+			return fmt.Errorf("unable to remove drop rule in %s chain: %s", chain, err.Error())
+		}
+	}
+
+	err := iptable.RawCombinedOutput(append([]string{"-A", chain}, args...)...)
+	if err != nil {
+		return fmt.Errorf("unable to insert drop rule in %s chain: %s", chain, err.Error())
+	}
+
+	return nil
+}
+
+func (iptable IPTable) EnsureDropRuleForIface(chain, iface string) error {
+	var (
+		table = Filter
+		args  = []string{"-o", iface, "-j", "DROP"}
+	)
+
+	if iptable.Exists(table, chain, args...) {
+		err := iptable.RawCombinedOutput(append([]string{"-D", chain}, args...)...)
+		if err != nil {
+			return fmt.Errorf("unable to remove drop rule in %s chain: %s", chain, err.Error())
+		}
+	}
+
+	err := iptable.RawCombinedOutput(append([]string{"-A", chain}, args...)...)
+	if err != nil {
+		return fmt.Errorf("unable to insert drop rule in %s chain: %s", chain, err.Error())
+	}
+
+	return nil
+}
+
+// EnsureJumpRule ensures the jump rule is on top
+func (iptable IPTable) EnsureJumpRuleForIface(fromChain, toChain, iface string) error {
+	var (
+		table = Filter
+		args  = []string{"-o", iface, "-j", toChain}
 	)
 
 	if iptable.Exists(table, fromChain, args...) {
