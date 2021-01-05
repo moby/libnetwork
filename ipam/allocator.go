@@ -3,6 +3,7 @@ package ipam
 import (
 	"fmt"
 	"net"
+	"runtime/debug"
 	"sort"
 	"sync"
 
@@ -444,7 +445,9 @@ func (a *Allocator) getPredefinedPool(as string, ipV6 bool) (*net.IPNet, error) 
 	}
 	aSpace.Unlock()
 
-	return nil, types.NotFoundErrorf("could not find an available, non-overlapping IPv%d address pool among the defaults to assign to the network", v)
+	debug.PrintStack()
+
+	return nil, types.NotFoundErrorf("XXXX could not find an available, non-overlapping IPv%d address pool among the defaults to assign to the network", v)
 }
 
 // RequestAddress returns an address from the specified pool ID

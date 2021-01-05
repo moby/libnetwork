@@ -1,4 +1,4 @@
-package iptables
+package firewalld
 
 import (
 	"fmt"
@@ -18,6 +18,9 @@ const (
 	IP6Tables IPV = "ipv6"
 	// Ebtables point to bridge table
 	Ebtables IPV = "eb"
+	// NFtables points to a nft table
+	// FIXME: firewalld somehow doesn't support direct passthrough for NFT yet
+	// We should reach out to the maintainers to find out whether ipv4|ipv6 handle this
 )
 
 const (
@@ -59,7 +62,7 @@ type ZoneSettings struct {
 var (
 	connection *Conn
 
-	firewalldRunning bool      // is Firewalld service running
+	FirewalldRunning bool      // is Firewalld service running
 	onReloaded       []*func() // callbacks when Firewalld has been reloaded
 )
 
@@ -70,8 +73,8 @@ func FirewalldInit() error {
 	if connection, err = newConnection(); err != nil {
 		return fmt.Errorf("Failed to connect to D-Bus system bus: %v", err)
 	}
-	firewalldRunning = checkRunning()
-	if !firewalldRunning {
+	FirewalldRunning = checkRunning()
+	if FirewalldRunning {
 		connection.sysconn.Close()
 		connection = nil
 	}
@@ -124,7 +127,7 @@ func (c *Conn) initConnection() error {
 func signalHandler() {
 	for signal := range connection.signal {
 		if strings.Contains(signal.Name, "NameOwnerChanged") {
-			firewalldRunning = checkRunning()
+			FirewalldRunning = checkRunning()
 			dbusConnectionChanged(signal.Body)
 		} else if strings.Contains(signal.Name, "Reloaded") {
 			reloaded()
@@ -185,7 +188,7 @@ func checkRunning() bool {
 	return false
 }
 
-// Passthrough method simply passes args through to iptables/ip6tables
+// Passthrough method simply passes args through to iptables/ip6tables/nft
 func Passthrough(ipv IPV, args ...string) ([]byte, error) {
 	var output string
 	logrus.Debugf("Firewalld passthrough: %s, %s", ipv, args)
