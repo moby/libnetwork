@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/docker/libnetwork/firewallapi"
 	"github.com/docker/libnetwork/firewalld"
 	"github.com/docker/libnetwork/iptables"
+	"github.com/docker/libnetwork/nftables"
 	"github.com/docker/libnetwork/types"
 	"github.com/sirupsen/logrus"
 )
@@ -34,7 +36,6 @@ func newLink(parentIP, childIP string, ports []types.TransportPort, bridge strin
 }
 
 func (l *link) Enable() error {
-	// -A == iptables append flag
 	linkFunction := func() error {
 		return linkContainers("-A", l.parentIP, l.childIP, l.ports, l.bridge, l.enableNFTables, false)
 	}
@@ -44,7 +45,6 @@ func (l *link) Enable() error {
 }
 
 func (l *link) Disable() {
-	// -D == iptables delete flag
 	err := linkContainers("-D", l.parentIP, l.childIP, l.ports, l.bridge, l.enableNFTables, true)
 	if err != nil {
 		logrus.Errorf("Error removing rules for a link %s due to %s", l.String(), err.Error())
@@ -55,17 +55,33 @@ func (l *link) Disable() {
 
 func linkContainers(action, parentIP, childIP string, ports []types.TransportPort, bridge string,
 	enableNFTables bool, ignoreErrors bool) error {
-	var nfAction iptables.Action
+	var nfAction firewallapi.Action
+	var chain firewallapi.FirewallChain
 
-	switch action {
-	case "-A":
-		nfAction = iptables.Append
-	case "-I":
-		nfAction = iptables.Insert
-	case "-D":
-		nfAction = iptables.Delete
-	default:
-		return InvalidIPTablesCfgError(action)
+	if enableNFTables {
+		chain = nftables.ChainInfo{Name: DockerChain}
+		switch action {
+		case "-A":
+			nfAction = nftables.Append
+		case "-I":
+			nfAction = nftables.Insert
+		case "-D":
+			nfAction = nftables.Delete
+		default:
+			return InvalidNFTablesCfgError(action)
+		}
+	} else {
+		chain = iptables.ChainInfo{Name: DockerChain}
+		switch action {
+		case "-A":
+			nfAction = iptables.Append
+		case "-I":
+			nfAction = iptables.Insert
+		case "-D":
+			nfAction = iptables.Delete
+		default:
+			return InvalidIPTablesCfgError(action)
+		}
 	}
 
 	ip1 := net.ParseIP(parentIP)
@@ -77,7 +93,6 @@ func linkContainers(action, parentIP, childIP string, ports []types.TransportPor
 		return InvalidLinkIPAddrError(childIP)
 	}
 
-	chain := iptables.ChainInfo{Name: DockerChain}
 	for _, port := range ports {
 		err := chain.Link(nfAction, ip1, ip2, int(port.Port), port.Proto.String(), bridge)
 		if !ignoreErrors && err != nil {

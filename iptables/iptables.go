@@ -292,13 +292,13 @@ func (iptable IPTable) RemoveExistingChain(name string, table Table) error {
 	return c.Remove()
 }
 
-func (c *ChainInfo) DeleteRule(version IPVersion, table Table, chain string, rule ...string) error {
+func (c ChainInfo) DeleteRule(version IPVersion, table Table, chain string, rule ...string) error {
 	return nil
 	//Nothing to do here for iptables
 }
 
 // Forward adds forwarding rule to 'filter' table and corresponding nat rule to 'nat' table.
-func (c *ChainInfo) Forward(action Action, ip net.IP, port int, proto, destAddr string, destPort int, bridgeName string) error {
+func (c ChainInfo) Forward(action Action, ip net.IP, port int, proto, destAddr string, destPort int, bridgeName string) error {
 
 	iptable := GetTable(c.FirewallTable.Version)
 	daddr := ip.String()
@@ -371,7 +371,7 @@ func (c *ChainInfo) Forward(action Action, ip net.IP, port int, proto, destAddr 
 
 // Link adds reciprocal ACCEPT rule for two supplied IP addresses.
 // Traffic is allowed from ip1 to ip2 and vice-versa
-func (c *ChainInfo) Link(action Action, ip1, ip2 net.IP, port int, proto string, bridgeName string) error {
+func (c ChainInfo) Link(action Action, ip1, ip2 net.IP, port int, proto string, bridgeName string) error {
 	iptable := GetTable(c.FirewallTable.Version)
 	// forward
 	args := []string{
@@ -403,7 +403,7 @@ func (iptable IPTable) ProgramRule(table Table, chain string, action Action, arg
 }
 
 // Prerouting adds linking rule to nat/PREROUTING chain.
-func (c *ChainInfo) Prerouting(action Action, args ...string) error {
+func (c ChainInfo) Prerouting(action Action, args ...string) error {
 	iptable := GetTable(c.FirewallTable.Version)
 	a := []string{"-t", string(Nat), string(action), "PREROUTING"}
 	if len(args) > 0 {
@@ -418,7 +418,7 @@ func (c *ChainInfo) Prerouting(action Action, args ...string) error {
 }
 
 // Output adds linking rule to an OUTPUT chain.
-func (c *ChainInfo) Output(action Action, args ...string) error {
+func (c ChainInfo) Output(action Action, args ...string) error {
 	iptable := GetTable(c.FirewallTable.Version)
 	a := []string{"-t", string(c.GetTable()), string(action), "OUTPUT"}
 	if len(args) > 0 {
@@ -433,7 +433,7 @@ func (c *ChainInfo) Output(action Action, args ...string) error {
 }
 
 // Remove removes the chain.
-func (c *ChainInfo) Remove() error {
+func (c ChainInfo) Remove() error {
 	iptable := GetTable(c.FirewallTable.Version)
 	// Ignore errors - This could mean the chains were never set up
 	if c.GetTable() == Nat {
@@ -762,22 +762,71 @@ func (iptable IPTable) EnsureJumpRuleForIface(fromChain, toChain, iface string) 
 	return nil
 }
 
-func (c *ChainInfo) GetName() string {
+//AddJumpRuleForIP ensures that there is a jump rule for a given IP at the top of the chain
+func (iptable IPTable) AddJumpRuleForIP(table Table, fromChain, toChain, ipaddr string) {
+	err := iptable.RawCombinedOutputNative("-t", string(table), "-C", fromChain, "-d", ipaddr, "-j", toChain)
+	if err == nil {
+		iptable.RawCombinedOutputNative("-t", string(table), "-F", toChain)
+	} else {
+		iptable.RawCombinedOutputNative("-t", string(table), "-N", toChain)
+		iptable.RawCombinedOutputNative("-t", string(table), "-I", fromChain, "-d", ipaddr, "-j", toChain)
+	}
+}
+
+//AddDNAT adds a dnat rule witth a port
+func (iptable IPTable) AddDNATwithPort(table Table, chain, dstIP, dstPort, proto, natIP string) {
+	rule := []string{"-t", string(table), "-d", dstIP, "-p", proto, "--dport", dstPort, "-j", "DNAT", "--to-destination", natIP}
+
+	if iptable.RawCombinedOutputNative(rule...) != nil {
+		logrus.Errorf("set up rule failed, %v", rule)
+	}
+}
+
+//AddSNAT adds a snat rule with a port
+func (iptable IPTable) ADDSNATwithPort(table Table, chain, srcIP, srcPort, proto, natPort string) {
+	rule := []string{"-t", string(table), "-s", srcIP, "-p", proto, "--sport", srcPort, "-j", "SNAT", "--to-source", ":" + natPort}
+	if iptable.RawCombinedOutputNative(rule...) != nil {
+		logrus.Errorf("set up rule failed, %v", rule)
+	}
+}
+
+func (iptable IPTable) GetInsertAction() string {
+	return string(Insert)
+}
+
+func (iptable IPTable) GetAppendAction() string {
+	return string(Append)
+}
+
+func (iptable IPTable) GetDeleteAction() string {
+	return string(Delete)
+}
+
+func (iptable IPTable) GetDropPolicy() string {
+	return string(Drop)
+}
+
+func (iptable IPTable) GetAcceptPolicy() string {
+	return string(Accept)
+}
+
+//Getters and setters for struct fields now that it's an interface
+func (c ChainInfo) GetName() string {
 	return c.GetName()
 }
 
-func (c *ChainInfo) GetTable() Table {
+func (c ChainInfo) GetTable() Table {
 	return c.GetTable()
 }
 
-func (c *ChainInfo) SetTable(t Table) {
+func (c ChainInfo) SetTable(t Table) {
 	c.SetTable(t)
 }
 
-func (c *ChainInfo) GetHairpinMode() bool {
+func (c ChainInfo) GetHairpinMode() bool {
 	return c.HairpinMode
 }
 
-func (c *ChainInfo) GetFirewallTable() firewallapi.FirewallTable {
+func (c ChainInfo) GetFirewallTable() firewallapi.FirewallTable {
 	return c.FirewallTable
 }

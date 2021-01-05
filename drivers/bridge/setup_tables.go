@@ -243,7 +243,7 @@ func (n *bridgeNetwork) setupFirewallTables(ipVersion firewallapi.IPVersion, mas
 }
 
 type firewallRule struct {
-	table   iptables.Table
+	table   firewallapi.Table
 	chain   string
 	preArgs []string
 	args    []string
@@ -253,8 +253,8 @@ func setupIPTablesInternal(hostIP net.IP, bridgeIface string, addr *net.IPNet, i
 
 	var (
 		address   = addr.String()
-		skipDNAT  = firewallRule{table: iptables.Nat, chain: DockerChain, preArgs: []string{"-t", "nat"}, args: []string{"-i", bridgeIface, "-j", "RETURN"}}
-		outRule   = firewallRule{table: iptables.Filter, chain: "FORWARD", args: []string{"-i", bridgeIface, "!", "-o", bridgeIface, "-j", "ACCEPT"}}
+		skipDNAT  = firewallRule{table: firewallapi.Nat, chain: DockerChain, preArgs: []string{"-t", "nat"}, args: []string{"-i", bridgeIface, "-j", "RETURN"}}
+		outRule   = firewallRule{table: firewallapi.Filter, chain: "FORWARD", args: []string{"-i", bridgeIface, "!", "-o", bridgeIface, "-j", "ACCEPT"}}
 		natArgs   []string
 		hpNatArgs []string
 	)

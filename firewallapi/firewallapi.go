@@ -62,6 +62,16 @@ type FirewallTable interface {
 	EnsureAcceptRuleForIface(chain, iface string) error
 	EnsureDropRule(chain string) error
 	EnsureDropRuleForIface(chain, iface string) error
+	AddJumpRuleForIP(table Table, fromChain, toChain, ipaddr string)
+	//AddDNATwithPort sets up a DNAT rule which forward all traffic on that port
+	AddDNATwithPort(table Table, chain, dstIP, dstPort, proto, natIP string)
+	//AddSNATwithPort sets up a SNAT rule which masquerades all traffic on that port
+	ADDSNATwithPort(table Table, chain, srcIP, srcPort, proto, natPort string)
+	GetInsertAction() string
+	GetAppendAction() string
+	GetDeleteAction() string
+	GetDropPolicy() string
+	GetAcceptPolicy() string
 }
 
 type FirewallChain interface {
