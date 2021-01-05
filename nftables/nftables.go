@@ -272,7 +272,7 @@ func (nftable NFTable) RemoveExistingChain(name string, table Table) error {
 }
 
 // Forward adds forwarding rule to 'filter' table and corresponding nat rule to 'nat' table.
-func (c *ChainInfo) Forward(action Action, ip net.IP, port int, proto, destAddr string, destPort int, bridgeName string) error {
+func (c ChainInfo) Forward(action Action, ip net.IP, port int, proto, destAddr string, destPort int, bridgeName string) error {
 
 	nftable := GetTable(c.FirewallTable.Version)
 	daddr := ip.String()
@@ -342,7 +342,7 @@ func (c *ChainInfo) Forward(action Action, ip net.IP, port int, proto, destAddr 
 
 // Link adds reciprocal ACCEPT rule for two supplied IP addresses.
 // Traffic is allowed from ip1 to ip2 and vice-versa
-func (c *ChainInfo) Link(action Action, ip1, ip2 net.IP, port int, proto string, bridgeName string) error {
+func (c ChainInfo) Link(action Action, ip1, ip2 net.IP, port int, proto string, bridgeName string) error {
 	nftable := GetTable(c.FirewallTable.Version)
 	// forward
 	args := []string{
@@ -367,7 +367,7 @@ func (c *ChainInfo) Link(action Action, ip1, ip2 net.IP, port int, proto string,
 	return nftable.ProgramRule(Filter, c.GetName(), action, args)
 }
 
-func (c *ChainInfo) DeleteRule(version IPVersion, table Table, chain string, rule ...string) error {
+func (c ChainInfo) DeleteRule(version IPVersion, table Table, chain string, rule ...string) error {
 	chain = strings.ToLower(chain)
 
 	return DeleteRule(version, table, chain, rule...)
@@ -425,7 +425,7 @@ func (nftable NFTable) ProgramRule(table Table, chain string, action Action, arg
 }
 
 // Prerouting adds linking rule to nat/PREROUTING chain.
-func (c *ChainInfo) Prerouting(action Action, args ...string) error {
+func (c ChainInfo) Prerouting(action Action, args ...string) error {
 	nftable := GetTable(c.FirewallTable.Version)
 	a := []string{string(action), string(c.FirewallTable.Version), string(Nat), "prerouting"}
 	if len(args) > 0 {
@@ -440,7 +440,7 @@ func (c *ChainInfo) Prerouting(action Action, args ...string) error {
 }
 
 // Output adds linking rule to an OUTPUT chain.
-func (c *ChainInfo) Output(action Action, args ...string) error {
+func (c ChainInfo) Output(action Action, args ...string) error {
 	nftable := GetTable(c.FirewallTable.Version)
 	a := []string{string(action), string(c.FirewallTable.Version), string(c.GetTable()), "output"}
 	if len(args) > 0 {
@@ -455,7 +455,7 @@ func (c *ChainInfo) Output(action Action, args ...string) error {
 }
 
 // Remove removes the chain.
-func (c *ChainInfo) Remove() error {
+func (c ChainInfo) Remove() error {
 	nftable := GetTable(c.FirewallTable.Version)
 
 	nftable.Raw("flush", "chain", string(c.FirewallTable.Version), c.GetName())
@@ -776,22 +776,68 @@ func (nftable NFTable) EnsureJumpRuleForIface(fromChain, toChain, iface string) 
 	return nil
 }
 
-func (c *ChainInfo) GetName() string {
+//AddJumpRuleForIP ensures that there is a jump rule for a given IP at the top of the chain
+func (nftable NFTable) AddJumpRuleForIP(table Table, fromChain, toChain, ipaddr string) {
+	if nftable.Exists(table, fromChain, "ip", "addr", ipaddr, "jump", toChain) {
+		nftable.RawCombinedOutputNative("flush", "chain", "ip", string(table), toChain)
+	} else {
+		nftable.RawCombinedOutputNative("add", "chain", "ip", string(table), toChain)
+		nftable.RawCombinedOutputNative("-t", string(table), "-I", fromChain, "-d", ipaddr, "-j", toChain)
+	}
+}
+
+//AddDNAT adds a dnat rule witth a port
+func (nftable NFTable) AddDNATwithPort(table Table, chain, dstIP, dstPort, proto, natIP string) {
+	rule := []string{"insert", "rule", "ip", string(table), chain, "ip", "daddr", dstIP, proto, "dport", dstPort, "dnat", "to", natIP}
+	if nftable.RawCombinedOutputNative(rule...) != nil {
+		logrus.Errorf("set up rule failed, %v", rule)
+	}
+}
+
+//AddSNAT adds a snat rule with a port
+func (iptable NFTable) ADDSNATwithPort(table Table, chain, srcIP, srcPort, proto, natPort string) {
+	rule := []string{"insert", "rule", "ip", string(table), chain, "ip", "saddr", srcIP, proto, "sport", srcPort, "snat", "to", ":" + natPort}
+	if iptable.RawCombinedOutputNative(rule...) != nil {
+		logrus.Errorf("set up rule failed, %v", rule)
+	}
+}
+
+func (nftable NFTable) GetInsertAction() string {
+	return string(Insert)
+}
+
+func (nftable NFTable) GetAppendAction() string {
+	return string(Append)
+}
+
+func (nftable NFTable) GetDeleteAction() string {
+	return string(Delete)
+}
+
+func (nftable NFTable) GetDropPolicy() string {
+	return string(Drop)
+}
+
+func (nftable NFTable) GetAcceptPolicy() string {
+	return string(Accept)
+}
+
+func (c ChainInfo) GetName() string {
 	return c.GetName()
 }
 
-func (c *ChainInfo) GetTable() Table {
+func (c ChainInfo) GetTable() Table {
 	return c.GetTable()
 }
 
-func (c *ChainInfo) SetTable(t Table) {
+func (c ChainInfo) SetTable(t Table) {
 	c.Table = t
 }
 
-func (c *ChainInfo) GetHairpinMode() bool {
+func (c ChainInfo) GetHairpinMode() bool {
 	return c.HairpinMode
 }
 
-func (c *ChainInfo) GetFirewallTable() firewallapi.FirewallTable {
+func (c ChainInfo) GetFirewallTable() firewallapi.FirewallTable {
 	return c.FirewallTable
 }
