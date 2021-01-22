@@ -173,6 +173,14 @@ func (iptable IPTable) NewChain(name string, table Table, hairpinMode bool) (fir
 	return c, nil
 }
 
+func (iptable IPTable) FlushChain(table Table, name string) error {
+	if _, err := iptable.Raw("-t", string(table), "-F"); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // LoopbackByVersion returns loopback address by version
 func (iptable IPTable) LoopbackByVersion() string {
 	if iptable.Version == IPv6 {
@@ -293,8 +301,14 @@ func (iptable IPTable) RemoveExistingChain(name string, table Table) error {
 }
 
 func (c ChainInfo) DeleteRule(version IPVersion, table Table, chain string, rule ...string) error {
+	iptable := GetTable(version)
+	del := append([]string{"-t", string(table), string(Delete), chain}, rule...)
+	if output, err := iptable.Raw(del...); err != nil {
+		return err
+	} else if len(output) != 0 {
+		return fmt.Errorf("Could not delete establish rule from %s: %s", c.GetTable(), output)
+	}
 	return nil
-	//Nothing to do here for iptables
 }
 
 // Forward adds forwarding rule to 'filter' table and corresponding nat rule to 'nat' table.
@@ -413,6 +427,22 @@ func (c ChainInfo) Prerouting(action Action, args ...string) error {
 		return err
 	} else if len(output) != 0 {
 		return ChainError{Chain: "PREROUTING", Output: output}
+	}
+	return nil
+
+}
+
+// Forward adds linking rule to forward chain.
+func (c ChainInfo) ForwardChain(action Action, args ...string) error {
+	iptable := GetTable(c.FirewallTable.Version)
+	a := []string{"-t", string(Nat), string(action), "FORWARD"}
+	if len(args) > 0 {
+		a = append(a, args...)
+	}
+	if output, err := iptable.Raw(a...); err != nil {
+		return err
+	} else if len(output) != 0 {
+		return ChainError{Chain: "FORWARD", Output: output}
 	}
 	return nil
 }
@@ -719,6 +749,52 @@ func (iptable IPTable) EnsureDropRule(chain string) error {
 	return nil
 }
 
+// EnsureReturnRule ensures the jump rule is on top
+func (iptable IPTable) EnsureReturnRule(table Table, chain string) error {
+	var (
+		args = []string{"-j", "RETURN"}
+	)
+
+	if !iptable.Exists(table, chain, args...) {
+		err := iptable.RawCombinedOutput(append([]string{"-t", string(table), "-A", chain}, args...)...)
+		if err != nil {
+			return fmt.Errorf("unable to ensure return rule in %s chain: %s", chain, err.Error())
+		}
+	}
+
+	return nil
+}
+
+// EnsureLocalMasquerade ensures the jump rule is on top
+func (iptable IPTable) EnsureLocalMasquerade(table Table, fromChain, toChain string) error {
+	var (
+		args = []string{"-m", "addrtype", "--dst-type", "LOCAL", "-j", toChain}
+	)
+
+	if !iptable.Exists(table, fromChain, args...) {
+		if err := iptable.RawCombinedOutput("-t", string(table), "-I", fromChain, "-m", "addrtype", "--dst-type", "LOCAL", "-j", toChain); err != nil {
+			return fmt.Errorf("failed to add jump rule in %s to ingress chain: %v", toChain, err)
+		}
+	}
+
+	return nil
+}
+
+// EnsureLocalMasqueradeForIface ensures the jump rule is on top
+func (iptable IPTable) EnsureLocalMasqueradeForIface(table Table, iface string) error {
+	var (
+		args = []string{"-m", "addrtype", "--src-type", "LOCAL", "-o", iface, "-j", "MASQUERADE"}
+	)
+
+	if !iptable.Exists(table, "POSTROUTING", args...) {
+		if err := iptable.RawCombinedOutput(append([]string{"-t", "nat", "-I", "POSTROUTING"}, args...)...); err != nil {
+			return fmt.Errorf("failed to add ingress localhost POSTROUTING rule for %s: %v", iface, err)
+		}
+	}
+
+	return nil
+}
+
 func (iptable IPTable) EnsureDropRuleForIface(chain, iface string) error {
 	var (
 		table = Filter
@@ -773,9 +849,18 @@ func (iptable IPTable) AddJumpRuleForIP(table Table, fromChain, toChain, ipaddr 
 	}
 }
 
-//AddDNAT adds a dnat rule witth a port
+//AddDNAT adds a dnat rule with a port
 func (iptable IPTable) AddDNATwithPort(table Table, chain, dstIP, dstPort, proto, natIP string) {
 	rule := []string{"-t", string(table), "-d", dstIP, "-p", proto, "--dport", dstPort, "-j", "DNAT", "--to-destination", natIP}
+
+	if iptable.RawCombinedOutputNative(rule...) != nil {
+		logrus.Errorf("set up rule failed, %v", rule)
+	}
+}
+
+//AddRedirect adds a redirect rule with a port
+func (iptable IPTable) AddRedirect(table Table, chain, dstIP, dstPort, proto, natIP string) {
+	rule := []string{"-t", string(table), "-d", dstIP, "-p", proto, "--dport", dstPort, "-j", "REDIRECT", "--to-destination", natIP}
 
 	if iptable.RawCombinedOutputNative(rule...) != nil {
 		logrus.Errorf("set up rule failed, %v", rule)
@@ -788,6 +873,28 @@ func (iptable IPTable) ADDSNATwithPort(table Table, chain, srcIP, srcPort, proto
 	if iptable.RawCombinedOutputNative(rule...) != nil {
 		logrus.Errorf("set up rule failed, %v", rule)
 	}
+}
+
+//AddDropIncoming
+func (iptable IPTable) DropIncoming(table Table, chain, iface, addr string) error {
+	rule := []string{"-t", string(table), "-i", iface, "!", "-d", addr, "-j", "DROP"}
+	err := iptable.RawCombinedOutputNative(rule...)
+
+	if err != nil {
+		logrus.Errorf("set up rule failed, %v", rule)
+	}
+	return err
+}
+
+//AddDropOutgoing
+func (iptable IPTable) DropOutgoing(table Table, chain, iface, addr string) error {
+	rule := []string{"-t", string(table), "-o", iface, "!", "-s", addr, "-j", "DROP"}
+	err := iptable.RawCombinedOutputNative(rule...)
+
+	if err != nil {
+		logrus.Errorf("set up rule failed, %v", rule)
+	}
+	return err
 }
 
 func (iptable IPTable) GetInsertAction() string {

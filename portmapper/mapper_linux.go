@@ -5,7 +5,6 @@ import (
 	"sync"
 
 	"github.com/docker/libnetwork/firewallapi"
-	"github.com/docker/libnetwork/iptables"
 	"github.com/docker/libnetwork/portallocator"
 )
 
@@ -21,25 +20,27 @@ type PortMapper struct {
 
 	Allocator *portallocator.PortAllocator
 	chain     firewallapi.FirewallChain
+	table     firewallapi.FirewallTable
 }
 
 // SetIptablesChain sets the specified chain into portmapper
-func (pm *PortMapper) SetFirewallTablesChain(c firewallapi.FirewallChain, bridgeName string) {
+func (pm *PortMapper) SetFirewallTablesChain(c firewallapi.FirewallChain, bridgeName string, table firewallapi.FirewallTable) {
 	pm.chain = c
 	pm.bridgeName = bridgeName
+	pm.table = table
 }
 
 // AppendForwardingTableEntry adds a port mapping to the forwarding table
 func (pm *PortMapper) AppendForwardingTableEntry(proto string, sourceIP net.IP, sourcePort int, containerIP string, containerPort int) error {
-	return pm.forward(iptables.Append, proto, sourceIP, sourcePort, containerIP, containerPort)
+	return pm.forward(firewallapi.Action(pm.table.GetAppendAction()), proto, sourceIP, sourcePort, containerIP, containerPort)
 }
 
 // DeleteForwardingTableEntry removes a port mapping from the forwarding table
 func (pm *PortMapper) DeleteForwardingTableEntry(proto string, sourceIP net.IP, sourcePort int, containerIP string, containerPort int) error {
-	return pm.forward(iptables.Delete, proto, sourceIP, sourcePort, containerIP, containerPort)
+	return pm.forward(firewallapi.Action(pm.table.GetDeleteAction()), proto, sourceIP, sourcePort, containerIP, containerPort)
 }
 
-func (pm *PortMapper) forward(action iptables.Action, proto string, sourceIP net.IP, sourcePort int, containerIP string, containerPort int) error {
+func (pm *PortMapper) forward(action firewallapi.Action, proto string, sourceIP net.IP, sourcePort int, containerIP string, containerPort int) error {
 	if pm.chain == nil {
 		return nil
 	}

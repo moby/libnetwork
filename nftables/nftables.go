@@ -44,13 +44,14 @@ const (
 	Drop Policy = "drop"
 	// Accept is the default nftables ACCEPT policy
 	Accept Policy = "accept"
+	// IPv4 sets the correct string for inet
 	// inet is both version 4 and 6
 	// "ip" and "ip6" can be used to segregate, but unlike iptables
 	// nftable doesn't need to differentiate between binaries, so
 	// this distinction is kept only for compatibility with drivers
 	// ip is version 4
 	IPv4 IPVersion = "ip"
-	// ip6 is version 6
+	// IPv6 sets the correct string. ip6 is version 6
 	IPv6 IPVersion = "ip6"
 )
 
@@ -62,6 +63,7 @@ var (
 	initOnce            sync.Once
 )
 
+//NFTable is a basic mapping to implement the interface
 type NFTable struct {
 	firewallapi.FirewallTable
 	Version IPVersion
@@ -108,10 +110,6 @@ func detectNftables() {
 		return
 	}
 	nftablesPath = path
-	if err != nil {
-		logrus.Warnf("Failed to read nftables version: %v", err)
-		return
-	}
 }
 
 func initDependencies() {
@@ -120,6 +118,7 @@ func initDependencies() {
 	detectNftables()
 }
 
+//InitCheck puts the module together
 func InitCheck() error {
 	initOnce.Do(initDependencies)
 
@@ -156,6 +155,15 @@ func (nftable NFTable) NewChain(name string, table Table, hairpinMode bool) (fir
 		}
 	}
 	return c, nil
+}
+
+func (nftable NFTable) FlushChain(table Table, name string) error {
+	name = strings.ToLower(name)
+	if _, err := nftable.Raw("flush", "chain", "ip", string(table)); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // LoopbackByVersion returns loopback address by version
@@ -367,18 +375,21 @@ func (c ChainInfo) Link(action Action, ip1, ip2 net.IP, port int, proto string, 
 	return nftable.ProgramRule(Filter, c.GetName(), action, args)
 }
 
+//DeleteRule passes down to a raw level since it's more complex in NFTables
 func (c ChainInfo) DeleteRule(version IPVersion, table Table, chain string, rule ...string) error {
 	chain = strings.ToLower(chain)
 
 	return DeleteRule(version, table, chain, rule...)
 }
 
+//DeleteRule passes down to a raw level since it's more complex in NFTables
 func (nftable NFTable) DeleteRule(version IPVersion, table Table, chain string, rule ...string) error {
 	chain = strings.ToLower(chain)
 
 	return DeleteRule(version, table, chain, rule...)
 }
 
+//DeleteRule passes down to a raw level since it's more complex in NFTables
 func DeleteRule(version IPVersion, table Table, chain string, rule ...string) error {
 	chain = strings.ToLower(chain)
 
@@ -435,6 +446,21 @@ func (c ChainInfo) Prerouting(action Action, args ...string) error {
 		return err
 	} else if len(output) != 0 {
 		return ChainError{Chain: "prerouting", Output: output}
+	}
+	return nil
+}
+
+// ForwardChain adds linking rule to a forward chain.
+func (c ChainInfo) ForwardChain(action Action, args ...string) error {
+	nftable := GetTable(c.FirewallTable.Version)
+	a := []string{string(action), string(c.FirewallTable.Version), string(c.GetTable()), "forward"}
+	if len(args) > 0 {
+		a = append(a, args...)
+	}
+	if output, err := nftable.Raw(a...); err != nil {
+		return err
+	} else if len(output) != 0 {
+		return ChainError{Chain: "forward", Output: output}
 	}
 	return nil
 }
@@ -659,6 +685,7 @@ func (nftable NFTable) EnsureJumpRule(fromChain, toChain string) error {
 	return nil
 }
 
+// EnsureAcceptRule is a re-implementation of some hardcoded logic to make sure it's not already in the ruleset
 func (nftable NFTable) EnsureAcceptRule(chain string) error {
 	chain = strings.ToLower(chain)
 
@@ -682,6 +709,7 @@ func (nftable NFTable) EnsureAcceptRule(chain string) error {
 	return nil
 }
 
+// EnsureAcceptRuleForIface is a re-implementation of some hardcoded logic to make sure it's not already in the ruleset
 func (nftable NFTable) EnsureAcceptRuleForIface(chain, iface string) error {
 	chain = strings.ToLower(chain)
 
@@ -697,7 +725,7 @@ func (nftable NFTable) EnsureAcceptRuleForIface(chain, iface string) error {
 		}
 	}
 
-	err := nftable.RawCombinedOutput(append([]string{"add", "rule", "ip", "filter", chain}, args...)...)
+	err := nftable.RawCombinedOutput(append([]string{"add", "rule", string(nftable.Version), "filter", chain}, args...)...)
 	if err != nil {
 		return fmt.Errorf("unable to insert accept rule in %s chain: %s", chain, err.Error())
 	}
@@ -705,6 +733,7 @@ func (nftable NFTable) EnsureAcceptRuleForIface(chain, iface string) error {
 	return nil
 }
 
+// EnsureDropRule is a re-implementation of some hardcoded logic to make sure it's not already in the ruleset
 func (nftable NFTable) EnsureDropRule(chain string) error {
 	chain = strings.ToLower(chain)
 
@@ -720,7 +749,7 @@ func (nftable NFTable) EnsureDropRule(chain string) error {
 		}
 	}
 
-	err := nftable.RawCombinedOutput(append([]string{"add", "rule", "ip", "filter", chain}, args...)...)
+	err := nftable.RawCombinedOutput(append([]string{"add", "rule", string(nftable.Version), "filter", chain}, args...)...)
 	if err != nil {
 		return fmt.Errorf("unable to insert drop rule in %s chain: %s", chain, err.Error())
 	}
@@ -728,6 +757,53 @@ func (nftable NFTable) EnsureDropRule(chain string) error {
 	return nil
 }
 
+// EnsureReturnRule makes sure that that's a return rule at the end of the table
+func (nftable NFTable) EnsureReturnRule(table Table, chain string) error {
+	chain = strings.ToLower(chain)
+
+	args := []string{"return"}
+
+	if !nftable.Exists(table, chain, args...) {
+		err := nftable.RawCombinedOutput(append([]string{"add", "rule", string(nftable.Version), string(table), chain}, args...)...)
+		if err != nil {
+			return fmt.Errorf("unable to ensure jump rule in %s chain: %s", chain, err.Error())
+		}
+	}
+
+	return nil
+}
+
+// EnsureLocalMasquerade ensures the jump rule is on top
+func (nftable NFTable) EnsureLocalMasquerade(table Table, fromChain, toChain string) error {
+	var (
+		args = []string{"fib", "daddr", "type", "local", "jump", toChain}
+	)
+
+	if !nftable.Exists(table, fromChain, args...) {
+		if err := nftable.RawCombinedOutput(append([]string{"insert", "rule", string(nftable.Version), string(table), fromChain}, args...)...); err != nil {
+			return fmt.Errorf("failed to add jump rule in %s to ingress chain: %v", toChain, err)
+		}
+	}
+
+	return nil
+}
+
+// EnsureLocalMasqueradeForIface ensures the jump rule is on top
+func (nftable NFTable) EnsureLocalMasqueradeForIface(table Table, iface string) error {
+	var (
+		args = []string{"oifname", iface, "fib", "saddr", "type", "local", "masquerade"}
+	)
+
+	if !nftable.Exists(table, "POSTROUTING", args...) {
+		if err := nftable.RawCombinedOutput(append([]string{"insert", "rule", string(nftable.Version), string(table)}, args...)...); err != nil {
+			return fmt.Errorf("failed to add ingress localhost POSTROUTING rule for %s: %v", iface, err)
+		}
+	}
+
+	return nil
+}
+
+// EnsureDropRuleForIface is a re-implementation of some hardcoded logic to make sure it's not already in the ruleset
 func (nftable NFTable) EnsureDropRuleForIface(chain, iface string) error {
 	chain = strings.ToLower(chain)
 
@@ -751,7 +827,7 @@ func (nftable NFTable) EnsureDropRuleForIface(chain, iface string) error {
 	return nil
 }
 
-// EnsureJumpRule ensures the jump rule is on top
+// EnsureJumpRuleForIface ensures the jump rule is on top
 func (nftable NFTable) EnsureJumpRuleForIface(fromChain, toChain, iface string) error {
 	fromChain = strings.ToLower(fromChain)
 	toChain = strings.ToLower(toChain)

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/docker/libnetwork/conntrack"
 	"github.com/docker/libnetwork/firewallapi"
 	"github.com/docker/libnetwork/iptables"
 	"github.com/docker/libnetwork/nftables"
@@ -230,9 +231,9 @@ func (n *bridgeNetwork) setupFirewallTables(ipVersion firewallapi.IPVersion, mas
 		})
 
 		if ipVersion == iptables.IPv4 {
-			n.portMapper.SetFirewallTablesChain(natChain, n.getNetworkBridgeName())
+			n.portMapper.SetFirewallTablesChain(natChain, n.getNetworkBridgeName(), table)
 		} else {
-			n.portMapperV6.SetFirewallTablesChain(natChain, n.getNetworkBridgeName())
+			n.portMapperV6.SetFirewallTablesChain(natChain, n.getNetworkBridgeName(), table)
 		}
 	}
 
@@ -269,13 +270,24 @@ func setupIPTablesInternal(hostIP net.IP, bridgeIface string, addr *net.IPNet, i
 		hpNatArgs = []string{"-m", "addrtype", "--src-type", "LOCAL", "-o", bridgeIface, "-j", "MASQUERADE"}
 	}
 
-	natRule := firewallRule{table: iptables.Nat, chain: "POSTROUTING", preArgs: []string{"-t", "nat"}, args: natArgs}
-	hpNatRule := firewallRule{table: iptables.Nat, chain: "POSTROUTING", preArgs: []string{"-t", "nat"}, args: hpNatArgs}
+	natRule := firewallRule{table: firewallapi.Nat, chain: "POSTROUTING", preArgs: []string{"-t", "nat"}, args: natArgs}
+	hpNatRule := firewallRule{table: firewallapi.Nat, chain: "POSTROUTING", preArgs: []string{"-t", "nat"}, args: hpNatArgs}
 
-	ipVersion := iptables.IPv4
+	_, ipVersion, nftablesEnabled := getFirewallTableImplementationByAddr(addr)
 
-	if addr.IP.To4() == nil {
-		ipVersion = iptables.IPv6
+	if nftablesEnabled {
+		skipDNAT.preArgs = []string{"nat"}
+		skipDNAT.args = []string{"iifname", bridgeIface, "return"}
+		outRule.args = []string{"iifname", bridgeIface, "oifname", "!=", bridgeIface, "accept"}
+
+		if hostIP != nil {
+			hostAddr := hostIP.String()
+			natArgs = []string{"oifname", "!=", bridgeIface, "ip", "saddr", address, "snat", "to", hostAddr}
+			hpNatArgs = []string{"oifname", bridgeIface, "fib", "saddr", "type", "local", "snat", "to", hostAddr}
+		} else {
+			natArgs = []string{"oifname", "!=", bridgeIface, "ip", "saddr", address, "masquerade"}
+			hpNatArgs = []string{"oifname", bridgeIface, "fib", "saddr", "type", "local", "masquerade"}
+		}
 	}
 
 	// Set NAT.
@@ -307,63 +319,89 @@ func setupIPTablesInternal(hostIP net.IP, bridgeIface string, addr *net.IPNet, i
 	return programChainRule(ipVersion, outRule, "ACCEPT NON_ICC OUTGOING", enable)
 }
 
-func programChainRule(version iptables.IPVersion, rule firewallRule, ruleDescr string, insert bool) error {
-
-	iptable := iptables.GetTable(version)
+func programChainRule(version firewallapi.IPVersion, rule firewallRule, ruleDescr string, insert bool) error {
+	var table firewallapi.FirewallTable
+	var nftablesEnabled bool
+	if err := nftables.InitCheck(); err != nil {
+		table = nftables.GetTable(version)
+	} else {
+		table = iptables.GetTable(version)
+	}
 
 	var (
 		prefix    []string
 		operation string
 		condition bool
-		doesExist = iptable.Exists(rule.table, rule.chain, rule.args...)
+		doesExist = table.Exists(rule.table, rule.chain, rule.args...)
 	)
 
 	if insert {
 		condition = !doesExist
-		prefix = []string{"-I", rule.chain}
+		prefix = []string{table.GetInsertAction(), rule.chain}
 		operation = "enable"
 	} else {
 		condition = doesExist
-		prefix = []string{"-D", rule.chain}
+		prefix = []string{table.GetDeleteAction(), rule.chain}
 		operation = "disable"
 	}
 	if rule.preArgs != nil {
-		prefix = append(rule.preArgs, prefix...)
+		if nftablesEnabled {
+			prefix = append([]string{prefix[0], string(version)}, rule.preArgs...)
+		} else {
+			prefix = append(rule.preArgs, prefix...)
+		}
 	}
 
 	if condition {
-		if err := iptable.RawCombinedOutput(append(prefix, rule.args...)...); err != nil {
-			return fmt.Errorf("Unable to %s %s rule: %s", operation, ruleDescr, err.Error())
+		if operation == "disable" {
+			if err := table.DeleteRule(version, firewallapi.Filter, rule.chain, rule.args...); err != nil {
+				return fmt.Errorf("Unable to %s %s rule: %s", operation, ruleDescr, err.Error())
+			}
+		} else {
+			if err := table.RawCombinedOutput(append(prefix, rule.args...)...); err != nil {
+				return fmt.Errorf("Unable to %s %s rule: %s", operation, ruleDescr, err.Error())
+			}
 		}
 	}
 
 	return nil
 }
 
-func setIcc(version iptables.IPVersion, bridgeIface string, iccEnable, insert bool) error {
-	iptable := iptables.GetTable(version)
+func setIcc(version firewallapi.IPVersion, bridgeIface string, iccEnable, insert bool) error {
+	fwtable, nftablesEnabled := getFirewallTableImplementationByVersion(version)
+
 	var (
-		table      = iptables.Filter
+		table      = firewallapi.Filter
 		chain      = "FORWARD"
-		args       = []string{"-i", bridgeIface, "-o", bridgeIface, "-j"}
-		acceptArgs = append(args, "ACCEPT")
-		dropArgs   = append(args, "DROP")
+		args       = []string{}
+		acceptArgs = []string{}
+		dropArgs   = []string{}
 	)
+
+	if nftablesEnabled {
+		args = []string{"iifname", bridgeIface, "oifname", bridgeIface}
+		acceptArgs = append(args, "accept")
+		dropArgs = append(args, "drop")
+	} else {
+		args = []string{"-i", bridgeIface, "-o", bridgeIface, "-j"}
+		acceptArgs = append(args, "ACCEPT")
+		dropArgs = append(args, "DROP")
+	}
 
 	if insert {
 		if !iccEnable {
-			iptable.Raw(append([]string{"-D", chain}, acceptArgs...)...)
+			fwtable.DeleteRule(version, table, chain, acceptArgs...)
 
-			if !iptable.Exists(table, chain, dropArgs...) {
-				if err := iptable.RawCombinedOutput(append([]string{"-A", chain}, dropArgs...)...); err != nil {
+			if !fwtable.Exists(table, chain, dropArgs...) {
+				if err := fwtable.ProgramRule(table, chain, firewallapi.Action(fwtable.GetAppendAction()), dropArgs); err != nil {
 					return fmt.Errorf("Unable to prevent intercontainer communication: %s", err.Error())
 				}
 			}
 		} else {
-			iptable.Raw(append([]string{"-D", chain}, dropArgs...)...)
+			fwtable.DeleteRule(version, table, chain, dropArgs...)
 
-			if !iptable.Exists(table, chain, acceptArgs...) {
-				if err := iptable.RawCombinedOutput(append([]string{"-I", chain}, acceptArgs...)...); err != nil {
+			if !fwtable.Exists(table, chain, acceptArgs...) {
+				if err := fwtable.ProgramRule(table, chain, firewallapi.Action(fwtable.GetInsertAction()), acceptArgs); err != nil {
 					return fmt.Errorf("Unable to allow intercontainer communication: %s", err.Error())
 				}
 			}
@@ -371,12 +409,12 @@ func setIcc(version iptables.IPVersion, bridgeIface string, iccEnable, insert bo
 	} else {
 		// Remove any ICC rule.
 		if !iccEnable {
-			if iptable.Exists(table, chain, dropArgs...) {
-				iptable.Raw(append([]string{"-D", chain}, dropArgs...)...)
+			if fwtable.Exists(table, chain, dropArgs...) {
+				fwtable.Raw(append([]string{"-D", chain}, dropArgs...)...)
 			}
 		} else {
-			if iptable.Exists(table, chain, acceptArgs...) {
-				iptable.Raw(append([]string{"-D", chain}, acceptArgs...)...)
+			if fwtable.Exists(table, chain, acceptArgs...) {
+				fwtable.Raw(append([]string{"-D", chain}, acceptArgs...)...)
 			}
 		}
 	}
@@ -385,10 +423,10 @@ func setIcc(version iptables.IPVersion, bridgeIface string, iccEnable, insert bo
 }
 
 // Control Inter Network Communication. Install[Remove] only if it is [not] present.
-func setINC(version iptables.IPVersion, iface string, enable bool) error {
-	iptable := iptables.GetTable(version)
+func setINC(version firewallapi.IPVersion, iface string, enable bool) error {
+	table, nftablesEnabled := getFirewallTableImplementationByVersion(version)
 	var (
-		action    = iptables.Insert
+		action    = firewallapi.Action(table.GetInsertAction())
 		actionMsg = "add"
 		chains    = []string{IsolationChain1, IsolationChain2}
 		rules     = [][]string{
@@ -398,18 +436,31 @@ func setINC(version iptables.IPVersion, iface string, enable bool) error {
 	)
 
 	if !enable {
-		action = iptables.Delete
+		action = firewallapi.Action(table.GetDeleteAction())
 		actionMsg = "remove"
 	}
 
+	if nftablesEnabled {
+		rules = [][]string{
+			{"iifname", iface, "oifname", "!=", iface, "jump", IsolationChain1},
+			{"oifname", iface, "drop"},
+		}
+	}
+
 	for i, chain := range chains {
-		if err := iptable.ProgramRule(iptables.Filter, chain, action, rules[i]); err != nil {
+		var err error
+		if !enable {
+			err = table.DeleteRule(version, firewallapi.Filter, chain, rules[i]...)
+		} else {
+			err = table.ProgramRule(firewallapi.Filter, chain, action, rules[i])
+		}
+		if err != nil {
 			msg := fmt.Sprintf("unable to %s inter-network communication rule: %v", actionMsg, err)
 			if enable {
 				if i == 1 {
 					// Rollback the rule installed on first chain
-					if err2 := iptable.ProgramRule(iptables.Filter, chains[0], iptables.Delete, rules[0]); err2 != nil {
-						logrus.Warnf("Failed to rollback iptables rule after failure (%v): %v", err, err2)
+					if err2 := table.ProgramRule(firewallapi.Filter, chains[0], iptables.Delete, rules[0]); err2 != nil {
+						logrus.Warnf("Failed to rollback firewall rule after failure (%v): %v", err, err2)
 					}
 				}
 				return fmt.Errorf(msg)
@@ -424,37 +475,37 @@ func setINC(version iptables.IPVersion, iface string, enable bool) error {
 // Obsolete chain from previous docker versions
 const oldIsolationChain = "DOCKER-ISOLATION"
 
-func removeIPChains(version iptables.IPVersion) {
-	ipt := iptables.IPTable{Version: version}
-
-	// Remove obsolete rules from default chains
-	ipt.ProgramRule(iptables.Filter, "FORWARD", iptables.Delete, []string{"-j", oldIsolationChain})
+func removeIPChains(version firewallapi.IPVersion) {
+	var table firewallapi.FirewallTable
+	if err := nftables.InitCheck(); err != nil {
+		table = nftables.GetTable(version)
+		// Remove obsolete rules from default chain
+		table.DeleteRule(version, firewallapi.Filter, "FORWARD", "jump", oldIsolationChain)
+	} else {
+		table = iptables.GetTable(version)
+		// Remove obsolete rules from default chains
+		table.DeleteRule(version, firewallapi.Filter, "FORWARD", "-j", oldIsolationChain)
+	}
 
 	// Remove chains
-	for _, chainInfo := range []iptables.ChainInfo{
-		{Name: DockerChain, Table: iptables.Nat, FirewallTable: ipt},
-		{Name: DockerChain, Table: iptables.Filter, FirewallTable: ipt},
-		{Name: IsolationChain1, Table: iptables.Filter, FirewallTable: ipt},
-		{Name: IsolationChain2, Table: iptables.Filter, FirewallTable: ipt},
-		{Name: oldIsolationChain, Table: iptables.Filter, FirewallTable: ipt},
-	} {
-
-		if err := chainInfo.Remove(); err != nil {
-			logrus.Warnf("Failed to remove existing iptables entries in table %s chain %s : %v", chainInfo.Table, chainInfo.Name, err)
-		}
-	}
+	table.RemoveExistingChain(string(firewallapi.Nat), DockerChain)
+	table.RemoveExistingChain(string(firewallapi.Filter), DockerChain)
+	table.RemoveExistingChain(string(firewallapi.Filter), IsolationChain1)
+	table.RemoveExistingChain(string(firewallapi.Filter), IsolationChain2)
+	table.RemoveExistingChain(string(firewallapi.Filter), oldIsolationChain)
 }
 
 func setupInternalNetworkRules(bridgeIface string, addr *net.IPNet, icc, insert bool) error {
+	_, version, nftablesEnabled := getFirewallTableImplementationByAddr(addr)
+
 	var (
-		inDropRule  = firewallRule{table: iptables.Filter, chain: IsolationChain1, args: []string{"-i", bridgeIface, "!", "-d", addr.String(), "-j", "DROP"}}
-		outDropRule = firewallRule{table: iptables.Filter, chain: IsolationChain1, args: []string{"-o", bridgeIface, "!", "-s", addr.String(), "-j", "DROP"}}
+		inDropRule  = firewallRule{table: firewallapi.Filter, chain: IsolationChain1, args: []string{"-i", bridgeIface, "!", "-d", addr.String(), "-j", "DROP"}}
+		outDropRule = firewallRule{table: firewallapi.Filter, chain: IsolationChain1, args: []string{"-o", bridgeIface, "!", "-s", addr.String(), "-j", "DROP"}}
 	)
 
-	version := iptables.IPv4
-
-	if addr.IP.To4() == nil {
-		version = iptables.IPv6
+	if nftablesEnabled {
+		inDropRule.args = []string{"iifname", bridgeIface, "ip", "daddr", "!=", addr.String(), "drop"}
+		outDropRule.args = []string{"oifname", bridgeIface, "ip", "saddr", "!=", addr.String(), "drop"}
 	}
 
 	if err := programChainRule(version, inDropRule, "DROP INCOMING", insert); err != nil {
@@ -476,5 +527,43 @@ func clearEndpointConnections(nlh *netlink.Handle, ep *bridgeEndpoint) {
 	if ep.addrv6 != nil {
 		ipv6List = append(ipv6List, ep.addrv6.IP)
 	}
-	iptables.DeleteConntrackEntries(nlh, ipv4List, ipv6List)
+	conntrack.DeleteConntrackEntries(nlh, ipv4List, ipv6List)
+}
+
+func getFirewallTableImplementationByAddr(addr *net.IPNet) (firewallapi.FirewallTable, firewallapi.IPVersion, bool) {
+	var table firewallapi.FirewallTable
+	var version firewallapi.IPVersion
+	var nftablesEnabled bool
+	if err := nftables.InitCheck(); err != nil {
+		if addr.IP.To4() == nil {
+			version = nftables.IPv6
+		} else {
+			version = nftables.IPv4
+		}
+		table = nftables.GetTable(version)
+		nftablesEnabled = true
+	} else {
+		if addr.IP.To4() == nil {
+			version = iptables.IPv6
+		} else {
+			version = iptables.IPv4
+		}
+		table = iptables.GetTable(version)
+		nftablesEnabled = false
+	}
+	return table, version, nftablesEnabled
+}
+
+func getFirewallTableImplementationByVersion(version firewallapi.IPVersion) (firewallapi.FirewallTable, bool) {
+	var table firewallapi.FirewallTable
+	var nftablesEnabled bool
+	if err := nftables.InitCheck(); err != nil {
+		table = nftables.GetTable(version)
+		nftablesEnabled = true
+	} else {
+
+		table = iptables.GetTable(version)
+		nftablesEnabled = false
+	}
+	return table, nftablesEnabled
 }

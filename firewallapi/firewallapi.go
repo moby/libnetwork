@@ -36,11 +36,13 @@ type ChainError struct {
 	Output []byte
 }
 
+// FirewallTable represents the operations supported by Linux firewall implementations
 type FirewallTable interface {
 	// GetTable returns the default implementation for a given
 	// firewall type
 	GetTable(ipv IPVersion) *VersionTable
 	NewChain(name string, table Table, hairpinMode bool) (FirewallChain, error)
+	FlushChain(table Table, name string) error
 	LoopbackByVersion() string
 	ProgramChain(c FirewallChain, bridgeName string, hairpinMode, enable bool) error
 	RemoveExistingChain(name string, table Table) error
@@ -55,6 +57,7 @@ type FirewallTable interface {
 	RawCombinedOutputNative(args ...string) error
 	ExistChain(chain string, table Table) bool
 	SetDefaultPolicy(table Table, chain string, policy Policy) error
+	DeleteRule(version IPVersion, table Table, chain string, rule ...string) error
 	AddReturnRule(chain string) error
 	EnsureJumpRule(fromChain, toChain string) error
 	EnsureJumpRuleForIface(fromChain, toChain, iface string) error
@@ -62,6 +65,9 @@ type FirewallTable interface {
 	EnsureAcceptRuleForIface(chain, iface string) error
 	EnsureDropRule(chain string) error
 	EnsureDropRuleForIface(chain, iface string) error
+	EnsureReturnRule(table Table, chain string) error
+	EnsureLocalMasquerade(table Table, fromChain, toChain string) error
+	EnsureLocalMasqueradeForIface(table Table, iface string) error
 	AddJumpRuleForIP(table Table, fromChain, toChain, ipaddr string)
 	//AddDNATwithPort sets up a DNAT rule which forward all traffic on that port
 	AddDNATwithPort(table Table, chain, dstIP, dstPort, proto, natIP string)
@@ -74,6 +80,7 @@ type FirewallTable interface {
 	GetAcceptPolicy() string
 }
 
+// FirewallChain represents the operations supported by iptables/nftables chains
 type FirewallChain interface {
 	Forward(action Action, ip net.IP, port int, proto, destAddr string, destPort int, bridgeName string) error
 	Link(action Action, ip1, ip2 net.IP, port int, proto string, bridgeName string) error

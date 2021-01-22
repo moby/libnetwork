@@ -25,7 +25,7 @@ func TestSetIptablesChain(t *testing.T) {
 		t.Fatal("chain should be nil at init")
 	}
 
-	pm.SetFirewallTablesChain(c, "lo")
+	pm.SetFirewallTablesChain(c, "lo", iptables.GetTable(iptables.IPv4))
 	if pm.chain == nil {
 		t.Fatal("chain should not be nil after set")
 	}

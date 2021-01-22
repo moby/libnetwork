@@ -38,7 +38,7 @@ func arrangeUserFilterRule() {
 		table = iptables.GetTable(iptables.IPv4)
 	}
 	// TODO IPv6 support
-	_, err := table.NewChain(userChain, iptables.Filter, false)
+	_, err := table.NewChain(userChain, firewallapi.Filter, false)
 	if err != nil {
 		logrus.Warnf("Failed to create %s chain: %v", userChain, err)
 		return
