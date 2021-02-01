@@ -68,6 +68,14 @@ func TestSetIPVlanMode(t *testing.T) {
 	if mode != netlink.IPVLAN_MODE_L3 {
 		t.Fatalf("expected %d got %d", netlink.IPVLAN_MODE_L3, mode)
 	}
+	// test ipvlan l3s mode
+	mode, err = setIPVlanMode(modeL3S)
+	if err != nil {
+		t.Fatalf("error parsing %v vlan mode: %v", mode, err)
+	}
+	if mode != netlink.IPVLAN_MODE_L3S {
+		t.Fatalf("expected %d got %d", netlink.IPVLAN_MODE_L3S, mode)
+	}
 	// test invalid mode
 	mode, err = setIPVlanMode("foo")
 	if err == nil {

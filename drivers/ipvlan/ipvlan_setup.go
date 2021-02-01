@@ -55,6 +55,8 @@ func setIPVlanMode(mode string) (netlink.IPVlanMode, error) {
 		return netlink.IPVLAN_MODE_L2, nil
 	case modeL3:
 		return netlink.IPVLAN_MODE_L3, nil
+	case modeL3S:
+		return netlink.IPVLAN_MODE_L3S, nil
 	default:
 		return 0, fmt.Errorf("Unknown ipvlan mode: %s", mode)
 	}

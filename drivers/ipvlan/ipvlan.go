@@ -18,6 +18,7 @@ const (
 	ipvlanType          = "ipvlan" // driver type name
 	modeL2              = "l2"     // ipvlan mode l2 is the default
 	modeL3              = "l3"     // ipvlan L3 mode
+	modeL3S             = "l3s"    // ipvlan L3S mode
 	parentOpt           = "parent" // parent interface -o parent
 	modeOpt             = "_mode"  // ipvlan mode ux opt suffix
 )

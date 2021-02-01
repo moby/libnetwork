@@ -47,6 +47,8 @@ func (d *driver) CreateNetwork(nid string, option map[string]interface{}, nInfo 
 		config.IpvlanMode = modeL2
 	case modeL3:
 		config.IpvlanMode = modeL3
+	case modeL3S:
+		config.IpvlanMode = modeL3S
 	default:
 		return fmt.Errorf("requested ipvlan mode '%s' is not valid, 'l2' mode is the ipvlan driver default", config.IpvlanMode)
 	}
