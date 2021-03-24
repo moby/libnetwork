@@ -103,6 +103,28 @@ func (proxy *UDPProxy) replyLoop(proxyConn *net.UDPConn, clientAddr *net.UDPAddr
 	}()
 
 	readBuf := make([]byte, UDPBufSize)
+
+	// set the src IP of the response to match the DST of the
+	// initial client packet. Reuse the OOB buffer to prevent subsequent marshal calls
+	var oobProto []byte // serialised
+	var oobBuf []byte
+
+	if srcAddr != nil {
+
+		if srcAddr.To4() != nil {
+			cm := new(ipv4.ControlMessage)
+			cm.Src = *srcAddr
+			oobProto = cm.Marshal()
+		} else {
+			cm := new(ipv6.ControlMessage)
+			cm.Src = *srcAddr
+			oobProto = cm.Marshal()
+		}
+
+		// pre-allocate a buffer for passing into WriteMsgUDP
+		oobBuf = make([]byte, len(oobProto))
+	}
+
 	for {
 		proxyConn.SetReadDeadline(time.Now().Add(UDPConnTrackTimeout))
 	again:
@@ -121,22 +143,10 @@ func (proxy *UDPProxy) replyLoop(proxyConn *net.UDPConn, clientAddr *net.UDPAddr
 		for i := 0; i != read; {
 			written := 0
 
-			if srcAddr != nil {
-				// set the src IP of the response to match the DST of the
-				// initial client packet.
-				var oob []byte //= nil
-
-				if srcAddr.To4() != nil {
-					cm := new(ipv4.ControlMessage)
-					cm.Src = *srcAddr
-					oob = cm.Marshal()
-				} else {
-					cm := new(ipv6.ControlMessage)
-					cm.Src = *srcAddr
-					oob = cm.Marshal()
-				}
-
-				written, _, err = proxy.listener.WriteMsgUDP(readBuf[i:read], oob, clientAddr)
+			if oobProto != nil {
+				// clone oobBuf as it will be mutated by WriteMsgUDP
+				copy(oobBuf, oobProto)
+				written, _, err = proxy.listener.WriteMsgUDP(readBuf[i:read], oobBuf, clientAddr)
 			} else {
 				written, err = proxy.listener.WriteToUDP(readBuf[i:read], clientAddr)
 			}
