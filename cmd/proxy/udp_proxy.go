@@ -110,7 +110,6 @@ func (proxy *UDPProxy) replyLoop(proxyConn *net.UDPConn, clientAddr *net.UDPAddr
 	var oobBuf []byte
 
 	if srcAddr != nil {
-
 		if srcAddr.To4() != nil {
 			cm := new(ipv4.ControlMessage)
 			cm.Src = *srcAddr
@@ -192,7 +191,7 @@ func (proxy *UDPProxy) Run() {
 		// the appropriate src IP automatically
 		var to *net.IP = nil
 
-		if from.IP.To16() != nil {
+		if from.IP.To4() == nil {
 			cm := new(ipv6.ControlMessage)
 			err = cm.Parse(oobBuf)
 

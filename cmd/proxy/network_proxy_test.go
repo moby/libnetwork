@@ -243,8 +243,10 @@ func TestUDP4SrcAddrProxy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	testAddr := strings.ReplaceAll(proxy.FrontendAddr().String(), "0.0.0.0", "127.0.0.2")
-	testProxyAt(t, "udp", proxy, testAddr, false)
+	// Connect to loopback but on 127.0.0.2 to test if srcaddr set correctly
+	testAddr := proxy.FrontendAddr().(*net.UDPAddr)
+	testAddr.IP = net.IPv4(127, 0, 0, 2)
+	testProxyAt(t, "udp", proxy, testAddr.String(), false)
 }
 
 func TestUDP6Proxy(t *testing.T) {
