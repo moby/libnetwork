@@ -137,28 +137,6 @@ func OptionLabels(labels []string) Option {
 	}
 }
 
-// OptionKVProvider function returns an option setter for kvstore provider
-func OptionKVProvider(provider string) Option {
-	return func(c *Config) {
-		logrus.Debugf("Option OptionKVProvider: %s", provider)
-		if _, ok := c.Scopes[datastore.GlobalScope]; !ok {
-			c.Scopes[datastore.GlobalScope] = &datastore.ScopeCfg{}
-		}
-		c.Scopes[datastore.GlobalScope].Client.Provider = strings.TrimSpace(provider)
-	}
-}
-
-// OptionKVProviderURL function returns an option setter for kvstore url
-func OptionKVProviderURL(url string) Option {
-	return func(c *Config) {
-		logrus.Debugf("Option OptionKVProviderURL: %s", url)
-		if _, ok := c.Scopes[datastore.GlobalScope]; !ok {
-			c.Scopes[datastore.GlobalScope] = &datastore.ScopeCfg{}
-		}
-		c.Scopes[datastore.GlobalScope].Client.Address = strings.TrimSpace(url)
-	}
-}
-
 // OptionDataDir function returns an option setter for data folder
 func OptionDataDir(dataDir string) Option {
 	return func(c *Config) {

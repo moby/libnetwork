@@ -12,16 +12,6 @@ import (
 	"github.com/docker/libnetwork/options"
 )
 
-func testNewController(t *testing.T, provider, url string) (NetworkController, error) {
-	cfgOptions, err := OptionBoltdbWithRandomDBFile()
-	if err != nil {
-		return nil, err
-	}
-	cfgOptions = append(cfgOptions, config.OptionKVProvider(provider))
-	cfgOptions = append(cfgOptions, config.OptionKVProviderURL(url))
-	return New(cfgOptions...)
-}
-
 func testLocalBackend(t *testing.T, provider, url string, storeConfig *store.Config) {
 	cfgOptions := []config.Option{}
 	cfgOptions = append(cfgOptions, config.OptionLocalKVProvider(provider))
