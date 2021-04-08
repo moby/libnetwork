@@ -19,7 +19,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/pkg/discovery"
 	"github.com/docker/docker/pkg/reexec"
@@ -35,6 +34,7 @@ import (
 	"github.com/docker/libnetwork/types"
 	"github.com/gorilla/mux"
 	"github.com/moby/term"
+	"github.com/pelletier/go-toml"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 )
@@ -72,7 +72,11 @@ func main() {
 func (d *dnetConnection) parseOrchestrationConfig(tomlCfgFile string) error {
 	dummy := &dnetConnection{}
 
-	if _, err := toml.DecodeFile(tomlCfgFile, dummy); err != nil {
+	data, err := ioutil.ReadFile(tomlCfgFile)
+	if err != nil {
+		return err
+	}
+	if err := toml.Unmarshal(data, dummy); err != nil {
 		return err
 	}
 

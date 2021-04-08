@@ -2,9 +2,9 @@ package config
 
 import (
 	"fmt"
+	"io/ioutil"
 	"strings"
 
-	"github.com/BurntSushi/toml"
 	"github.com/docker/docker/pkg/discovery"
 	"github.com/docker/docker/pkg/plugingetter"
 	"github.com/docker/go-connections/tlsconfig"
@@ -15,6 +15,7 @@ import (
 	"github.com/docker/libnetwork/netlabel"
 	"github.com/docker/libnetwork/osl"
 	"github.com/docker/libnetwork/portallocator"
+	"github.com/pelletier/go-toml"
 	"github.com/sirupsen/logrus"
 )
 
@@ -70,8 +71,12 @@ func ParseConfig(tomlCfgFile string) (*Config, error) {
 	cfg := &Config{
 		Scopes: map[string]*datastore.ScopeCfg{},
 	}
+	data, err := ioutil.ReadFile(tomlCfgFile)
+	if err != nil {
+		return nil, err
+	}
 
-	if _, err := toml.DecodeFile(tomlCfgFile, cfg); err != nil {
+	if err := toml.Unmarshal(data, cfg); err != nil {
 		return nil, err
 	}
 
