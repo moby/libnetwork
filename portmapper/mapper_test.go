@@ -1,6 +1,7 @@
 package portmapper
 
 import (
+	"fmt"
 	"net"
 	"strings"
 	"testing"
@@ -195,7 +196,7 @@ func TestMapAllPortsSingleInterface(t *testing.T) {
 	}
 }
 
-func TestMapTCPDummyListen(t *testing.T) {
+func TestMapTCPDummyNotListen(t *testing.T) {
 	pm := New("")
 	dstIP := net.ParseIP("0.0.0.0")
 	dstAddr := &net.TCPAddr{IP: dstIP, Port: 80}
@@ -207,32 +208,55 @@ func TestMapTCPDummyListen(t *testing.T) {
 		return (addr1.Network() == addr2.Network()) && (addr1.String() == addr2.String())
 	}
 
+	// When allocating a single port, we should not bind the port
 	if host, err := pm.Map(srcAddr, dstIP, 80, false); err != nil {
 		t.Fatalf("Failed to allocate port: %s", err)
 	} else if !addrEqual(dstAddr, host) {
 		t.Fatalf("Incorrect mapping result: expected %s:%s, got %s:%s",
 			dstAddr.String(), dstAddr.Network(), host.String(), host.Network())
 	}
-	if _, err := net.Listen("tcp", "0.0.0.0:80"); err == nil {
-		t.Fatal("Listen on mapped port without proxy should fail")
-	} else {
-		if !strings.Contains(err.Error(), "address already in use") {
-			t.Fatalf("Error should be about address already in use, got %v", err)
-		}
+	if _, err := net.Listen("tcp", "0.0.0.0:80"); err != nil {
+		t.Fatalf("Allocated port shouldn't be bound, but it was, got %v", err)
 	}
+
+	// No failsafe of reusing an existing port
 	if _, err := net.Listen("tcp", "0.0.0.0:81"); err != nil {
 		t.Fatal(err)
 	}
-	if host, err := pm.Map(srcAddr, dstIP, 81, false); err == nil {
-		t.Fatalf("Bound port shouldn't be allocated, but it was on: %v", host)
+	if _, err := pm.Map(srcAddr, dstIP, 81, false); err != nil {
+		t.Fatalf("Bound port should be allocated, but got %v", err)
+	}
+
+	// But we shouldn't be able to map the same port twice
+	if host, err := pm.Map(srcAddr, dstIP, 80, false); err == nil {
+		t.Fatalf("Mapping port 80 a second time did not trigger an error, got %v", host)
+	}
+}
+
+func TestMapRangeTCPDummyListen(t *testing.T) {
+	pm := New("")
+	dstIP := net.ParseIP("0.0.0.0")
+
+	// no-op for dummy
+	srcAddr := &net.TCPAddr{Port: 1080, IP: net.ParseIP("172.16.0.1")}
+
+	if host, err := pm.MapRange(srcAddr, dstIP, 3000, 4000, false); err != nil {
+		t.Fatalf("Failed to allocate port: %s", err)
+	} else if host.(*net.TCPAddr).Port < 3000 || host.(*net.TCPAddr).Port > 4000 {
+		t.Fatalf("Incorrect mapping result: expected port between 3000 and 4000, got %s:%s",
+			host.String(), host.Network())
 	} else {
-		if !strings.Contains(err.Error(), "address already in use") {
-			t.Fatalf("Error should be about address already in use, got %v", err)
+		if _, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", host.(*net.TCPAddr).Port)); err == nil {
+			t.Fatal("Listen on mapped port without proxy should fail")
+		} else {
+			if !strings.Contains(err.Error(), "address already in use") {
+				t.Fatalf("Error should be about address already in use, got %v", err)
+			}
 		}
 	}
 }
 
-func TestMapUDPDummyListen(t *testing.T) {
+func TestMapUDPDummyNotListen(t *testing.T) {
 	pm := New("")
 	dstIP := net.ParseIP("0.0.0.0")
 	dstAddr := &net.UDPAddr{IP: dstIP, Port: 80}
@@ -244,27 +268,50 @@ func TestMapUDPDummyListen(t *testing.T) {
 		return (addr1.Network() == addr2.Network()) && (addr1.String() == addr2.String())
 	}
 
+	// When allocating a single port, we should not bind the port
 	if host, err := pm.Map(srcAddr, dstIP, 80, false); err != nil {
 		t.Fatalf("Failed to allocate port: %s", err)
 	} else if !addrEqual(dstAddr, host) {
 		t.Fatalf("Incorrect mapping result: expected %s:%s, got %s:%s",
 			dstAddr.String(), dstAddr.Network(), host.String(), host.Network())
 	}
-	if _, err := net.ListenUDP("udp", &net.UDPAddr{IP: dstIP, Port: 80}); err == nil {
-		t.Fatal("Listen on mapped port without proxy should fail")
-	} else {
-		if !strings.Contains(err.Error(), "address already in use") {
-			t.Fatalf("Error should be about address already in use, got %v", err)
-		}
+	if _, err := net.ListenUDP("udp", &net.UDPAddr{IP: dstIP, Port: 80}); err != nil {
+		t.Fatalf("Allocated port shouldn't be bound, but it was, got %v", err)
 	}
+
+	// No failsafe of reusing an existing port
 	if _, err := net.ListenUDP("udp", &net.UDPAddr{IP: dstIP, Port: 81}); err != nil {
 		t.Fatal(err)
 	}
-	if host, err := pm.Map(srcAddr, dstIP, 81, false); err == nil {
-		t.Fatalf("Bound port shouldn't be allocated, but it was on: %v", host)
+	if _, err := pm.Map(srcAddr, dstIP, 81, false); err != nil {
+		t.Fatalf("Bound port should be allocated, but got %v", err)
+	}
+
+	// But we shouldn't be able to map the same port twice
+	if host, err := pm.Map(srcAddr, dstIP, 80, false); err == nil {
+		t.Fatalf("Mapping port 80 a second time did not trigger an error, got %v", host)
+	}
+}
+
+func TestMapRangeUDPDummyListen(t *testing.T) {
+	pm := New("")
+	dstIP := net.ParseIP("0.0.0.0")
+
+	// no-op for dummy
+	srcAddr := &net.UDPAddr{Port: 1080, IP: net.ParseIP("172.16.0.1")}
+
+	if host, err := pm.MapRange(srcAddr, dstIP, 3000, 4000, false); err != nil {
+		t.Fatalf("Failed to allocate port: %s", err)
+	} else if host.(*net.UDPAddr).Port < 3000 || host.(*net.UDPAddr).Port > 4000 {
+		t.Fatalf("Incorrect mapping result: expected port between 3000 and 4000, got %s:%s",
+			host.String(), host.Network())
 	} else {
-		if !strings.Contains(err.Error(), "address already in use") {
-			t.Fatalf("Error should be about address already in use, got %v", err)
+		if _, err := net.ListenUDP("udp", &net.UDPAddr{IP: dstIP, Port: host.(*net.UDPAddr).Port}); err == nil {
+			t.Fatal("Listen on mapped port without proxy should fail")
+		} else {
+			if !strings.Contains(err.Error(), "address already in use") {
+				t.Fatalf("Error should be about address already in use, got %v", err)
+			}
 		}
 	}
 }
