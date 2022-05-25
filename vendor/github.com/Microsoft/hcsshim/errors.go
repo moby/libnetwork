@@ -59,7 +59,7 @@ var (
 	// ErrVmcomputeOperationInvalidState is an error encountered when the compute system is not in a valid state for the requested operation
 	ErrVmcomputeOperationInvalidState = hcs.ErrVmcomputeOperationInvalidState
 
-	// ErrProcNotFound is an error encountered when the the process cannot be found
+	// ErrProcNotFound is an error encountered when a procedure look up fails.
 	ErrProcNotFound = hcs.ErrProcNotFound
 
 	// ErrVmcomputeOperationAccessIsDenied is an error which can be encountered when enumerating compute systems in RS1/RS2
@@ -83,7 +83,6 @@ type NetworkNotFoundError = hns.NetworkNotFoundError
 type ProcessError struct {
 	Process   *process
 	Operation string
-	ExtraInfo string
 	Err       error
 	Events    []hcs.ErrorEvent
 }
@@ -92,7 +91,6 @@ type ProcessError struct {
 type ContainerError struct {
 	Container *container
 	Operation string
-	ExtraInfo string
 	Err       error
 	Events    []hcs.ErrorEvent
 }
@@ -125,10 +123,6 @@ func (e *ContainerError) Error() string {
 		s += "\n" + ev.String()
 	}
 
-	if e.ExtraInfo != "" {
-		s += " extra info: " + e.ExtraInfo
-	}
-
 	return s
 }
 
@@ -137,7 +131,7 @@ func makeContainerError(container *container, operation string, extraInfo string
 	if _, ok := err.(*ContainerError); ok {
 		return err
 	}
-	containerError := &ContainerError{Container: container, Operation: operation, ExtraInfo: extraInfo, Err: err}
+	containerError := &ContainerError{Container: container, Operation: operation, Err: err}
 	return containerError
 }
 
@@ -176,14 +170,14 @@ func makeProcessError(process *process, operation string, extraInfo string, err 
 	if _, ok := err.(*ProcessError); ok {
 		return err
 	}
-	processError := &ProcessError{Process: process, Operation: operation, ExtraInfo: extraInfo, Err: err}
+	processError := &ProcessError{Process: process, Operation: operation, Err: err}
 	return processError
 }
 
 // IsNotExist checks if an error is caused by the Container or Process not existing.
 // Note: Currently, ErrElementNotFound can mean that a Process has either
 // already exited, or does not exist. Both IsAlreadyStopped and IsNotExist
-// will currently return true when the error is ErrElementNotFound or ErrProcNotFound.
+// will currently return true when the error is ErrElementNotFound.
 func IsNotExist(err error) bool {
 	if _, ok := err.(EndpointNotFoundError); ok {
 		return true
@@ -216,7 +210,7 @@ func IsTimeout(err error) bool {
 // a Container or Process being already stopped.
 // Note: Currently, ErrElementNotFound can mean that a Process has either
 // already exited, or does not exist. Both IsAlreadyStopped and IsNotExist
-// will currently return true when the error is ErrElementNotFound or ErrProcNotFound.
+// will currently return true when the error is ErrElementNotFound.
 func IsAlreadyStopped(err error) bool {
 	return hcs.IsAlreadyStopped(getInnerError(err))
 }
@@ -244,7 +238,7 @@ func getInnerError(err error) error {
 
 func convertSystemError(err error, c *container) error {
 	if serr, ok := err.(*hcs.SystemError); ok {
-		return &ContainerError{Container: c, Operation: serr.Op, ExtraInfo: serr.Extra, Err: serr.Err, Events: serr.Events}
+		return &ContainerError{Container: c, Operation: serr.Op, Err: serr.Err, Events: serr.Events}
 	}
 	return err
 }
