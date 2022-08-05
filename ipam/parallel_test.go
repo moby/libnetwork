@@ -212,7 +212,6 @@ func allocate(t *testing.T, tctx *testContext, parallel int64) {
 		}
 		if there, ok := tctx.ipMap[ip.String()]; ok && there {
 			t.Fatalf("Got duplicate IP %s", ip.String())
-			break
 		}
 		tctx.ipList = append(tctx.ipList, ip)
 		tctx.ipMap[ip.String()] = true
