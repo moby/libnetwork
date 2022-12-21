@@ -93,7 +93,7 @@ func TestRequestPoolParallel(t *testing.T) {
 		go func(t *testing.T, a *Allocator, ch chan *op) {
 			name, _, _, err := a.RequestPool("GlobalDefault", "", "", nil, false)
 			if err != nil {
-				t.Fatalf("request error %v", err)
+				t.Errorf("request error %v", err)
 			}
 			idx := atomic.AddInt32(&operationIndex, 1)
 			ch <- &op{idx, true, name}
@@ -101,7 +101,7 @@ func TestRequestPoolParallel(t *testing.T) {
 			idx = atomic.AddInt32(&operationIndex, 1)
 			err = a.ReleasePool(name)
 			if err != nil {
-				t.Fatalf("release error %v", err)
+				t.Errorf("release error %v", err)
 			}
 			ch <- &op{idx, false, name}
 		}(t, a, ch)
@@ -267,7 +267,7 @@ func release(t *testing.T, tctx *testContext, mode releaseMode, parallel int64) 
 			// logrus.Errorf("list %v", tctx.ipList)
 			err := tctx.a.ReleaseAddress(tctx.pid, tctx.ipList[index].IP)
 			if err != nil {
-				t.Fatalf("routine %d got %v", id, err)
+				t.Errorf("routine %d got %v", id, err)
 			}
 			ch <- tctx.ipList[index]
 			parallelExec.Release(1)

@@ -446,11 +446,11 @@ func TestConcurrentWrites(t *testing.T) {
 
 			for j := 0; j < 25; j++ {
 				if err := Add(file.Name(), rec); err != nil {
-					t.Fatal(err)
+					t.Error(err)
 				}
 
 				if err := Delete(file.Name(), rec); err != nil {
-					t.Fatal(err)
+					t.Error(err)
 				}
 			}
 		}(i)

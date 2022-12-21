@@ -1516,7 +1516,7 @@ func TestRequestReleaseAddressDuplicate(t *testing.T) {
 				wg.Add(1)
 				go func(ip *net.IPNet) {
 					if err = a.ReleaseAddress(poolID, ip.IP); err != nil {
-						t.Fatal(err)
+						t.Error(err)
 					}
 					l.Lock()
 					ips = append(ips, IP{ip, -1})
