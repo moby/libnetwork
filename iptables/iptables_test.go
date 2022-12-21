@@ -213,7 +213,7 @@ func RunConcurrencyTest(t *testing.T, allowXlock bool) {
 			defer wg.Done()
 			err := natChain.Forward(Append, ip, port, proto, dstAddr, dstPort, "lo")
 			if err != nil {
-				t.Fatal(err)
+				t.Error(err)
 			}
 		}()
 	}

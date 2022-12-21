@@ -1080,6 +1080,9 @@ func TestEndpointMultipleJoins(t *testing.T) {
 		libnetwork.OptionHostname("test"),
 		libnetwork.OptionDomainname("docker.io"),
 		libnetwork.OptionExtraHost("web", "192.168.0.1"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer func() {
 		if err := sbx1.Delete(); err != nil {
 			t.Fatal(err)
@@ -1087,6 +1090,9 @@ func TestEndpointMultipleJoins(t *testing.T) {
 	}()
 
 	sbx2, err := controller.NewSandbox("c2")
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer func() {
 		if err := sbx2.Delete(); err != nil {
 			t.Fatal(err)

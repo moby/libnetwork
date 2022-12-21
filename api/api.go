@@ -278,6 +278,7 @@ func processCreateDefaults(c libnetwork.NetworkController, nc *networkCreate) {
 /***************************
  NetworkController interface
 ****************************/
+
 func procCreateNetwork(c libnetwork.NetworkController, vars map[string]string, body []byte) (interface{}, *responseStatus) {
 	var create networkCreate
 
@@ -385,6 +386,7 @@ func procCreateSandbox(c libnetwork.NetworkController, vars map[string]string, b
 /******************
  Network interface
 *******************/
+
 func procCreateEndpoint(c libnetwork.NetworkController, vars map[string]string, body []byte) (interface{}, *responseStatus) {
 	var ec endpointCreate
 
@@ -483,6 +485,7 @@ func procDeleteNetwork(c libnetwork.NetworkController, vars map[string]string, b
 /******************
  Endpoint interface
 *******************/
+
 func procJoinEndpoint(c libnetwork.NetworkController, vars map[string]string, body []byte) (interface{}, *responseStatus) {
 	var ej endpointJoin
 	var setFctList []libnetwork.EndpointOption
@@ -561,6 +564,7 @@ func procDeleteEndpoint(c libnetwork.NetworkController, vars map[string]string, 
 /******************
  Service interface
 *******************/
+
 func procGetServices(c libnetwork.NetworkController, vars map[string]string, body []byte) (interface{}, *responseStatus) {
 	// Look for query filters and validate
 	nwName, filterByNwName := vars[urlNwName]
@@ -734,6 +738,7 @@ func procDetachBackend(c libnetwork.NetworkController, vars map[string]string, b
 /******************
  Sandbox interface
 *******************/
+
 func procGetSandbox(c libnetwork.NetworkController, vars map[string]string, body []byte) (interface{}, *responseStatus) {
 	if epT, ok := vars[urlEpID]; ok {
 		sv, errRsp := findService(c, epT, byID)
@@ -816,6 +821,7 @@ func procDeleteSandbox(c libnetwork.NetworkController, vars map[string]string, b
 /***********
   Utilities
 ************/
+
 const (
 	byID = iota
 	byName

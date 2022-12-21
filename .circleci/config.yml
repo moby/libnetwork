@@ -4,7 +4,7 @@ defaults: &defaults
   working_directory: ~/go/src/github.com/docker/libnetwork
   docker:
     # the following image is irrelevant for the build, everything is built inside a container, check the Makefile
-    - image: 'circleci/golang:latest'
+    - image: 'cimg/go:1.18.9'
       environment:
           dockerbuildargs: .
           dockerargs:  --privileged -e CIRCLECI
@@ -15,7 +15,7 @@ jobs:
     steps:
       - checkout
       - setup_remote_docker:
-          version: 19.03.12
+          version: 20.10.18
           reusable: true
           exclusive: false
       - run: make builder
@@ -25,7 +25,7 @@ jobs:
     steps:
       - checkout
       - setup_remote_docker:
-          version: 19.03.12
+          version: 20.10.18
           reusable: true
           exclusive: false
       - run: make build
@@ -35,7 +35,7 @@ jobs:
     steps:
       - checkout
       - setup_remote_docker:
-          version: 19.03.12
+          version: 20.10.18
           reusable: true
           exclusive: false
       - run: make check
@@ -45,7 +45,7 @@ jobs:
     steps:
       - checkout
       - setup_remote_docker:
-          version: 19.03.12
+          version: 20.10.18
           reusable: true
           exclusive: false
       - run: make cross
@@ -55,7 +55,7 @@ jobs:
     steps:
       - checkout
       - setup_remote_docker:
-          version: 19.03.12
+          version: 20.10.18
           reusable: true
           exclusive: false
       - run: make unit-tests

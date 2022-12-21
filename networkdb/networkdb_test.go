@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -562,12 +563,12 @@ func TestNetworkDBGarbageCollection(t *testing.T) {
 	assert.NilError(t, err)
 
 	for i := 0; i < keysWriteDelete; i++ {
-		err = dbs[i%2].CreateEntry("testTable", "network1", "key-"+string(i), []byte("value"))
+		err = dbs[i%2].CreateEntry("testTable", "network1", "key-"+strconv.Itoa(i), []byte("value"))
 		assert.NilError(t, err)
 	}
 	time.Sleep(time.Second)
 	for i := 0; i < keysWriteDelete; i++ {
-		err = dbs[i%2].DeleteEntry("testTable", "network1", "key-"+string(i))
+		err = dbs[i%2].DeleteEntry("testTable", "network1", "key-"+strconv.Itoa(i))
 		assert.NilError(t, err)
 	}
 	for i := 0; i < 2; i++ {

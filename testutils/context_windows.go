@@ -10,8 +10,7 @@ import (
 //
 // Example usage:
 //
-//     defer SetupTestOSContext(t)()
-//
+//	defer SetupTestOSContext(t)()
 func SetupTestOSContext(t *testing.T) func() {
 	return func() {
 	}

@@ -45,8 +45,8 @@ build: builder
 build-local:
 	@echo "🐳 $@"
 	@mkdir -p "bin"
-	go build -tags experimental -o "bin/dnet" ./cmd/dnet
-	go build -o "bin/docker-proxy" ./cmd/proxy
+	GO111MODULE=off go build -tags experimental -o "bin/dnet" ./cmd/dnet
+	GO111MODULE=off go build -o "bin/docker-proxy" ./cmd/proxy
 	CGO_ENABLED=0 go build -o "bin/diagnosticClient" ./cmd/diagnostic
 	CGO_ENABLED=0 go build -o "bin/testMain" ./cmd/networkdb-test/testMain.go
 
@@ -82,8 +82,8 @@ cross: builder
 
 cross-local:
 	@echo "🐳 $@"
-	go build -o "bin/dnet-$$GOOS-$$GOARCH" ./cmd/dnet
-	go build -o "bin/docker-proxy-$$GOOS-$$GOARCH" ./cmd/proxy
+	GO111MODULE=off go build -o "bin/dnet-$$GOOS-$$GOARCH" ./cmd/dnet
+	GO111MODULE=off go build -o "bin/docker-proxy-$$GOOS-$$GOARCH" ./cmd/proxy
 
 # Rebuild protocol buffers.
 # These may need to be rebuilt after vendoring updates, so .proto files are declared .PHONY so they are always rebuilt.
@@ -125,7 +125,7 @@ unit-tests: builder
 unit-tests-local:
 	@echo "🐳 Running tests... "
 	@echo "mode: count" > coverage.coverprofile
-	@go build -o "bin/docker-proxy" ./cmd/proxy
+	@GO111MODULE=off go build -o "bin/docker-proxy" ./cmd/proxy
 	@for dir in $$( find . -maxdepth 10 -not -path './.git*' -not -path '*/_*' -not -path './vendor/*' -type d); do \
 	if ls $$dir/*.go &> /dev/null; then \
 		pushd . &> /dev/null ; \
