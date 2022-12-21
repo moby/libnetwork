@@ -31,6 +31,7 @@ type SandboxResource struct {
 /***********
   Body types
   ************/
+
 type ipamConf struct {
 	PreferredPool string
 	SubPool       string
