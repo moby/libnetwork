@@ -161,14 +161,13 @@ func main() {
 	}
 
 	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, os.Interrupt, os.Kill)
+	signal.Notify(sigCh, os.Interrupt)
 
-	for {
-		select {
-		case <-sigCh:
-			r.d.Leave("testnetwork", "testep")
-			overlay.Fini(r.d)
-			os.Exit(0)
+	for range sigCh {
+		if err := r.d.Leave("testnetwork", "testep"); err != nil {
+			fmt.Printf("Error leaving: %v", err)
 		}
+		overlay.Fini(r.d)
+		os.Exit(0)
 	}
 }

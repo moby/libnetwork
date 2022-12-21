@@ -52,7 +52,7 @@ type DNSBackend interface {
 	// ExecFunc allows a function to be executed in the context of the backend
 	// on behalf of the resolver.
 	ExecFunc(f func()) error
-	//NdotsSet queries the backends ndots dns option settings
+	// NdotsSet queries the backends ndots dns option settings
 	NdotsSet() bool
 	// HandleQueryResp passes the name & IP from a response to the backend. backend
 	// can use it to maintain any required state about the resolution
@@ -64,7 +64,7 @@ const (
 	ptrIPv4domain   = ".in-addr.arpa."
 	ptrIPv6domain   = ".ip6.arpa."
 	respTTL         = 600
-	maxExtDNS       = 3 //max number of external servers to try
+	maxExtDNS       = 3 // max number of external servers to try
 	extIOTimeout    = 4 * time.Second
 	defaultRespSize = 512
 	maxConcurrent   = 1024
@@ -157,13 +157,17 @@ func (r *resolver) Start() error {
 	s := &dns.Server{Handler: r, PacketConn: r.conn}
 	r.server = s
 	go func() {
-		s.ActivateAndServe()
+		if err := s.ActivateAndServe(); err != nil {
+			logrus.WithError(err).Error("error starting packetconn dns server")
+		}
 	}()
 
 	tcpServer := &dns.Server{Handler: r, Listener: r.tcpListen}
 	r.tcpServer = tcpServer
 	go func() {
-		tcpServer.ActivateAndServe()
+		if err := tcpServer.ActivateAndServe(); err != nil {
+			logrus.WithError(err).Error("error starting tcp dns server")
+		}
 	}()
 	return nil
 }
@@ -392,7 +396,9 @@ func (r *resolver) ServeDNS(w dns.ResponseWriter, query *dns.Msg) {
 		if !r.proxyDNS {
 			resp = new(dns.Msg)
 			resp.SetRcode(query, dns.RcodeServerFailure)
-			w.WriteMsg(resp)
+			if err := w.WriteMsg(resp); err != nil {
+				logrus.WithError(err).Error("Error writing dns response")
+			}
 			return
 		}
 
@@ -457,7 +463,9 @@ func (r *resolver) ServeDNS(w dns.ResponseWriter, query *dns.Msg) {
 				extConn.LocalAddr().String(), proto, extDNS.IPStr)
 
 			// Timeout has to be set for every IO operation.
-			extConn.SetDeadline(time.Now().Add(extIOTimeout))
+			if err := extConn.SetDeadline(time.Now().Add(extIOTimeout)); err != nil {
+				logrus.WithError(err).Error("Error setting conn deadline")
+			}
 			co := &dns.Conn{
 				Conn:    extConn,
 				UDPSize: uint16(maxSize),

@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"sync"
 	"testing"
 
 	"github.com/docker/docker/pkg/plugins"
@@ -371,7 +370,7 @@ func TestNetworkConfig(t *testing.T) {
 	}
 
 	// Verify config network cannot inherit another config network
-	configNetwork, err := controller.NewNetwork("bridge", "config_network0", "",
+	_, err := controller.NewNetwork("bridge", "config_network0", "",
 		libnetwork.NetworkOptionConfigOnly(),
 		libnetwork.NetworkOptionConfigFrom("anotherConfigNw"))
 
@@ -399,7 +398,7 @@ func TestNetworkConfig(t *testing.T) {
 		libnetwork.NetworkOptionIpam("default", "", ipamV4ConfList, ipamV6ConfList, nil),
 	}
 
-	configNetwork, err = controller.NewNetwork(bridgeNetType, "config_network0", "", netOptions...)
+	configNetwork, err := controller.NewNetwork(bridgeNetType, "config_network0", "", netOptions...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -872,7 +871,7 @@ func TestNetworkQuery(t *testing.T) {
 		t.Fatalf("EndpointByName() returned %v instead of %v", e, ep11)
 	}
 
-	e, err = net1.EndpointByName("")
+	_, err = net1.EndpointByName("")
 	if err == nil {
 		t.Fatalf("EndpointByName() succeeded with invalid target name")
 	}
@@ -899,7 +898,7 @@ func TestNetworkQuery(t *testing.T) {
 		t.Fatalf("EndpointByID() returned %v instead of %v", e, ep12)
 	}
 
-	e, err = net1.EndpointByID("")
+	_, err = net1.EndpointByID("")
 	if err == nil {
 		t.Fatalf("EndpointByID() succeeded with invalid target id")
 	}
@@ -1331,10 +1330,6 @@ func TestInvalidRemoteDriver(t *testing.T) {
 	}
 	defer server.Close()
 
-	type pluginRequest struct {
-		name string
-	}
-
 	mux.HandleFunc("/Plugin.Activate", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/vnd.docker.plugins.v1+json")
 		fmt.Fprintln(w, `{"Implements": ["InvalidDriver"]}`)
@@ -1381,10 +1376,6 @@ func TestValidRemoteDriver(t *testing.T) {
 		t.Fatal("Failed to start an HTTP Server")
 	}
 	defer server.Close()
-
-	type pluginRequest struct {
-		name string
-	}
 
 	mux.HandleFunc("/Plugin.Activate", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/vnd.docker.plugins.v1+json")
@@ -1433,7 +1424,6 @@ func TestValidRemoteDriver(t *testing.T) {
 }
 
 var (
-	once    sync.Once
 	start   = make(chan struct{})
 	done    = make(chan chan struct{}, numThreads-1)
 	origins = netns.None()
@@ -1508,10 +1498,8 @@ func createGlobalInstance(t *testing.T) {
 	}
 }
 
-func debugf(format string, a ...interface{}) (int, error) {
+func debugf(format string, a ...interface{}) {
 	if debug {
-		return fmt.Printf(format, a...)
+		fmt.Printf(format, a...)
 	}
-
-	return 0, nil
 }

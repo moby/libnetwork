@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"strings"
 	"sync"
 
 	"github.com/docker/libnetwork/datastore"
@@ -116,6 +115,12 @@ func (ep *endpoint) UnmarshalJSON(b []byte) (err error) {
 	}
 	ep.name = epMap["name"].(string)
 	ep.id = epMap["id"].(string)
+
+	// TODO(cpuguy83): So yeah, this isn't checking any errors anywhere.
+	// Seems like we should be checking errors even because of memory related issues that can arise.
+	// Alas it seems like given the nature of this data we could introduce problems if we start checking these errors.
+	//
+	// If anyone ever comes here and figures out one way or another if we can/should be checking these errors and it turns out we can't... then please document *why*
 
 	ib, _ := json.Marshal(epMap["ep_iface"])
 	json.Unmarshal(ib, &ep.iface)
@@ -253,12 +258,16 @@ func (ep *endpoint) CopyTo(o datastore.KVObject) error {
 
 	if ep.iface != nil {
 		dstEp.iface = &endpointInterface{}
-		ep.iface.CopyTo(dstEp.iface)
+		if err := ep.iface.CopyTo(dstEp.iface); err != nil {
+			return err
+		}
 	}
 
 	if ep.joinInfo != nil {
 		dstEp.joinInfo = &endpointJoinInfo{}
-		ep.joinInfo.CopyTo(dstEp.joinInfo)
+		if err := ep.joinInfo.CopyTo(dstEp.joinInfo); err != nil {
+			return err
+		}
 	}
 
 	dstEp.exposedPorts = make([]types.TransportPort, len(ep.exposedPorts))
@@ -352,17 +361,6 @@ func (ep *endpoint) KeyPrefix() []string {
 	}
 
 	return []string{datastore.EndpointKeyPrefix, ep.network.id}
-}
-
-func (ep *endpoint) networkIDFromKey(key string) (string, error) {
-	// endpoint Key structure : docker/libnetwork/endpoint/${network-id}/${endpoint-id}
-	// it's an invalid key if the key doesn't have all the 5 key elements above
-	keyElements := strings.Split(key, "/")
-	if !strings.HasPrefix(key, datastore.Key(datastore.EndpointKeyPrefix)) || len(keyElements) < 5 {
-		return "", fmt.Errorf("invalid endpoint key : %v", key)
-	}
-	// network-id is placed at index=3. pls refer to endpoint.Key() method
-	return strings.Split(key, "/")[3], nil
 }
 
 func (ep *endpoint) Value() []byte {
@@ -650,10 +648,14 @@ func (ep *endpoint) rename(name string) error {
 		}
 		defer func() {
 			if err != nil {
-				ep.deleteServiceInfoFromCluster(sb, true, "rename")
+				if err2 := ep.deleteServiceInfoFromCluster(sb, true, "rename"); err2 != nil {
+					logrus.WithField("main error", err).WithError(err2).Debug("Error during cleanup due deleting service info from cluster while cleaning up due to other error")
+				}
 				ep.name = oldName
 				ep.anonymous = oldAnonymous
-				ep.addServiceInfoToCluster(sb)
+				if err2 := ep.addServiceInfoToCluster(sb); err2 != nil {
+					logrus.WithField("main error", err).WithError(err2).Debug("Error during cleanup due adding service to from cluster while cleaning up due to other error")
+				}
 			}
 		}()
 	} else {
@@ -1226,7 +1228,9 @@ func (c *controller) cleanupLocalEndpoints() {
 		epCnt := n.getEpCnt().EndpointCnt()
 		if epCnt != uint64(len(epl)) {
 			logrus.Infof("Fixing inconsistent endpoint_cnt for network %s. Expected=%d, Actual=%d", n.name, len(epl), epCnt)
-			n.getEpCnt().setCnt(uint64(len(epl)))
+			if err := n.getEpCnt().setCnt(uint64(len(epl))); err != nil {
+				logrus.WithField("network", n.name).WithError(err).Warn("Error while fixing inconsistent endpoint_cnt for network")
+			}
 		}
 	}
 }

@@ -12,24 +12,6 @@ import (
 	"github.com/docker/libnetwork/options"
 )
 
-func testZooKeeperBackend(t *testing.T) {
-	c, err := testNewController(t, "zk", "127.0.0.1:2181/custom_prefix")
-	if err != nil {
-		t.Fatal(err)
-	}
-	c.Stop()
-}
-
-func testNewController(t *testing.T, provider, url string) (NetworkController, error) {
-	cfgOptions, err := OptionBoltdbWithRandomDBFile()
-	if err != nil {
-		return nil, err
-	}
-	cfgOptions = append(cfgOptions, config.OptionKVProvider(provider))
-	cfgOptions = append(cfgOptions, config.OptionKVProviderURL(url))
-	return New(cfgOptions...)
-}
-
 func testLocalBackend(t *testing.T, provider, url string, storeConfig *store.Config) {
 	cfgOptions := []config.Option{}
 	cfgOptions = append(cfgOptions, config.OptionLocalKVProvider(provider))
@@ -54,10 +36,10 @@ func testLocalBackend(t *testing.T, provider, url string, storeConfig *store.Con
 		t.Fatalf("Error creating endpoint: %v", err)
 	}
 	store := ctrl.(*controller).getStore(datastore.LocalScope).KVStore()
-	if exists, err := store.Exists(datastore.Key(datastore.NetworkKeyPrefix, string(nw.ID()))); !exists || err != nil {
+	if exists, err := store.Exists(datastore.Key(datastore.NetworkKeyPrefix, nw.ID())); !exists || err != nil {
 		t.Fatalf("Network key should have been created.")
 	}
-	if exists, err := store.Exists(datastore.Key([]string{datastore.EndpointKeyPrefix, string(nw.ID()), string(ep.ID())}...)); !exists || err != nil {
+	if exists, err := store.Exists(datastore.Key([]string{datastore.EndpointKeyPrefix, nw.ID(), ep.ID()}...)); !exists || err != nil {
 		t.Fatalf("Endpoint key should have been created.")
 	}
 	store.Close()

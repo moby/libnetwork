@@ -305,7 +305,7 @@ func TestAddReleasePoolID(t *testing.T) {
 		assert.NilError(t, err)
 
 		var k0, k1 SubnetKey
-		aSpace, err := a.getAddrSpace(localAddressSpace)
+		_, err = a.getAddrSpace(localAddressSpace)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -318,7 +318,7 @@ func TestAddReleasePoolID(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		aSpace, err = a.getAddrSpace(localAddressSpace)
+		aSpace, err := a.getAddrSpace(localAddressSpace)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1068,8 +1068,6 @@ func TestRelease(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		bm := a.addresses[SubnetKey{localAddressSpace, subnet, ""}]
-
 		// Allocate all addresses
 		for err != ipamapi.ErrNoAvailableIPs {
 			_, _, err = a.RequestAddress(pid, nil, nil)
@@ -1106,7 +1104,7 @@ func TestRelease(t *testing.T) {
 		for i, inp := range toRelease {
 			ip0 := net.ParseIP(inp.address)
 			a.ReleaseAddress(pid, ip0)
-			bm = a.addresses[SubnetKey{localAddressSpace, subnet, ""}]
+			bm := a.addresses[SubnetKey{localAddressSpace, subnet, ""}]
 			if bm.Unselected() != 1 {
 				t.Fatalf("Failed to update free address count after release. Expected %d, Found: %d", i+1, bm.Unselected())
 			}
@@ -1195,13 +1193,6 @@ func benchmarkRequest(b *testing.B, a *Allocator, subnet string) {
 	pid, _, _, err := a.RequestPool(localAddressSpace, subnet, "", nil, false)
 	for err != ipamapi.ErrNoAvailableIPs {
 		_, _, err = a.RequestAddress(pid, nil, nil)
-	}
-}
-
-func benchMarkRequest(subnet string, b *testing.B) {
-	a, _ := getAllocator(true)
-	for n := 0; n < b.N; n++ {
-		benchmarkRequest(b, a, subnet)
 	}
 }
 
@@ -1440,9 +1431,7 @@ func runParallelTests(t *testing.T, instance int) {
 	}
 
 	if instance != first {
-		select {
-		case <-start:
-		}
+		<-start
 
 		instDone := make(chan struct{})
 		done <- instDone
@@ -1460,9 +1449,7 @@ func runParallelTests(t *testing.T, instance int) {
 
 	if instance == first {
 		for instDone := range done {
-			select {
-			case <-instDone:
-			}
+			<-instDone
 		}
 		// Now check each instance got a different pool
 		for i := 0; i < numInstances; i++ {

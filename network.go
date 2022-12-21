@@ -79,8 +79,8 @@ type NetworkInfo interface {
 	// gossip cluster. For non-dynamic overlay networks and bridge networks it returns an
 	// empty slice
 	Peers() []networkdb.PeerInfo
-	//Services returns a map of services keyed by the service name with the details
-	//of all the tasks that belong to the service. Applicable only in swarm mode.
+	// Services returns a map of services keyed by the service name with the details
+	// of all the tasks that belong to the service. Applicable only in swarm mode.
 	Services() map[string]ServiceInfo
 }
 
@@ -221,7 +221,6 @@ type network struct {
 	dbIndex          uint64
 	dbExists         bool
 	persist          bool
-	stopWatchCh      chan struct{}
 	drvOnce          *sync.Once
 	resolverOnce     sync.Once
 	resolver         []Resolver
@@ -500,25 +499,33 @@ func (n *network) CopyTo(o datastore.KVObject) error {
 
 	for _, v4conf := range n.ipamV4Config {
 		dstV4Conf := &IpamConf{}
-		v4conf.CopyTo(dstV4Conf)
+		if err := v4conf.CopyTo(dstV4Conf); err != nil {
+			return err
+		}
 		dstN.ipamV4Config = append(dstN.ipamV4Config, dstV4Conf)
 	}
 
 	for _, v4info := range n.ipamV4Info {
 		dstV4Info := &IpamInfo{}
-		v4info.CopyTo(dstV4Info)
+		if err := v4info.CopyTo(dstV4Info); err != nil {
+			return err
+		}
 		dstN.ipamV4Info = append(dstN.ipamV4Info, dstV4Info)
 	}
 
 	for _, v6conf := range n.ipamV6Config {
 		dstV6Conf := &IpamConf{}
-		v6conf.CopyTo(dstV6Conf)
+		if err := v6conf.CopyTo(dstV6Conf); err != nil {
+			return err
+		}
 		dstN.ipamV6Config = append(dstN.ipamV6Config, dstV6Conf)
 	}
 
 	for _, v6info := range n.ipamV6Info {
 		dstV6Info := &IpamInfo{}
-		v6info.CopyTo(dstV6Info)
+		if err := v6info.CopyTo(dstV6Info); err != nil {
+			return err
+		}
 		dstN.ipamV6Info = append(dstN.ipamV6Info, dstV6Info)
 	}
 
@@ -934,16 +941,6 @@ func (n *network) resolveDriver(name string, load bool) (driverapi.Driver, *driv
 	return d, cap, nil
 }
 
-func (n *network) driverScope() string {
-	_, cap, err := n.resolveDriver(n.networkType, true)
-	if err != nil {
-		// If driver could not be resolved simply return an empty string
-		return ""
-	}
-
-	return cap.DataScope
-}
-
 func (n *network) driverIsMultihost() bool {
 	_, cap, err := n.resolveDriver(n.networkType, true)
 	if err != nil {
@@ -1030,7 +1027,7 @@ func (n *network) delete(force bool, rmLBEndpoint bool) error {
 			// continue deletion when force is true even on error
 			logrus.Warnf("Error deleting load balancer sandbox: %v", err)
 		}
-		//Reload the network from the store to update the epcnt.
+		// Reload the network from the store to update the epcnt.
 		n, err = c.getNetworkFromStore(id)
 		if err != nil {
 			return &UnknownNetworkError{name: name, id: id}
@@ -1837,13 +1834,17 @@ func (n *network) IpamConfig() (string, map[string]string, []*IpamConf, []*IpamC
 
 	for i, c := range n.ipamV4Config {
 		cc := &IpamConf{}
-		c.CopyTo(cc)
+		if err := c.CopyTo(cc); err != nil {
+			logrus.WithError(err).Error("Error copying ipam ipv4 config")
+		}
 		v4L[i] = cc
 	}
 
 	for i, c := range n.ipamV6Config {
 		cc := &IpamConf{}
-		c.CopyTo(cc)
+		if err := c.CopyTo(cc); err != nil {
+			logrus.WithError(err).Debug("Error copying ipam ipv6 config")
+		}
 		v6L[i] = cc
 	}
 
@@ -1859,13 +1860,17 @@ func (n *network) IpamInfo() ([]*IpamInfo, []*IpamInfo) {
 
 	for i, info := range n.ipamV4Info {
 		ic := &IpamInfo{}
-		info.CopyTo(ic)
+		if err := info.CopyTo(ic); err != nil {
+			logrus.WithError(err).Error("Error copying ipv4 ipam config")
+		}
 		v4Info[i] = ic
 	}
 
 	for i, info := range n.ipamV6Info {
 		ic := &IpamInfo{}
-		info.CopyTo(ic)
+		if err := info.CopyTo(ic); err != nil {
+			logrus.WithError(err).Error("Error copying ipv6 ipam config")
+		}
 		v6Info[i] = ic
 	}
 
@@ -2236,14 +2241,14 @@ func (n *network) deleteLoadBalancerSandbox() error {
 			if sb != nil {
 				if err := sb.DisableService(); err != nil {
 					logrus.Warnf("Failed to disable service on sandbox %s: %v", sandboxName, err)
-					//Ignore error and attempt to delete the load balancer endpoint
+					// Ignore error and attempt to delete the load balancer endpoint
 				}
 			}
 		}
 
 		if err := endpoint.Delete(true); err != nil {
 			logrus.Warnf("Failed to delete endpoint %s (%s) in %s: %v", endpoint.Name(), endpoint.ID(), sandboxName, err)
-			//Ignore error and attempt to delete the sandbox.
+			// Ignore error and attempt to delete the sandbox.
 		}
 	}
 

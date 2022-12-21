@@ -3,7 +3,6 @@ package ipvlan
 import (
 	"fmt"
 
-	"github.com/docker/libnetwork/osl"
 	"github.com/docker/libnetwork/types"
 	"github.com/sirupsen/logrus"
 )
@@ -85,19 +84,6 @@ func validateID(nid, eid string) error {
 	}
 
 	return nil
-}
-
-func (n *network) sandbox() osl.Sandbox {
-	n.Lock()
-	defer n.Unlock()
-
-	return n.sbox
-}
-
-func (n *network) setSandbox(sbox osl.Sandbox) {
-	n.Lock()
-	n.sbox = sbox
-	n.Unlock()
 }
 
 func (d *driver) getNetwork(id string) (*network, error) {

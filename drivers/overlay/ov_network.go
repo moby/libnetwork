@@ -413,7 +413,9 @@ func (n *network) destroySandbox() {
 
 func populateVNITbl() {
 	filepath.Walk(filepath.Dir(osl.GenerateKey("walk")),
-		func(path string, info os.FileInfo, err error) error {
+		// NOTE(cpuguy83): The linter picked up on the fact that this walk function was not using this error argument
+		// That seems wrong... however I'm not familiar with this code or if that error matters
+		func(path string, info os.FileInfo, _ error) error {
 			_, fname := filepath.Split(path)
 
 			if len(strings.Split(fname, "-")) <= 1 {
@@ -1072,7 +1074,7 @@ func (n *network) releaseVxlanID() ([]uint32, error) {
 }
 
 func (n *network) obtainVxlanID(s *subnet) error {
-	//return if the subnet already has a vxlan id assigned
+	// return if the subnet already has a vxlan id assigned
 	if n.vxlanID(s) != 0 {
 		return nil
 	}

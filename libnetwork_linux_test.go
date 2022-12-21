@@ -550,12 +550,12 @@ func TestEnableIPv6(t *testing.T) {
 
 	tmpResolvConf := []byte("search pommesfrites.fr\nnameserver 12.34.56.78\nnameserver 2001:4860:4860::8888\n")
 	expectedResolvConf := []byte("search pommesfrites.fr\nnameserver 127.0.0.11\nnameserver 2001:4860:4860::8888\noptions ndots:0\n")
-	//take a copy of resolv.conf for restoring after test completes
+	// take a copy of resolv.conf for restoring after test completes
 	resolvConfSystem, err := ioutil.ReadFile("/etc/resolv.conf")
 	if err != nil {
 		t.Fatal(err)
 	}
-	//cleanup
+	// cleanup
 	defer func() {
 		if err := ioutil.WriteFile("/etc/resolv.conf", resolvConfSystem, 0644); err != nil {
 			t.Fatal(err)
@@ -628,12 +628,12 @@ func TestResolvConfHost(t *testing.T) {
 
 	tmpResolvConf := []byte("search localhost.net\nnameserver 127.0.0.1\nnameserver 2001:4860:4860::8888\n")
 
-	//take a copy of resolv.conf for restoring after test completes
+	// take a copy of resolv.conf for restoring after test completes
 	resolvConfSystem, err := ioutil.ReadFile("/etc/resolv.conf")
 	if err != nil {
 		t.Fatal(err)
 	}
-	//cleanup
+	// cleanup
 	defer func() {
 		if err := ioutil.WriteFile("/etc/resolv.conf", resolvConfSystem, 0644); err != nil {
 			t.Fatal(err)
@@ -711,12 +711,12 @@ func TestResolvConf(t *testing.T) {
 	expectedResolvConf1 := []byte("search pommesfrites.fr\nnameserver 127.0.0.11\noptions ndots:0\n")
 	tmpResolvConf3 := []byte("search pommesfrites.fr\nnameserver 113.34.56.78\n")
 
-	//take a copy of resolv.conf for restoring after test completes
+	// take a copy of resolv.conf for restoring after test completes
 	resolvConfSystem, err := ioutil.ReadFile("/etc/resolv.conf")
 	if err != nil {
 		t.Fatal(err)
 	}
-	//cleanup
+	// cleanup
 	defer func() {
 		if err := ioutil.WriteFile("/etc/resolv.conf", resolvConfSystem, 0644); err != nil {
 			t.Fatal(err)
@@ -920,7 +920,17 @@ func runParallelTests(t *testing.T, thrNumber int) {
 			t.Fatal(err)
 		}
 	}
-	defer netns.Set(origins)
+	defer func() {
+		if err := netns.Set(origins); err != nil {
+			// NOTE(@cpuguy83): This...
+			// I touched this code because the linter found that we weren't checking the error...
+			// It returns an error because "origins" is a closed file handle *unless* createGlobalInstance is called.
+			// Which... this test is run in parallel and `createGlobalInstance` modifies `origins` without synchronization.
+			// I'm not sure what exactly the *intent* of this code was, but it looks very broken.
+			// Anyway that's why I'm only logging the error and not failing the test.
+			t.Log(err)
+		}
+	}()
 
 	net1, err := controller.NetworkByName("testhost")
 	if err != nil {

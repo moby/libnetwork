@@ -21,7 +21,9 @@ func (c *controller) addEndpointNameResolution(svcName, svcID, nID, eID, contain
 	logrus.Debugf("addEndpointNameResolution %s %s add_service:%t sAliases:%v tAliases:%v", eID, svcName, addService, serviceAliases, taskAliases)
 
 	// Add container resolution mappings
-	c.addContainerNameResolution(nID, eID, containerName, taskAliases, ip, method)
+	if err := c.addContainerNameResolution(nID, eID, containerName, taskAliases, ip, method); err != nil {
+		return err
+	}
 
 	serviceID := svcID
 	if serviceID == "" {
@@ -301,7 +303,9 @@ func (c *controller) addServiceBinding(svcName, svcID, nID, eID, containerName s
 	n.(*network).addLBBackend(ip, lb)
 
 	// Add the appropriate name resolutions
-	c.addEndpointNameResolution(svcName, svcID, nID, eID, containerName, vip, serviceAliases, taskAliases, ip, addService, "addServiceBinding")
+	if err := c.addEndpointNameResolution(svcName, svcID, nID, eID, containerName, vip, serviceAliases, taskAliases, ip, addService, "addServiceBinding"); err != nil {
+		return err
+	}
 
 	logrus.Debugf("addServiceBinding from %s END for %s %s", method, svcName, eID)
 
@@ -386,7 +390,9 @@ func (c *controller) rmServiceBinding(svcName, svcID, nID, eID, containerName st
 
 	// Delete the name resolutions
 	if deleteSvcRecords {
-		c.deleteEndpointNameResolution(svcName, svcID, nID, eID, containerName, vip, serviceAliases, taskAliases, ip, rmService, entries > 0, "rmServiceBinding")
+		if err := c.deleteEndpointNameResolution(svcName, svcID, nID, eID, containerName, vip, serviceAliases, taskAliases, ip, rmService, entries > 0, "rmServiceBinding"); err != nil {
+			return err
+		}
 	}
 
 	if len(s.loadBalancers) == 0 {

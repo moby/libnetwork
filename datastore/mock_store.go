@@ -125,5 +125,4 @@ func (s *MockStore) AtomicDelete(key string, previous *store.KVPair) (bool, erro
 
 // Close closes the client connection
 func (s *MockStore) Close() {
-	return
 }

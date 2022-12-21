@@ -67,8 +67,7 @@ func (n *network) findLBEndpointSandbox() (*endpoint, *sandbox, error) {
 	if !ok {
 		return nil, nil, fmt.Errorf("Unable to get sandbox for %s(%s) in for %s", ep.Name(), ep.ID(), n.ID())
 	}
-	var sep *endpoint
-	sep = sb.getEndpoint(ep.ID())
+	sep := sb.getEndpoint(ep.ID())
 	if sep == nil {
 		return nil, nil, fmt.Errorf("Load balancing endpoint %s(%s) removed from %s", ep.Name(), ep.ID(), n.ID())
 	}
@@ -395,7 +394,7 @@ func programIngress(gwIP net.IP, ingressPorts []*PortConfig, isDelete bool) erro
 		}
 	}
 
-	//Filter the ingress ports until port rules start to be added/deleted
+	// Filter the ingress ports until port rules start to be added/deleted
 	filteredPorts := filterPortConfigs(ingressPorts, isDelete)
 	rollbackRules := make([][]string, 0, len(filteredPorts)*3)
 	var portErr error

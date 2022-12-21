@@ -100,7 +100,7 @@ func (sb *sandbox) buildHostsFile() error {
 }
 
 func (sb *sandbox) updateHostsFile(ifaceIPs []string) error {
-	if ifaceIPs == nil || len(ifaceIPs) == 0 {
+	if len(ifaceIPs) == 0 {
 		return nil
 	}
 
@@ -314,7 +314,7 @@ func (sb *sandbox) updateDNS(ipv6Enabled bool) error {
 	if currHash != "" && currHash != currRC.Hash {
 		// Seems the user has changed the container resolv.conf since the last time
 		// we checked so return without doing anything.
-		//logrus.Infof("Skipping update of resolv.conf file with ipv6Enabled: %t because file was touched by user", ipv6Enabled)
+		// logrus.Infof("Skipping update of resolv.conf file with ipv6Enabled: %t because file was touched by user", ipv6Enabled)
 		return nil
 	}
 

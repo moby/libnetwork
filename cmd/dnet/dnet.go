@@ -172,11 +172,9 @@ func startDiscovery(cfg *config.ClusterCfg) ([]config.Option, error) {
 	options := []config.Option{config.OptionDiscoveryWatcher(d), config.OptionDiscoveryAddress(cfg.Address)}
 	go func() {
 		for {
-			select {
-			case <-time.After(hb):
-				if err := d.Register(cfg.Address + ":0"); err != nil {
-					logrus.Warn(err)
-				}
+			time.Sleep(hb)
+			if err := d.Register(cfg.Address + ":0"); err != nil {
+				logrus.Warn(err)
 			}
 		}
 	}()
@@ -507,7 +505,7 @@ func (d *dnetConnection) httpCall(method, path string, data interface{}, headers
 		return nil, nil, -1, err
 	}
 
-	req, err := http.NewRequest(method, fmt.Sprintf("%s", path), in)
+	req, err := http.NewRequest(method, path, in)
 	if err != nil {
 		return nil, nil, -1, err
 	}
@@ -552,10 +550,8 @@ func setupRequestHeaders(method string, data interface{}, req *http.Request, hea
 		req.Header.Set("Content-Type", "text/plain")
 	}
 
-	if headers != nil {
-		for k, v := range headers {
-			req.Header[k] = v
-		}
+	for k, v := range headers {
+		req.Header[k] = v
 	}
 }
 

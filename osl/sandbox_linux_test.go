@@ -145,7 +145,7 @@ func verifySandbox(t *testing.T, s Sandbox, ifaceSuffixes []string) {
 
 func verifyCleanup(t *testing.T, s Sandbox, wait bool) {
 	if wait {
-		time.Sleep(time.Duration(gpmCleanupPeriod * 2))
+		time.Sleep(gpmCleanupPeriod * 2)
 	}
 
 	if _, err := os.Stat(s.Key()); err == nil {
@@ -200,7 +200,7 @@ func TestDisableIPv6DAD(t *testing.T) {
 		t.Fatalf("Failed to create a new sandbox: %v", err)
 	}
 	runtime.LockOSThread()
-	defer s.Destroy()
+	defer destroyTest(t, s)
 
 	n, ok := s.(*networkNamespace)
 	if !ok {
@@ -241,6 +241,12 @@ func TestDisableIPv6DAD(t *testing.T) {
 	}
 }
 
+func destroyTest(t *testing.T, s Sandbox) {
+	if err := s.Destroy(); err != nil {
+		t.Log(err)
+	}
+}
+
 func TestSetInterfaceIP(t *testing.T) {
 	defer testutils.SetupTestOSContext(t)()
 
@@ -254,7 +260,7 @@ func TestSetInterfaceIP(t *testing.T) {
 		t.Fatalf("Failed to create a new sandbox: %v", err)
 	}
 	runtime.LockOSThread()
-	defer s.Destroy()
+	defer destroyTest(t, s)
 
 	n, ok := s.(*networkNamespace)
 	if !ok {
@@ -330,7 +336,7 @@ func TestLiveRestore(t *testing.T) {
 		t.Fatalf("Failed to create a new sandbox: %v", err)
 	}
 	runtime.LockOSThread()
-	defer s.Destroy()
+	defer destroyTest(t, s)
 
 	n, ok := s.(*networkNamespace)
 	if !ok {
@@ -396,6 +402,7 @@ func TestLiveRestore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create a new sandbox: %v", err)
 	}
+	defer destroyTest(t, s)
 
 	// Check if the IPV4 & IPV6 entry present
 	// If present , we should get error in below call
