@@ -240,12 +240,12 @@ func programVXLANRuleFunc(programWithMatch func(matchVXLAN matchVXLANFunc, vni u
 					return multierror.Append(err, err2)
 				}
 			}
-			return nil
 		} else {
 			// Delete both flavours.
 			err := programWithMatch(matchVXLANWithU32, vni, add)
 			return multierror.Append(err, programWithMatch(matchVXLANWithBPF, vni, add)).ErrorOrNil()
 		}
+		return nil
 	}
 }
 
