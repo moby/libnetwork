@@ -11,12 +11,15 @@
 [Org]
 	[Org."Core maintainers"]
 		people = [
+			"akerouanton",
 			"akihirosuda",
 			"arkodg",
 			"corhere",
 			"cpuguy83",
+			"crazy-max",
 			"euanh",
 			"fcrisciani",
+			"laurazard",
 			"mavenugo",
 			"neersighted",
 			"rumpl",
@@ -34,6 +37,11 @@
 # in the people section.
 
 	# ADD YOURSELF HERE IN ALPHABETICAL ORDER
+
+	[people.akerouanton]
+	Name = "Albin Kerouanton"
+	Email = "albinker@gmail.com"
+	GitHub = "akerouanton"
 
 	[people.akihirosuda]
 	Name = "Akihiro Suda"
@@ -55,6 +63,11 @@
 	Email = "cpuguy83@gmail.com"
 	GitHub = "cpuguy83"
 
+	[people.crazy-max]
+	Name = "Kevin Alvarez"
+	Email = "contact@crazymax.dev"
+	GitHub = "crazy-max"
+
 	[people.euanh]
 	Name = "Euan Harris"
 	Email = "euan.harris@docker.com"
@@ -64,6 +77,11 @@
 	Name = "Flavio Crisciani"
 	Email = "flavio.crisciani@docker.com"
 	GitHub = "fcrisciani"
+
+	[people.laurazard]
+	Name = "Laura Brehm"
+	Email = "laura.brehm@docker.com"
+	GitHub = "laurazard"
 
 	[people.mavenugo]
 	Name = "Madhu Venugopal"
