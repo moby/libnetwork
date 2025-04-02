@@ -785,6 +785,11 @@ func (n *network) initSandbox(restore bool) error {
 			n.id, sbox.Key(), err)
 	}
 
+	// Initialize the multicast routing
+	if err := n.initMulticast(); err != nil {
+		logrus.Errorf("failed to initialize multicast routing for overlay network %s: %v", n.id, err)
+	}
+
 	return nil
 }
 
@@ -853,6 +858,15 @@ func (n *network) watchMiss(nlSock *nl.NetlinkSocket, nsPath string) {
 
 			// Not any of the network's subnets. Ignore.
 			if !n.contains(ip) {
+				continue
+			}
+
+			// Check if it's a multicast packet
+			if ip.IsMulticast() {
+				// Handle multicast packet
+				if err := n.driver.handleMulticastPackets(n.id, ip, ip, nil); err != nil {
+					logrus.Errorf("Failed to handle multicast packet: %v", err)
+				}
 				continue
 			}
 

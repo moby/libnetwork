@@ -52,6 +52,7 @@ type driver struct {
 	keys             []*key
 	peerOpCh         chan *peerOperation
 	peerOpCancel     context.CancelFunc
+	multicastRoutes  *multicastRoutes
 	sync.Mutex
 }
 
@@ -66,9 +67,10 @@ func Init(dc driverapi.DriverCallback, config map[string]interface{}) error {
 		peerDb: peerNetworkMap{
 			mp: map[string]*peerMap{},
 		},
-		secMap:   &encrMap{nodes: map[string][]*spi{}},
-		config:   config,
-		peerOpCh: make(chan *peerOperation),
+		secMap:          &encrMap{nodes: map[string][]*spi{}},
+		config:          config,
+		peerOpCh:        make(chan *peerOperation),
+		multicastRoutes: newMulticastRoutes(),
 	}
 
 	// Launch the go routine for processing peer operations
